@@ -23,7 +23,7 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 - [ ] Golden screenshots or frame hashes added or updated for every UI change (from M0)
 - [ ] `PLAN.md` updated first for any interface or contract change; it remains the design of record
 - [ ] No VM types or target conditionals in `krdbg/ui`; no SDL2 DLL in the Windows deliverable
-- [ ] Change committed once the directory is a repository; no secrets, debug output, or unrelated edits
+- [ ] Change committed; no secrets, debug output, or unrelated edits
 
 Until M0 lands there is no build system, so the only executable check is the doctor command in the Environment section.
 
@@ -61,18 +61,20 @@ Target-specific notes:
 
 ## Environment
 
+**Repository.** `https://github.com/kevinwross/krdbg.git`, branch `main`, initial commit `6106cfe`. Remote operations use the host's stored GitHub credentials.
+
 **Build entry point.** None yet — M0 creates the CMake skeleton and presets. Until then there is nothing to configure or build; do not invent commands.
 
 **Doctor.** `.agents/templates/doctor.msvc.ps1` — the delivered starting point. Exits 0 on Hukilau and reports the MSVC, Windows SDK, and CMake it resolved; run it when a build cannot find its toolchain.
 
 **Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH`); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`; all found with `vswhere` via the doctor. The Linux and ARM64 toolchain is not yet verified for this project; the plan requires C++20 and SDL2 (`PLAN.md` §4.8).
 
-**Verified on** Hukilau **at** 2026-11-18 (no repository yet): `.agents/templates/doctor.msvc.ps1` → exit 0. No build has been attempted.
+**Verified on** Hukilau **at** 2026-11-18: `.agents/templates/doctor.msvc.ps1` → exit 0. No build has been attempted.
 
 **Install (requires approval).** Nothing yet. M0 will need CMake and a C++20 compiler; Linux needs SDL2 as a system package, and Windows must not require an `SDL2.dll`.
 
 ## Known traps
 
-- There is no version control in this directory: no revert boundary, and project-root discovery falls back to the session directory, so `AGENTS.md` is missed when a session starts in a subdirectory. Create a repository only with the user's approval.
+- There is no CI workflow or ARM64 runner registration yet. M0.8 creates both, and G0/G6 stay blocked until the Raspberry Pi runner is available.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - `krc::debug` does not exist yet. The vendored KDBG bootstrap is temporary and must record its provenance and pass a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).

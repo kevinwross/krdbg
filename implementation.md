@@ -9,7 +9,7 @@
 ARM64 runs the functional checks and may keep a separate hash.
 **CI policy:** gate workflow skeleton in M0, full matrix by M2; ARM64 is a
 required gate at M0 and M6, and tracked as non-blocking evidence between them.
-**Repository:** initialized in M0 after approval.
+**Repository:** initialized and pushed in M0.0 (`6106cfe`); see §2.
 
 ---
 
@@ -68,7 +68,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] planned` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.0 done` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] planned` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -97,19 +97,22 @@ the empty/loaded surface shell; a headless PPM and stable hash. No VM code yet.
 
 ### M0.0 Repository and baseline
 
-- [ ] **M0.0.1** Create the repository: `git init`, default branch, `.gitignore`
-      for build trees, IDE files, screenshots and local settings. This step is
+- [x] **M0.0.1** Create the repository: `git init`, default branch, `.gitignore`
+      for build trees, IDE files, local captures and local settings. This step is
       only run after the user's explicit go-ahead.
-- [ ] **M0.0.2** Add `README.md` with one paragraph of purpose and a link to
+- [x] **M0.0.2** Add `README.md` with one paragraph of purpose and a link to
       `PLAN.md`; do not restate the plan.
-- [ ] **M0.0.3** Commit the initial tree: `PLAN.md`, `implementation.md`,
+- [x] **M0.0.3** Commit the initial tree: `PLAN.md`, `implementation.md`,
       `AGENTS.md`, `AGENTS.local.md`, `README.md`, `.gitignore`. No product code
       in this commit.
-- [ ] **M0.0.4** The user supplies a remote URL; configure `origin` and push the
-      initial commit. If no remote exists, record `BLOCKED` and keep the gate
-      open; CI cannot run without a remote.
-- [ ] **M0.0.5** Confirm the repository is clean and the commit contains no
+- [x] **M0.0.4** Configure `origin` as
+      `https://github.com/kevinwross/krdbg.git` and push the initial commit.
+- [x] **M0.0.5** Confirm the repository is clean and the commit contains no
       build artefacts or secrets.
+
+Evidence: initial commit `6106cfe`; `git status --short --branch` reports
+`## main...origin/main`; `git ls-remote --heads origin` reports the same commit
+on `refs/heads/main`.
 
 ### M0.1 CMake skeleton
 
@@ -655,7 +658,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
-| Git remote URL | M0.0 / G0 | User | `[ ]` |
+| Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
 | ARM64 self-hosted runner and labels | G0 / G6 | User + CI | `[ ]` |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
