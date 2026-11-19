@@ -1,0 +1,34 @@
+# Build trees
+build/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+Testing/
+install/
+
+# IDE and local user files
+.vs/
+.vscode/
+*.user
+*.suo
+*.VC.db
+*.opendb
+
+# Build artefacts
+*.o
+*.obj
+*.lib
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# Local captures and logs
+*.ppm
+*.log
+capture-*.png
