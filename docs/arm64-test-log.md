@@ -176,3 +176,13 @@ job.
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Extra check, not the gate: rebuilt `build/kr16-check` (`KRDBG_KR16_ADAPTER=ON`, null presenter) at this SHA. **Build OK, 115 checks, 0 failures** — the default 105 plus the eight `kr16_*` cases and the two `host_build` cases.
 - Notes: the host build chain's end-to-end tests are conditional twice over, and neither condition holds here — `tests/test_host_build.cpp` is only compiled when an adapter is enabled, and its cases `return` immediately when `KRDBG_KRC_PREFIX` is unset. So `host_build_chain_builds_c_cpp_and_s` and `host_rebuild_preserves_line_breakpoints` report PASS without asserting anything on this host, and `krc`/`krld` are not installed here. M5's build chain therefore has **no ARM64 end-to-end evidence**; only that it compiles. Goldens stay at 16, and the gate still renders only empty and loaded.
+
+## 2026-11-20T14:42:44-08:00 — main @ 348e0a2
+
+- Host: BitWhiz
+- Range: 81e1c31..348e0a2, 2 commits
+- Docs-only: no (`85f6221` changes `.github/workflows/ci.yml` as well as Markdown)
+- Build: `scripts/gate-linux-arm64.sh` — pass (4 s, no rebuild: the only non-Markdown file is the workflow)
+- Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: `85f6221` removes the `arm64` GitHub Actions job and names this tester log as the only ARM64 verification path, which `AGENTS.local.md` and `docs/ci-arm64.md` now say. No source, test or adapter file changed since `81e1c31`, so the 105-check result and the code-compiles evidence carry over unchanged; this entry records the workflow change and the fact that the gate had nothing to compile (4 s, not a build claim).
