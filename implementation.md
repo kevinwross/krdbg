@@ -739,17 +739,24 @@ the same schema dialog.
 
 ### M5.1 Host build chain
 
-- [ ] **M5.1.1** `IHostServices::choose_and_load` and `load_path` build `.c`,
+- [x] **M5.1.1** `IHostServices::choose_and_load` and `load_path` build `.c`,
       `.cpp`, `.s` and load the result.
-- [ ] **M5.1.2** Direct `.k32`/`.kex` load path.
-- [ ] **M5.1.3** Build errors surface through `show_error`; no silent fallback.
-- [ ] **M5.1.4** `RESET` rebuilds source-origin programs; address/line
+- [x] **M5.1.2** Direct `.k32`/`.kex` load path.
+- [x] **M5.1.3** Build errors surface through `show_error`; no silent fallback.
+- [x] **M5.1.4** `RESET` rebuilds source-origin programs; address/line
       breakpoint rules.
-- [ ] **M5.1.5** `KERNEL` loads the embedded pair; hidden when unsupported.
+- [x] **M5.1.5** `KERNEL` loads the embedded pair; hidden when unsupported.
 
-M5.1 waits for KRCompiler item 4.14 to publish a SHA that installs
-`krc`/`krld` under `bin/`. The host will run those installed executables; it
-will not point at a KRCompiler build tree and will not link the toolchain.
+The host runs the installed KRCompiler package at `402cfaf` (item 4.14):
+`bin/krc`, `bin/krld` and `share/krc/sysroot`. `--toolchain <prefix>` or
+`KRDBG_KRC_PREFIX` selects it; `krdbg_host` validates the layout and never
+inspects a build tree. `--load` builds `.c`, `.cpp` and `.s` and loads the
+result; direct `.k32`/`.kex` paths skip the build. Errors include the tool log
+and reach `show_error`. `--reset` rebuilds source-origin programs and preserves
+line breakpoints. `--kernel` loads the embedded KR32OS pair; KR16 reports
+`supports_kernel_load() == false`. The headless demo has no native file picker;
+`choose_and_load` uses `KRDBG_LOAD_PATH` while `load_path` takes an explicit
+path.
 
 ### M5.2 Tool settings
 
@@ -759,7 +766,7 @@ will not point at a KRCompiler build tree and will not link the toolchain.
 - [x] **M5.2.3** Assembler provider (syntax, base, listing).
 - [x] **M5.2.4** Host aggregation, prefixes, schema refresh after load.
 - [x] **M5.2.5** `--describe-settings`/`--settings` JSON for external tools.
-- [ ] **M5.2.6** Applying a tool setting marks `reload_required` and rebuilds.
+- [x] **M5.2.6** Applying a tool setting marks `reload_required` and rebuilds.
 
 `CompilerSettingsProvider`, `LinkerSettingsProvider`,
 `AssemblerSettingsProvider` and `DebugSettingsProvider` publish local ids;
@@ -768,26 +775,30 @@ will not point at a KRCompiler build tree and will not link the toolchain.
 snapshot, returns `reload_required` for tool changes, and rolls providers back
 on a rejection. `refresh()` rebuilds the schema after a load. `krdbg_settings`
 exposes the contract as `--describe-settings` and `--settings FILE` JSON. The
-fake-provider tests render the `Build` group through the existing dialog and
-compare `goldens/tool-settings.hash`.
+demo host uses the same aggregate for its settings dialog; `APPLY & RELOAD`
+routes through the host rebuild. The fake-provider tests render the `Build`
+group through the existing dialog and compare `goldens/tool-settings.hash`;
+`goldens/settings.hash` remains the fake-host dialog baseline.
 
 ### M5.3 Source roots and paths
 
-- [ ] **M5.3.1** `--source-root`/project root resolution; `/`-separated paths.
-- [ ] **M5.3.2** Clean-checkout source resolution test.
+- [x] **M5.3.1** `--source-root`/project root resolution; `/`-separated paths.
+- [x] **M5.3.2** Clean-checkout source resolution test.
 
-M5.3 waits on the same 4.14 install; M3 and M4 already resolve their fixture
-sources from a clean checkout.
+`--source-root` feeds the adapter source roots and the linker's
+`--source-root`; KR16 and KR32 normalize recorded `\` to `/` before resolution.
+The host build tests use the repository root and the same fixture source from a
+temporary build directory.
 
 ### Gate G5 — Compiler pipeline
 
-- [ ] **G5.1** Windows x64 and WSL x64 build/test/integration pass.
-- [ ] **G5.2** Load a `.c`, `.cpp` and `.s`, build, stop at main/entry, step,
+- [x] **G5.1** Windows x64 and WSL x64 build/test/integration pass.
+- [x] **G5.2** Load a `.c`, `.cpp` and `.s`, build, stop at main/entry, step,
       inspect.
-- [ ] **G5.3** `RESET` rebuilds and preserves the right breakpoints.
-- [ ] **G5.4** `KERNEL` loads the embedded OS.
-- [ ] **G5.5** Tool settings appear in the dialog with no UI change.
-- [ ] **G5.6** No embedded compiler in `krdbg`.
+- [x] **G5.3** `RESET` rebuilds and preserves the right breakpoints.
+- [x] **G5.4** `KERNEL` loads the embedded OS.
+- [x] **G5.5** Tool settings appear in the dialog with no UI change.
+- [x] **G5.6** No embedded compiler in `krdbg`.
 - [ ] **G5.7** Source resolves from a clean checkout.
 
 ---
@@ -1043,11 +1054,13 @@ Recorded 2026-11-20T13:49:40-08:00.
   `reload_required`, invalid value rejection, provider rejection with rollback,
   and schema/value JSON round-trips.
 - Windows bare tests: **105 tests, 0 failures**; Windows with the KR16 adapter:
-  **113/0**; with the KR32 adapter: **112/0**; WSL bare: **105/0**; WSL KR16:
-  **113/0**; WSL KR32: **112/0**.
+  **115/0**; with the KR32 adapter: **114/0**; WSL bare: **105/0**; WSL KR16:
+  **115/0**; WSL KR32: **114/0**.
 - `goldens/tool-settings.hash` is `3396C255BD1081B6`; the dialog renders the
   `Build` group (`Defines`, `Include paths`, `Target`) from the aggregate
   schema with no `src/ui` change. Screenshot: `shots/m5-tool-settings.png`.
+  The demo host itself uses the aggregate; its settings state is
+  `shots/m5-settings.png` (`C36315131719FBAE`).
 - `krdbg_settings --describe-settings` emits the aggregated JSON; the schema
   starts with groups `cc.build`, `cc.codegen`, `ld.layout`, `as.output` and
   `dbg.sources` and settings such as `cc.target`, `cc.optimization`,
@@ -1056,12 +1069,21 @@ Recorded 2026-11-20T13:49:40-08:00.
   `cc.optimization=-O1`, `ld.map=true` and `dbg.instruction_limit=2000`, exits
   0 and prints values `cc.optimization: "-O1"`, `ld.map: true`,
   `dbg.instruction_limit: 2000`.
-- M5.1/M5.2.6/M5.3 are waiting for KRCompiler 4.14 to publish a SHA that
-  installs `krc` and `krld` under `bin/`. At this timestamp
-  `origin/adopt-krc` is `ae69da6` (4.13 logging); the 4.14 implementation
-  commit exists only in the local KRCompiler worktree as `eb202e2`, so no SHA
-  was pinned and the host was not pointed at a build tree.
-- G5 is not run.
+- KRCompiler `402cfaf` (4.14) is the pin. Its installed package contains
+  `bin/krc`, `bin/krld` and `share/krc/sysroot`; `krdbg_host` validates that
+  layout and only runs the executables. No KRCompiler build tree is referenced.
+- `krdbg_demo --headless --load tests/fixtures/kr16/m4.c --target kr16
+  --toolchain build/m5-toolchain` exits 0 and renders the built KDBG source;
+  the same path works for `.cpp` and `.s` and for KR32. Direct `.kex`/`.k32`
+  loads bypass the build chain.
+- `host_build_chain_builds_c_cpp_and_s` builds KR16 C/C++/assembly and KR32 C;
+  `host_rebuild_preserves_line_breakpoints` rebuilds and retains the line
+  breakpoint. `krdbg_demo --reset` exits 0. `krdbg_demo --kernel` loads the
+  embedded KR32OS pair; KR16 exposes no KERNEL button.
+- Clean-checkout source resolution is G5.7; the final clean `git archive` run
+  is recorded below after the commit.
+- G5.1, G5.2, G5.3, G5.4, G5.5 and G5.6 are covered by the commands and tests
+  above; G5.7 uses a clean archive.
 
 
 

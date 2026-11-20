@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -23,85 +24,182 @@
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
+#include "build_chain.h"
+#include "settings_host.h"
+#include "tool_settings.h"
+#include "settings_validation.h"
+
+#include <functional>
 
 namespace {
 
-class DemoHost final : public krdbg::IHostServices {
+std::string environment_value(const char* name) {
+#if defined(_WIN32)
+    char* value = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&value, &length, name) == 0 && value != nullptr) {
+        std::string result(value);
+        std::free(value);
+        return result;
+    }
+    return {};
+#else
+    const char* value = std::getenv(name);
+    return value == nullptr ? std::string{} : std::string(value);
+#endif
+}
+
+class DemoVmProvider final : public krdbg::ISettingsProvider {
 public:
-    DemoHost() {
+    std::string id() const override { return "vm"; }
+
+    krdbg::SettingsSchema schema() const override {
+        krdbg::SettingsSchema schema;
         schema.groups = {
-            krdbg::SettingsGroup{"vm", "Virtual Machine", "VM memory", 10},
+            krdbg::SettingsGroup{"memory", "Memory", "Guest memory", 10},
             krdbg::SettingsGroup{"run", "Run", "Execution limits", 20},
-            krdbg::SettingsGroup{"env", "Environment", "Guest environment", 30},
+            krdbg::SettingsGroup{"environment", "Environment",
+                                 "Guest environment", 30},
         };
-        krdbg::SettingDescriptor ram;
-        ram.id = "vm.ram_mb";
-        ram.group = "vm";
-        ram.label = "RAM";
-        ram.description = "Guest RAM size. Requires reload.";
-        ram.type = krdbg::SettingType::Int;
-        ram.default_json = "128";
-        ram.has_range = true;
-        ram.min = 16;
-        ram.max = 2048;
-        ram.step = 16;
-        ram.unit = "MiB";
-        ram.requires_restart = true;
-        schema.settings.push_back(ram);
-        krdbg::SettingDescriptor limit;
-        limit.id = "run.limit";
-        limit.group = "run";
-        limit.label = "Instruction limit";
-        limit.description = "Maximum instructions per run slice.";
-        limit.type = krdbg::SettingType::Int;
-        limit.default_json = "1000000";
-        limit.has_range = true;
-        limit.min = 1000;
-        limit.max = 100000000;
-        schema.settings.push_back(limit);
-        krdbg::SettingDescriptor env;
-        env.id = "env";
-        env.group = "env";
-        env.label = "Environment";
-        env.description = "KEY=VALUE entries passed to the guest.";
-        env.type = krdbg::SettingType::StringMap;
-        schema.settings.push_back(env);
-        values.values["vm.ram_mb"] = std::int64_t{128};
-        values.values["run.limit"] = std::int64_t{1000000};
-        values.values["env"] = std::map<std::string, std::string>{
-            {"PATH", "/bin"}, {"TERM", "dumb"}};
-        values.origins["vm.ram_mb"] = krdbg::SettingOrigin::User;
+        krdbg::SettingDescriptor ram_setting;
+        ram_setting.id = "ram_mb";
+        ram_setting.group = "memory";
+        ram_setting.label = "RAM";
+        ram_setting.description = "Guest RAM size. Requires reload.";
+        ram_setting.type = krdbg::SettingType::Int;
+        ram_setting.default_json = "128";
+        ram_setting.has_range = true;
+        ram_setting.min = 16;
+        ram_setting.max = 2048;
+        ram_setting.step = 16;
+        ram_setting.unit = "MiB";
+        ram_setting.requires_restart = true;
+        schema.settings.push_back(ram_setting);
+        krdbg::SettingDescriptor limit_setting;
+        limit_setting.id = "limit";
+        limit_setting.group = "run";
+        limit_setting.label = "Instruction limit";
+        limit_setting.description = "Maximum instructions per run slice.";
+        limit_setting.type = krdbg::SettingType::Int;
+        limit_setting.default_json = "1000000";
+        limit_setting.has_range = true;
+        limit_setting.min = 1000;
+        limit_setting.max = 100000000;
+        schema.settings.push_back(limit_setting);
+        krdbg::SettingDescriptor env_setting;
+        env_setting.id = "env";
+        env_setting.group = "environment";
+        env_setting.label = "Environment";
+        env_setting.description = "KEY=VALUE entries passed to the guest.";
+        env_setting.type = krdbg::SettingType::StringMap;
+        schema.settings.push_back(env_setting);
+        return schema;
     }
 
+    krdbg::SettingsSnapshot values() const override {
+        krdbg::SettingsSnapshot snapshot;
+        snapshot.values["ram_mb"] = ram;
+        snapshot.values["limit"] = limit;
+        snapshot.values["env"] = env;
+        snapshot.origins["ram_mb"] = krdbg::SettingOrigin::User;
+        return snapshot;
+    }
+
+    krdbg::SettingsApplyResult apply(
+        const krdbg::SettingsSnapshot& next) override {
+        krdbg::SettingsApplyResult result;
+        const krdbg::SettingsSchema current = schema();
+        for (const auto& [id, value] : next.values) {
+            if (id != "ram_mb" && id != "limit" && id != "env") {
+                continue;
+            }
+            const auto found = std::find_if(
+                current.settings.begin(), current.settings.end(),
+                [&id](const krdbg::SettingDescriptor& candidate) {
+                    return candidate.id == id;
+                });
+            if (found == current.settings.end()) {
+                continue;
+            }
+            std::string error;
+            if (!krdbg::settings_validation::validate(*found, value, error)) {
+                result.ok = false;
+                result.errors[id] = error;
+                continue;
+            }
+            if (id == "ram_mb") {
+                ram = std::get<std::int64_t>(value);
+            } else if (id == "limit") {
+                limit = std::get<std::int64_t>(value);
+            } else {
+                env = std::get<std::map<std::string, std::string>>(value);
+            }
+            result.reload_required = true;
+        }
+        return result;
+    }
+
+    std::int64_t ram = 128;
+    std::int64_t limit = 1000000;
+    std::map<std::string, std::string> env = {{"PATH", "/bin"},
+                                             {"TERM", "dumb"}};
+};
+
+class DemoHost final : public krdbg::IHostServices {
+public:
+    DemoHost() : aggregator_({&vm_, &cc_, &ld_, &as_, &dbg_}) {}
+
     bool choose_and_load(std::string& error) override {
-        error = "LOAD is not available in the M0 shell";
-        return false;
+        if (!load_callback) {
+            error = "LOAD needs a host-provided path";
+            return false;
+        }
+        const std::string configured = environment_value("KRDBG_LOAD_PATH");
+        if (configured.empty()) {
+            error = "no file picker in this host; pass --load <path> or set "
+                    "KRDBG_LOAD_PATH";
+            return false;
+        }
+        return load_callback(configured, error);
     }
     bool load_path(const std::string& path, std::string& error) override {
-        (void)path;
-        error = "LOAD is not available in the M0 shell";
-        return false;
+        return load_callback ? load_callback(path, error) : false;
     }
+    bool supports_kernel_load() const override { return kernel_supported; }
+    bool load_kernel(std::string& error) override {
+        return kernel_callback ? kernel_callback(error) : false;
+    }
+    bool last_load_was_source() const override { return last_load_source; }
     bool reload(std::string& error) override {
-        (void)error;
-        return true;
+        return reload_callback ? reload_callback(error) : true;
     }
     std::string clipboard_text() override { return {}; }
     void show_error(std::string_view message) override {
         std::fprintf(stderr, "krdbg: %.*s\n", static_cast<int>(message.size()),
                      message.data());
     }
-    krdbg::SettingsSchema settings_schema() const override { return schema; }
-    krdbg::SettingsSnapshot settings_values() const override { return values; }
+    krdbg::SettingsSchema settings_schema() const override {
+        return aggregator_.schema();
+    }
+    krdbg::SettingsSnapshot settings_values() const override {
+        return aggregator_.values();
+    }
     krdbg::SettingsApplyResult apply_settings(const krdbg::SettingsSnapshot& next,
                                               krdbg::SettingsLayer layer) override {
-        (void)layer;
-        values = next;
-        return {};
+        return aggregator_.apply(next, layer);
     }
 
-    krdbg::SettingsSchema schema;
-    krdbg::SettingsSnapshot values;
+    std::function<bool(const std::string&, std::string&)> load_callback;
+    std::function<bool(std::string&)> reload_callback;
+    std::function<bool(std::string&)> kernel_callback;
+    bool kernel_supported = false;
+    bool last_load_source = false;
+    DemoVmProvider vm_;
+    krdbg::CompilerSettingsProvider cc_;
+    krdbg::LinkerSettingsProvider ld_;
+    krdbg::AssemblerSettingsProvider as_;
+    krdbg::DebugSettingsProvider dbg_;
+    krdbg::SettingsAggregator aggregator_;
 };
 
 struct Options {
@@ -118,11 +216,17 @@ struct Options {
     bool video16 = false;
     bool no_com = false;
     bool no_video = false;
+    bool kernel = false;
+    bool reset = false;
     int frames = -1;
     std::string screenshot;
     std::string kr32_image;
     bool kr32_os = false;
     std::string kr16_image;
+    std::string load_path;
+    std::string toolchain;
+    std::string build_target = "kr32";
+    std::string source_root;
 };
 
 void print_usage() {
@@ -130,7 +234,9 @@ void print_usage() {
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
-        "[--kr32-os] [--kr16 <image.kex>] [--frames <n>]\n");
+        "[--kr32-os] [--kr16 <image.kex>] [--load <source-or-image>] "
+        "[--toolchain <krc-install-prefix>] [--target kr32|kr16] "
+        "[--source-root <dir>] [--kernel] [--reset] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -144,8 +250,20 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.kr32_image = argv[++index];
         } else if (argument == "--kr32-os") {
             options.kr32_os = true;
+        } else if (argument == "--kernel") {
+            options.kernel = true;
+        } else if (argument == "--reset") {
+            options.reset = true;
         } else if (argument == "--kr16" && index + 1 < argc) {
             options.kr16_image = argv[++index];
+        } else if (argument == "--load" && index + 1 < argc) {
+            options.load_path = argv[++index];
+        } else if (argument == "--toolchain" && index + 1 < argc) {
+            options.toolchain = argv[++index];
+        } else if (argument == "--target" && index + 1 < argc) {
+            options.build_target = argv[++index];
+        } else if (argument == "--source-root" && index + 1 < argc) {
+            options.source_root = argv[++index];
         } else if (argument == "--frames" && index + 1 < argc) {
             char* end = nullptr;
             const long frames = std::strtol(argv[++index], &end, 10);
@@ -220,6 +338,9 @@ int main(int argc, char** argv) {
     if (!parse_options(argc, argv, options)) {
         return 2;
     }
+    if (options.source_root.empty()) {
+        options.source_root = std::filesystem::current_path().string();
+    }
 
     std::unique_ptr<krdbg::DebugSession> session;
     krdbg::FakeTarget* fake_target = nullptr;
@@ -229,7 +350,7 @@ int main(int argc, char** argv) {
         krdbg::kr32adapter::LoadedProgram loaded;
         krdbg::kr32adapter::Options adapter_options;
         adapter_options.source_roots = {
-            std::filesystem::current_path().string()};
+            options.source_root};
         std::string error;
         if (options.kr32_os) {
             if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
@@ -285,7 +406,7 @@ int main(int argc, char** argv) {
         krdbg::kr16adapter::LoadedProgram loaded;
         krdbg::kr16adapter::Options adapter_options;
         adapter_options.source_roots = {
-            std::filesystem::current_path().string()};
+            options.source_root};
         std::string error;
         if (!krdbg::kr16adapter::load_image(options.kr16_image,
                                             adapter_options, loaded, error)) {
@@ -334,6 +455,195 @@ int main(int argc, char** argv) {
     DemoHost host;
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
+
+    std::unique_ptr<krdbg::host::BuildChain> build_chain;
+    std::string toolchain_prefix = options.toolchain;
+    if (toolchain_prefix.empty()) {
+        toolchain_prefix = environment_value("KRDBG_KRC_PREFIX");
+    }
+    if (!toolchain_prefix.empty()) {
+        krdbg::host::ToolchainPaths paths;
+        std::string error;
+        if (krdbg::host::discover_toolchain(toolchain_prefix, paths, error)) {
+            build_chain =
+                std::make_unique<krdbg::host::BuildChain>(std::move(paths));
+        } else if (!options.load_path.empty()) {
+            std::fprintf(stderr, "krdbg: toolchain: %s\n", error.c_str());
+            return 1;
+        }
+    }
+
+    std::string loaded_source;
+    std::string loaded_image;
+    const auto stop_at_main = [](krdbg::DebugSession& current) {
+        const krdbg::DebugInfo& info = current.info();
+        for (std::size_t index = 0; index < info.functions.size(); ++index) {
+            if (info.functions[index].name != "main") {
+                continue;
+            }
+            std::uint64_t first_line = 0;
+            for (const krdbg::LineInfo& line : info.lines) {
+                if (line.function == index &&
+                    (first_line == 0 || line.address < first_line)) {
+                    first_line = line.address;
+                }
+            }
+            if (first_line != 0) {
+                current.run_to_address(first_line);
+            }
+            break;
+        }
+    };
+    const auto set_program = [&surface](const std::string& path,
+                                        const std::string& name,
+                                        std::uint64_t entry) {
+        surface.set_program_info(krdbg::ProgramInfo{path, name, entry, true});
+        surface.resize(surface.width(), surface.height());
+    };
+#if defined(KRDBG_HAVE_KR16) || defined(KRDBG_HAVE_KR32)
+    const auto load_any = [&](const std::string& path, std::string& error) {
+        namespace fs = std::filesystem;
+        if (path.empty()) {
+            error = "empty load path";
+            return false;
+        }
+        std::string lower = path;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char ch) {
+                           return static_cast<char>(std::tolower(ch));
+                       });
+        const bool source = lower.ends_with(".c") ||
+                            lower.ends_with(".cpp") ||
+                            lower.ends_with(".cc") ||
+                            lower.ends_with(".cxx") ||
+                            lower.ends_with(".s");
+        std::string image_path = path;
+        std::string target_name = options.build_target;
+        if (source) {
+            if (build_chain == nullptr) {
+                error = "source loading needs --toolchain <krc-install-prefix> "
+                        "or KRDBG_KRC_PREFIX";
+                return false;
+            }
+            krdbg::host::BuildOptions build_options;
+            build_options.target = target_name;
+            build_options.source_root = options.source_root;
+            const krdbg::host::BuildResult built =
+                build_chain->build(path, build_options);
+            if (!built.ok) {
+                error = built.error;
+                if (!built.log.empty()) {
+                    error += "\n" + built.log;
+                }
+                return false;
+            }
+            image_path = built.image.string();
+        } else if (lower.ends_with(".kex")) {
+            target_name = "kr16";
+        } else if (lower.ends_with(".k32")) {
+            target_name = "kr32";
+        }
+
+        if (target_name == "kr16") {
+#if defined(KRDBG_HAVE_KR16)
+            krdbg::kr16adapter::LoadedProgram loaded;
+            krdbg::kr16adapter::Options adapter_options;
+            adapter_options.source_roots = {options.source_root};
+            if (!krdbg::kr16adapter::load_image(image_path, adapter_options,
+                                                 loaded, error)) {
+                return false;
+            }
+            session->replace_target(std::move(loaded.target), loaded.info);
+#else
+            error = "this build has no KR16 adapter";
+            return false;
+#endif
+        } else if (target_name == "kr32") {
+#if defined(KRDBG_HAVE_KR32)
+            krdbg::kr32adapter::LoadedProgram loaded;
+            krdbg::kr32adapter::Options adapter_options;
+            adapter_options.source_roots = {options.source_root};
+            if (!krdbg::kr32adapter::load_standalone(image_path, adapter_options,
+                                                      loaded, error)) {
+                return false;
+            }
+            session->replace_target(std::move(loaded.target), loaded.info);
+#else
+            error = "this build has no KR32 adapter";
+            return false;
+#endif
+        } else {
+            error = "unknown target '" + target_name + "'";
+            return false;
+        }
+        stop_at_main(*session);
+        loaded_source = source ? path : std::string{};
+        loaded_image = image_path;
+        host.last_load_source = source;
+        set_program(image_path, fs::path(path).filename().string(), session->pc());
+        return true;
+    };
+#else
+    const auto load_any = [](const std::string&, std::string& error) {
+        error = "this build has no VM adapter";
+        return false;
+    };
+#endif
+
+    host.load_callback = load_any;
+    host.reload_callback = [&](std::string& error) {
+        if (!loaded_source.empty()) {
+            return load_any(loaded_source, error);
+        }
+        if (!session->restart(error)) {
+            return false;
+        }
+        set_program(loaded_image, std::filesystem::path(loaded_image).filename().string(),
+                    session->pc());
+        return true;
+    };
+#if defined(KRDBG_HAVE_KR32)
+    host.kernel_supported = true;
+    host.kernel_callback = [&](std::string& error) {
+        krdbg::kr32adapter::LoadedProgram loaded;
+        krdbg::kr32adapter::Options adapter_options;
+        adapter_options.source_roots = {options.source_root};
+        if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
+                                                   error)) {
+            return false;
+        }
+        session->replace_target(std::move(loaded.target), loaded.info);
+        loaded_source.clear();
+        loaded_image = "<embedded KR32OS>";
+        host.last_load_source = false;
+        set_program(loaded_image, "KR32OS", session->pc());
+        return true;
+    };
+#endif
+
+    if (!options.load_path.empty()) {
+        std::string error;
+        if (!load_any(options.load_path, error)) {
+            std::fprintf(stderr, "krdbg: load failed: %s\n", error.c_str());
+            return 1;
+        }
+    }
+    if (options.kernel) {
+        std::string error;
+        if (!host.load_kernel(error)) {
+            std::fprintf(stderr, "krdbg: kernel load failed: %s\n",
+                         error.c_str());
+            return 1;
+        }
+    }
+    if (options.reset) {
+        std::string error;
+        if (!host.reload(error)) {
+            std::fprintf(stderr, "krdbg: reset failed: %s\n", error.c_str());
+            return 1;
+        }
+    }
+
     if (real_program.has_value()) {
         surface.set_program_info(*real_program);
     } else if (options.loaded) {

@@ -65,6 +65,18 @@ target_include_directories(krdbg_core
 )
 target_link_libraries(krdbg_core PRIVATE krdbg_warnings)
 
+# Host-side process and build chain. It runs installed krc/krld; no compiler
+# code is linked into krdbg.
+add_library(krdbg_host STATIC
+    src/host/process.cpp
+    src/host/build_chain.cpp
+)
+target_include_directories(krdbg_host
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src/host"
+)
+target_link_libraries(krdbg_host PUBLIC krdbg_core PRIVATE krdbg_warnings)
+
 # KDBG translation. The decoder is the exact KRCompiler pair vendored under
 # third_party/krc-debug; only src/kdbg includes krc/debug/kdbg.h and only this
 # target sees a KdbgImage.
@@ -190,7 +202,7 @@ endif()
 
 add_executable(krdbg_demo apps/demo/main.cpp)
 target_link_libraries(krdbg_demo PRIVATE
-    krdbg_ui ${KRDBG_PLATFORM_TARGET} krdbg_warnings)
+    krdbg_ui krdbg_host ${KRDBG_PLATFORM_TARGET} krdbg_warnings)
 if(KRDBG_KR32_ADAPTER)
     target_link_libraries(krdbg_demo PRIVATE krdbg_kr32)
     target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR32=1)
@@ -225,23 +237,28 @@ if(KRDBG_BUILD_TESTS)
         tests/test_golden.cpp
     )
     target_link_libraries(krdbg_tests PRIVATE
-        krdbg_ui krdbg_kdbg krdbg_platform_null krdbg_warnings)
+        krdbg_ui krdbg_kdbg krdbg_host krdbg_platform_null krdbg_warnings)
     target_include_directories(krdbg_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui")
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
         KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg"
         KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    if(KRDBG_KR32_ADAPTER OR KRDBG_KR16_ADAPTER)
+        target_sources(krdbg_tests PRIVATE tests/test_host_build.cpp)
+    endif()
     if(KRDBG_KR32_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr32_adapter.cpp)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr32)
         target_compile_definitions(krdbg_tests PRIVATE
+            KRDBG_HAVE_KR32=1
             KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.k32")
     endif()
     if(KRDBG_KR16_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr16_adapter.cpp)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr16)
         target_compile_definitions(krdbg_tests PRIVATE
+            KRDBG_HAVE_KR16=1
             KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kex"
             KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
     endif()
