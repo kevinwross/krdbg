@@ -10,9 +10,12 @@ confirm before branching.
 **Requested by:** kevinwross
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.5,
 plus 4.9 for the listing.
-**Pinned:** `f936155` on `KRCompiler` `adopt-krc` — the facade, the
-`krc::toolchain`/`krc::debug` packages, the listing rows, and the CLIs rebuilt on
-the facade.
+**Pinned:** `47fa4e5` on `KRCompiler` `adopt-krc` — the facade and packages
+(`f936155`), the listing rows, the KR16 directives, and the installed sysroot and
+runtime that item 3.9 consumes.
+**Stage A:** complete at `1de7012` — items 3.1–3.9, with the gate at 98/98 on
+Windows and WSL under both toolchains. Stage B (3.10) needs its second approval
+and the one-release window.
 **Sibling plan:** [kr16](kr16-adopt-krc-toolchain.md). This one runs second, on
 the evidence that kr32 has the harder compiler.
 **Read at that commit:** `src/ui/debugger_ui.cpp`, `include/kr32/cc/cc.h`,
