@@ -65,11 +65,11 @@ Target-specific notes:
 
 **Build entry point.** None yet — M0 creates the CMake skeleton and presets. Until then there is nothing to configure or build; do not invent commands.
 
-**Doctor.** `.agents/templates/doctor.msvc.ps1` — the delivered starting point. Exits 0 on Hukilau and reports the MSVC, Windows SDK, and CMake it resolved; run it when a build cannot find its toolchain.
+**Doctor.** `.agents/templates/doctor.msvc.ps1` — the delivered starting point. Exits 0 on BigBrain and reports the MSVC, Windows SDK, and CMake it resolved; run it when a build cannot find its toolchain.
 
 **Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH`); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`; all found with `vswhere` via the doctor. The Linux and ARM64 toolchain is not yet verified for this project; the plan requires C++20 and SDL2 (`PLAN.md` §4.8).
 
-**Verified on** Hukilau **at** 2026-11-18: `.agents/templates/doctor.msvc.ps1` → exit 0. No build has been attempted.
+**Verified on** BigBrain **at** 2026-11-20T01:41:25-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting MSVC 14.51.36231 and CMake 4.3.1-msvc1; neither `cmake` nor `ninja` is on `PATH`. No build has been attempted.
 
 **Install (requires approval).** Nothing yet. M0 will need CMake and a C++20 compiler; Linux needs SDL2 as a system package, and Windows must not require an `SDL2.dll`.
 

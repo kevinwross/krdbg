@@ -19,9 +19,9 @@ concrete integration contract.
 
 | Workspace | What it contributes | Key evidence |
 |---|---|---|
-| `C:\Users\kevin\repos\kr32` | The reference debugger GUI. SDL2 + software `Canvas`, 1440x900, multi-pane layout. | `docs/ui.md`; `src/ui/debugger_ui.cpp`; `include/kr32/debug/debug.h` |
-| `C:\Users\kevin\repos\KR16` | A second, independently written debugger GUI: Win32 GDI / SDL3, different layout, different session API. | `src/ui/app.cpp`; `include/kr16/debug_session.hpp`; `docs/research/visual-debugger.md` |
-| `C:\Users\kevin\repos\KRCompiler` | The new compiler/linker and the KDBG v1 debug format. No GUI debugger. | `src/debug/kdbg.h`; `src/debug/kdbg.cpp`; `src/linker/linker.cpp`; `docs/symbols.md` |
+| `C:\Users\kevin\source\repos\KR32` | The reference debugger GUI. SDL2 + software `Canvas`, 1440x900, multi-pane layout. | `docs/ui.md`; `src/ui/debugger_ui.cpp`; `include/kr32/debug/debug.h` |
+| `C:\Users\kevin\source\repos\kr16` | A second, independently written debugger GUI: Win32 GDI / SDL3, different layout, different session API. | `src/ui/app.cpp`; `include/kr16/debug_session.hpp`; `docs/research/visual-debugger.md` |
+| `C:\Users\kevin\source\repos\KRCompiler` | The new compiler/linker and the KDBG v1 debug format. No GUI debugger. | `src/debug/kdbg.h`; `src/debug/kdbg.cpp`; `src/linker/linker.cpp`; `docs/symbols.md` |
 
 I also launched both GUIs to look at the real surface:
 
@@ -69,7 +69,7 @@ screen console. A target may expose a framebuffer, a COM port, both, or neither.
 
 There are already two debugger front ends, and a third VM would mean a third one:
 
-- **KR32** owns a `DebuggerUI` (4,759 lines of painting and hit-testing), a
+- **KR32** owns a `DebuggerUI` (4,769 lines of painting and hit-testing), a
   `debug::Session` tied to `kr32::core::Machine`, and its own `.debug_info`
   dialect.
 - **KR16** owns an `App` (3,337 lines) and a `DebugSession` tied to
@@ -719,7 +719,7 @@ apps/demo/
 ```
 
 `DebuggerSurface::render(Canvas&)` draws in the same order as KR32
-(`debugger_ui.cpp:3840-3899`): toolbar, source, disassembly, state, memory,
+(`debugger_ui.cpp:3849-3909`): toolbar, source, disassembly, state, memory,
 variables, breakpoints, call stack, inspector, COM port or video preview tab,
 status bar, then tooltips/menus/modals.
 
@@ -808,10 +808,10 @@ is stable.
 ### 4.9 KDBG reader ownership
 
 KDBG is currently implemented inside KRCompiler's `krc_core`
-(`CMakeLists.txt:98`) with no install/export target. `krc --dump-symbols` is the
-only consumer. The plan says “All debuggers MUST use `libkrcdebug`; no debugger
-parses the format directly” (`plan.md:1108-1119`), but no such library exists
-yet.
+(`CMakeLists.txt:86-121`, with `kdbg.cpp` at line 100) with no install/export
+target. `krc --dump-symbols` is the only consumer. The plan says “All debuggers
+MUST use `libkrcdebug`; no debugger parses the format directly”
+(`plan.md:1108-1119`), but no such library exists yet.
 
 #### What `libkrcdebug` would be
 
@@ -1112,7 +1112,7 @@ It is **not** enough to match KR32's current surface in these places:
 
 | KR32 feature | KDBG v1 | Consequence |
 |---|---|---|
-| Register-promoted locals (`P` records in `.debug_info`, `docs/debug.md:16`) | **Missing** | At `-O1`, KDBG's frame offset points at a dead slot. The variable shows `0`, the exact failure KR32 fixed. |
+| Register-promoted locals (`P` records in `.debug_info`, `docs/debug.md:16`) | **Missing** | A `-O1` debugger reads the frame slot, not the register: the compiler refuses to promote a source variable, so the value is right but the display loses KR32's `register: R9`. Correctness breaks only once frame slots are reused (`ADR 0052`, proposed). |
 | Class inheritance (`C <class> <size> <base>`) | **Missing** | A derived class with no own members shows nothing; KR32 expands base members (`debug.h:112-119`). |
 | Array element type/count | **Missing** (kind `array`, size only) | Arrays cannot be paged/expanded correctly; KR32 parses type strings and pages 16 elements at a time. |
 | Parameter/local/static distinction, scopes | **Missing** | Shadowed locals collide by `function + name`; params are indistinguishable. |
@@ -1122,8 +1122,10 @@ It is **not** enough to match KR32's current surface in these places:
 
 The updated KR32 UI makes the location gap concrete: a promoted local now shows
 `register: R9` or `register: F2` instead of an address, and its members are read
-through that register (`docs/ui.md:224-231`). KDBG v1 has no record that can
-express this, so it is the first v1.1 item, not an optional nicety.
+through that register (`docs/ui.md:229-233`). KDBG v1 has no record that can
+express this, so it is the first v1.1 item — for parity with KR32's display and
+to keep the value correct once a slot can be reused, not because v1 reads a wrong
+value today (`docs/symbols.md:70-74`, `KRCompiler` ADR 0052).
 
 ### 5.3 Approved v1.1 shape
 
@@ -1182,7 +1184,7 @@ and for comparing the new surface with the old one, but KDBG is the future.
 ### 5.6 Source paths
 
 KDBG stores whatever `krld` recorded; `--source-root` rewrites paths under a
-root to `/`-separated relative paths (`docs/symbols.md:64-68`). The surface
+root to `/`-separated relative paths (`docs/symbols.md:76-80`). The surface
 needs a resolver:
 
 1. absolute path, if it exists;
@@ -1256,7 +1258,7 @@ and 8-byte instruction widths.
 
 ### 6.2 Interactions to preserve
 
-From `docs/ui.md:130-246` and `debugger_ui.cpp:4472-4726`:
+From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
 
 - `F5` run/pause, `F6` break, `F9` toggle breakpoint at current line,
   `F10` instruction over, `F11` instruction in, `Shift+F11` instruction out,
@@ -1595,8 +1597,11 @@ is too UI-shaped):
 - Memory: 16-bit addresses, 64 KiB; stack guard; MMIO.
 - Unwind: KR16 ABI — frame pointer R4, saved FP at `[R4]`, return PC at
   `[R4+2]` (`docs/research/visual-debugger.md:61`).
-- COM port: MMIO `0xF000` output / input, mapped to the three-register model
-  (`OUT`/`IN`/`STATUS`); `RX_READY`/`TX_READY` are synthesized by the adapter.
+- COM port: the console block at `0xF000` — OUT `0xF000`, `TX_READY` `0xF001`,
+  echo `0xF002`, IN `0xF004`, `RX_READY`/`OVERRUN` `0xF005` — mapped to the
+  three-register model (`OUT`/`IN`/`STATUS`); the adapter reads the status bits
+  rather than synthesizing them and feeds input through `Machine::push_key`
+  (`src/vm/machine.cpp:142-161,177-190`).
   KR16 has no framebuffer, so `SCREEN`/`VIDEO` is hidden and only the COM port is
   present.
 - Kernel: KR16 has no embedded kernel/BIOS pair equivalent to KR32OS, so
@@ -1812,16 +1817,16 @@ the first point that runs a real VM.
 
 ## Appendix A — Evidence index
 
-- KR32 GUI spec: `kr32/docs/ui.md`, especially layout (44–59), settings
-  (112–128), interactions (130–246), headless (248–257).
+- KR32 GUI spec: `kr32/docs/ui.md`, especially layout (44–116), settings
+  (117–133), interactions (135–252), headless (253–263).
 - KR32 UI layout constants: `kr32/src/ui/debugger_ui.cpp:38-61`,
-  `3298-3337`; key handling `4472-4726`; render order `3840-3899`.
+  `3298-3337`; key handling `4481-4736`; render order `3849-3909`.
 - KR32 debug model: `kr32/include/kr32/debug/debug.h:19-262`;
   `src/debug/debug.cpp:117-254` (parse), `678-701` (unwind).
 - KR32 `.debug_info` records: `kr32/docs/debug.md:6-58`.
 - KR16 UI: `KR16/src/ui/app.hpp:17-292`; `app.cpp` layout `295-488`;
   `debug_session.hpp:87-238`.
-- KR16 layout/step model: `KR16/dist/kr16-1.0.0-windows-x64/docs/research/visual-debugger.md:174-349`.
+- KR16 layout/step model: `KR16/docs/research/visual-debugger.md:174-349`.
 - KDBG format: `KRCompiler/docs/symbols.md`; `KRCompiler/src/debug/kdbg.h:9-87`;
   decoder `src/debug/kdbg.cpp:365-506`.
 - KDBG writer/attachment: `KRCompiler/src/linker/linker.cpp:566-704`;
@@ -1829,6 +1834,7 @@ the first point that runs a real VM.
 - KR16 image writer drops debug: `KRCompiler/src/linker/kr16_image.cpp:51-105`;
   `krld` calls `attach_kdbg` at `src/tools/krld/main.cpp:242` but writes only
   text for KR16 at `278-298`.
-- KRCompiler has no GUI: `plan.md:1108-1119` describes `libkrcdebug` but
-  `CMakeLists.txt` only builds `krc_core`; no install/export.
+- KRCompiler has no GUI: `plan.md:1108-1119` describes `libkrcdebug`, but
+  `kdbg.cpp` is one source of `krc_core` (`CMakeLists.txt:86-121`); no target
+  or install/export rule packages it.
 - Sibling VM discovery for tests: `KRCompiler/CMakeLists.txt:42-83`.

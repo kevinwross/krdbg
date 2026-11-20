@@ -495,7 +495,9 @@ abstraction with no UI conditionals.
 
 - [ ] **M4.1.1** `adapters/kr16` target.
 - [ ] **M4.1.2** State: R0–R4, PC, SP, SR, C/Z/N/V/I; 4-digit addresses.
-- [ ] **M4.1.3** Disassembly, memory, unwind (R4), COM MMIO `0xF000`.
+- [ ] **M4.1.3** Disassembly, memory, unwind (R4), COM console block at `0xF000`
+      (OUT `0xF000`, `TX_READY` `0xF001`, IN `0xF004`, status `0xF005`), and
+      input through `Machine::push_key`.
 - [ ] **M4.1.4** No framebuffer: `VIDEO` hidden; COM only.
 - [ ] **M4.1.5** `KERNEL` hidden (`supports_kernel_load == false`).
 
