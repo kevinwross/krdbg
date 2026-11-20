@@ -82,3 +82,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 50 checks, 0 failures, 48 passed with the two x64 golden comparisons excluded; `platform_boundary` 14 UI/public files clean and 10 core/kdbg files VM-clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: `2aee61f` makes `replace_target` refresh the debug info together with the new target and extends the existing `replace_target` test to re-resolve a moved line breakpoint, so the check count stays at 50; `1c978f6` marks M1/G1 done using this run as the ARM64 evidence. The UI is untouched, so the frame hashes are unchanged.
+
+## 2026-11-20T09:53:15-08:00 — main @ 1c80f16
+
+- Host: BitWhiz
+- Range: 1c978f6..1c80f16, 3 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the surface, scroll and SDL2 presenter translation units rebuilt)
+- Test: CTest — pass (2/2: `krdbg_unit` 62 checks, 0 failures, 60 passed with the two x64 golden comparisons excluded; `platform_boundary` 15 UI/public files clean and 10 core/kdbg files VM-clean)
+- Hash: empty `5B8F7CFA1DDEE5D2`, loaded `BEFD2141466934DD` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M2.1 is the first UI change since M0, so the hashes moved from `F15B00C153682DF8` / `E47FA2651086D075` to the new values; ARM64 matches the regenerated x64 goldens exactly in Debug and Release, so `goldens/*.arm64.hash` is still unnecessary. `krdbg_unit` grew from 50 to 62 checks. The boundary check now covers 15 UI/public files because `src/ui/scroll.h` joined the set. Caveat: the gate renders and hashes only the empty and loaded states, so the new `goldens/running.hash` has no ARM64 evidence — the running state is exercised by the x64 golden test, which the ARM64 unit run excludes.
