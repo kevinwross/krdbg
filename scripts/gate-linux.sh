@@ -60,6 +60,10 @@ frame_hash() {
 }
 
 mkdir -p build/gate
+if [[ "$arch" == "arm64" ]]; then
+    # One run, one record: the tester log is the durable history.
+    : > build/gate/arm64-hashes.txt
+fi
 for index in "${!presets[@]}"; do
     exe="${dirs[$index]}/krdbg_demo"
     for state in empty loaded; do
@@ -73,7 +77,7 @@ for index in "${!presets[@]}"; do
             echo "hash $state $hash (matches goldens/${state}.hash)"
         else
             echo "arm64 hash $state $hash"
-            echo "$preset $state $hash" >> build/gate/arm64-hashes.txt
+            echo "${presets[$index]} $state $hash" >> build/gate/arm64-hashes.txt
             if [[ -f "goldens/${state}.arm64.hash" ]]; then
                 expected="$(tr -d '\r\n' < "goldens/${state}.arm64.hash")"
                 if [[ "$hash" != "$expected" ]]; then
