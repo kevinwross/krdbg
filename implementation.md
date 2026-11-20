@@ -715,16 +715,19 @@ legacy path, and the 16-bit UI. The UI screenshot is `shots/m4-kr16.png`.
 ### Gate G4 — KR16 slice
 
 - [x] **G4.1** Windows x64 and WSL x64 build/test/integration pass.
-- [ ] **G4.2** ARM64 evidence recorded (non-blocking).
+- [x] **G4.2** ARM64 evidence recorded (non-blocking).
 - [x] **G4.3** Same interactions work on KR16; only adapter code changed.
 - [x] **G4.4** No `if (kr16)` or 16-bit special case in `src/ui`.
 - [x] **G4.5** `.kex` debug path is documented or the legacy adapter is used.
 - [x] **G4.6** Goldens updated.
 
-G4 is closed for the blocking rows. G4.2 is pending the ARM64 tester entry and
-is non-blocking. `adapters/kr16` is the only source that includes a KR16 header;
-`src/ui` and the public headers are unchanged. The KDBG path is preferred, and
-the legacy `.debug_*` adapter is used only when `.kdbg` is absent.
+G4 is closed. The ARM64 gate at `dee054e` (adapter OFF) passed 99 checks; the
+extra adapter-ON build at the same revision passed **107 checks, 0 failures**,
+including the 16-bit golden. The extra build used the sibling KR16 tree at
+`b9f7436`, which krdbg does not pin, and the null presenter; it is host evidence,
+not a reproducible gate row. `adapters/kr16` is the only source that includes a
+KR16 header; `src/ui` and the public headers are unchanged. The KDBG path is
+preferred, and the legacy `.debug_*` adapter is used only when `.kdbg` is absent.
 
 ---
 
@@ -846,7 +849,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G3 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR32_ROOT=/home/kevinro/repos/kr32 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T11:49:04-08:00 @ `9d63589`: gate 99 checks, 0 failures; entry 2026-11-20T11:54:14-08:00 @ `7539b23`: adapter ON **106 checks, 0 failures**, real-target golden `19D243A88CB8EF35`; sibling KR32 `aa120ad` is host evidence, not pinned | `7539b23` |
 | G4 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=C:/Users/kevin/source/repos/kr16` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON Debug 107 tests, 0 failures, Release 107 tests, 0 failures; 16-bit golden `A1F5B45032915A96` | `0c6b246` |
 | G4 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=/mnt/c/Users/kevin/source/repos/kr16 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON 107 tests, 0 failures; 16-bit golden matches Windows | `0c6b246` |
-| G4 | ARM64 | not run | PENDING (non-blocking) — no M4 entry in `docs/arm64-test-log.md`; G4.1/G4.3–G4.6 are the blocking rows | — |
+| G4 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR16_ROOT=/home/kevinro/repos/kr16 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T13:01:18-08:00 @ `dee054e`: gate 99 checks, 0 failures; adapter ON **107 checks, 0 failures**, 16-bit golden `A1F5B45032915A96`; sibling KR16 `b9f7436` is host evidence, not pinned | `0d5a272` |
 | G5 | Windows x64 | TBD | TBD | TBD |
 | G5 | WSL x64 | TBD | TBD | TBD |
 | G6 | Windows x64 | TBD | TBD | TBD |
@@ -1003,8 +1006,12 @@ Recorded 2026-11-20T12:51:17-08:00.
 - Clean checkout: `git archive HEAD` extracted under `build/clean-m4`, adapter
   ON, configured, built and passed the same **107 tests, 0 failures**; the
   fixture source path resolves inside the extracted tree.
-- G4.2: not run; `docs/arm64-test-log.md` has no M4 entry. The ARM64 row is
-  non-blocking per the milestone instruction.
+- G4.2: ARM64 tester entry 2026-11-20T13:01:18-08:00 @ `dee054e` records the
+  adapter-OFF gate at 99 checks and an extra adapter-ON build at **107 checks,
+  0 failures**, including `kr16_ui_loaded_state_matches_the_committed_golden`
+  (`A1F5B45032915A96`). The extra build used the sibling KR16 tree at
+  `b9f7436` and the null presenter, so it is host evidence rather than a
+  reproducible gate row.
 
 
 
