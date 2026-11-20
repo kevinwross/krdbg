@@ -301,10 +301,11 @@ Pass only when all of these are checked and §9 has the real output.
 - [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 has a tester
       log entry for the revision.
   Evidence: CI runs `44733345483` (`b325a7f`), `44777407987` (`da4d19b`) and
-  `44778060127` (`503f5de`) show `windows-x64` and `linux-x64` succeeding. The
+  `44778060127` (`503f5de`) show `windows-x64` and `linux-x64` succeeding.
+  After removing the ARM64 job, run `44830559486` (`85f6221`) completed with
+  `windows-x64` success and `linux-x64` success and only those two jobs. The
   ARM64 tester entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` records
-  `krdbg_unit` 105 checks, 0 failures; the workflow no longer has an `arm64`
-  job.
+  `krdbg_unit` 105 checks, 0 failures; the workflow has no `arm64` job.
 - [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
   Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
@@ -883,7 +884,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS`. CI run `44733345483` also passed `windows-x64`. | `77c4e00` |
 | G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
 | G0 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: Debug and Release configure/build pass; CTest 2/2 with the x64 goldens excluded; empty `F15B00C153682DF8`, loaded `E47FA2651086D075` match x64 | `5fd5196` |
-| G0 | CI | `.github/workflows/ci.yml`; `docs/arm64-tester.md` | PASS — Windows and Ubuntu CI green; ARM64 evidence is tester entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` (105 gate checks, 0 failures); no ARM64 CI job remains | `81e1c31` |
+| G0 | CI | `.github/workflows/ci.yml`; `docs/arm64-tester.md` | PASS — run `44830559486` (`85f6221`) after removing the ARM64 job: only `windows-x64` and `linux-x64`, both success; ARM64 evidence is tester entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` (105 gate checks, 0 failures) | `85f6221` |
 | G1 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS` on `2aee61f`; 50 tests, 0 failures; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; CI run `44783518343` also passed `windows-x64` | `2aee61f` |
 | G1 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS` on `2aee61f`; 50 tests, 0 failures; same hashes; CI run `44783518343` also passed `linux-x64` | `2aee61f` |
 | G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
