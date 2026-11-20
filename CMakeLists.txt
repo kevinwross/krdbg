@@ -53,6 +53,8 @@ add_library(krdbg_core STATIC
     src/core/session.cpp
     src/core/debug_info.cpp
     src/core/settings_json.cpp
+    src/core/settings_host.cpp
+    src/core/tool_settings.cpp
     src/core/variables.cpp
     src/core/fake_target.cpp
     src/core/fake_debug_info.cpp
@@ -198,6 +200,10 @@ if(KRDBG_KR16_ADAPTER)
     target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR16=1)
 endif()
 
+# External tool contract: schema and values as JSON without the UI.
+add_executable(krdbg_settings apps/settings_cli/main.cpp)
+target_link_libraries(krdbg_settings PRIVATE krdbg_core krdbg_warnings)
+
 enable_testing()
 
 if(KRDBG_BUILD_TESTS)
@@ -212,6 +218,7 @@ if(KRDBG_BUILD_TESTS)
         tests/test_kdbg.cpp
         tests/test_session.cpp
         tests/test_settings_json.cpp
+        tests/test_settings_host.cpp
         tests/test_scroll.cpp
         tests/test_surface.cpp
         tests/test_video_fit.cpp

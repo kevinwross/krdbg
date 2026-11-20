@@ -747,20 +747,37 @@ the same schema dialog.
       breakpoint rules.
 - [ ] **M5.1.5** `KERNEL` loads the embedded pair; hidden when unsupported.
 
+M5.1 waits for KRCompiler item 4.14 to publish a SHA that installs
+`krc`/`krld` under `bin/`. The host will run those installed executables; it
+will not point at a KRCompiler build tree and will not link the toolchain.
+
 ### M5.2 Tool settings
 
-- [ ] **M5.2.1** Compiler `ISettingsProvider` (target, optimization, defines,
+- [x] **M5.2.1** Compiler `ISettingsProvider` (target, optimization, defines,
       include paths, warnings, debug info).
-- [ ] **M5.2.2** Linker provider (base, entry, map, strip, gc-sections).
-- [ ] **M5.2.3** Assembler provider (syntax, base, listing).
-- [ ] **M5.2.4** Host aggregation, prefixes, schema refresh after load.
-- [ ] **M5.2.5** `--describe-settings`/`--settings` JSON for external tools.
+- [x] **M5.2.2** Linker provider (base, entry, map, strip, gc-sections).
+- [x] **M5.2.3** Assembler provider (syntax, base, listing).
+- [x] **M5.2.4** Host aggregation, prefixes, schema refresh after load.
+- [x] **M5.2.5** `--describe-settings`/`--settings` JSON for external tools.
 - [ ] **M5.2.6** Applying a tool setting marks `reload_required` and rebuilds.
+
+`CompilerSettingsProvider`, `LinkerSettingsProvider`,
+`AssemblerSettingsProvider` and `DebugSettingsProvider` publish local ids;
+`SettingsAggregator` prefixes groups and settings with `cc.`, `ld.`, `as.` and
+`dbg.` and merges them with any VM provider. `apply` validates the whole
+snapshot, returns `reload_required` for tool changes, and rolls providers back
+on a rejection. `refresh()` rebuilds the schema after a load. `krdbg_settings`
+exposes the contract as `--describe-settings` and `--settings FILE` JSON. The
+fake-provider tests render the `Build` group through the existing dialog and
+compare `goldens/tool-settings.hash`.
 
 ### M5.3 Source roots and paths
 
 - [ ] **M5.3.1** `--source-root`/project root resolution; `/`-separated paths.
 - [ ] **M5.3.2** Clean-checkout source resolution test.
+
+M5.3 waits on the same 4.14 install; M3 and M4 already resolve their fixture
+sources from a clean checkout.
 
 ### Gate G5 — Compiler pipeline
 
@@ -1012,6 +1029,39 @@ Recorded 2026-11-20T12:51:17-08:00.
   (`A1F5B45032915A96`). The extra build used the sibling KR16 tree at
   `b9f7436` and the null presenter, so it is host evidence rather than a
   reproducible gate row.
+
+
+
+### M5.2/M5.4/M5.5 evidence
+
+Recorded 2026-11-20T13:49:40-08:00.
+
+- `src/core/tool_settings.cpp` publishes compiler, linker, assembler and debug
+  providers; `src/core/settings_host.cpp` prefixes their local ids with
+  `cc.`, `ld.`, `as.` and `dbg.` and merges them with a VM provider. The tests
+  cover six groups, 19 settings, a dynamic schema refresh, valid apply with
+  `reload_required`, invalid value rejection, provider rejection with rollback,
+  and schema/value JSON round-trips.
+- Windows bare tests: **105 tests, 0 failures**; Windows with the KR16 adapter:
+  **113/0**; with the KR32 adapter: **112/0**; WSL bare: **105/0**; WSL KR16:
+  **113/0**; WSL KR32: **112/0**.
+- `goldens/tool-settings.hash` is `3396C255BD1081B6`; the dialog renders the
+  `Build` group (`Defines`, `Include paths`, `Target`) from the aggregate
+  schema with no `src/ui` change. Screenshot: `shots/m5-tool-settings.png`.
+- `krdbg_settings --describe-settings` emits the aggregated JSON; the schema
+  starts with groups `cc.build`, `cc.codegen`, `ld.layout`, `as.output` and
+  `dbg.sources` and settings such as `cc.target`, `cc.optimization`,
+  `ld.base`, `as.syntax`, `dbg.source_roots`.
+- `krdbg_settings --settings build/m5-settings.json`, where the file sets
+  `cc.optimization=-O1`, `ld.map=true` and `dbg.instruction_limit=2000`, exits
+  0 and prints values `cc.optimization: "-O1"`, `ld.map: true`,
+  `dbg.instruction_limit: 2000`.
+- M5.1/M5.2.6/M5.3 are waiting for KRCompiler 4.14 to publish a SHA that
+  installs `krc` and `krld` under `bin/`. At this timestamp
+  `origin/adopt-krc` is `ae69da6` (4.13 logging); the 4.14 implementation
+  commit exists only in the local KRCompiler worktree as `eb202e2`, so no SHA
+  was pinned and the host was not pointed at a build tree.
+- G5 is not run.
 
 
 
