@@ -178,6 +178,9 @@ Plus the package-consumer check, the byte-identity diff from 4.2/4.3, and the
 listing comparison from 4.9. Every check must be run and its real output
 recorded; nothing is claimed from this plan.
 
+The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
+it is not re-run here.
+
 ## 6. Risks
 
 | Risk | Why it bites | Mitigation |

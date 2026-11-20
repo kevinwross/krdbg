@@ -124,6 +124,9 @@ Run the suite twice, once per `KR32_TOOLCHAIN` value, on Windows and WSL, plus
 the 3.1 debug check and the OS-mode smoke test. Record the real output; nothing
 here is claimed to pass.
 
+The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the branch tip,
+and it is non-blocking per this plan.
+
 ## 6. Risks
 
 | Risk | Why it bites | Mitigation |
