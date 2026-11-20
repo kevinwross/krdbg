@@ -64,11 +64,15 @@ not require a debugger change, unlike kr16.
 6. OS mode smoke test: the embedded kernel/BIOS pair is unchanged and still
    boots, and so does an explicit `--os <kernel> --bios <bios>` pair; the krc
    path applies to user programs only.
+7. The five guest headers — `<kr32/fb.h>`, `<kr32/gfx.h>`, `<kr32/con.h>`,
+   `<kr32/input.h>` and `<kr32/sys.h>` — written as files on disk, so both
+   toolchains find them through the include path.
 
 **In scope (stage B, second approval)**
 
-7. Default flips to `krc`; delete `src/cc`, `src/cxx`, `src/asm` and `src/link`
-   after a release in which both are available.
+8. Default flips to `krc`; delete `src/cc`, `src/cxx`, `src/asm` and `src/link`
+   after a release in which both are available; with them go KR32's runtime and
+   the injected guest-header strings.
 
 **Out of scope**
 
@@ -107,7 +111,8 @@ not require a debugger change, unlike kr16.
 | 3.5 | Diagnostics, options, listing | errors carry file/line/column; base/entry/source-root map; the listing is formatted from the facade rows and matches the built-in shape |
 | 3.6 | OS mode and kernel/BIOS smoke test | `--os --embedded` and an explicit `--os <kernel> --bios <bios>` pair both boot, and the video window opens |
 | 3.7 | Suite twice | all existing tests pass with `builtin` and with `krc` |
-| 3.8 | Stage B: default flip, delete the four directories | suite green on a clean checkout with no built-in toolchain present |
+| 3.8 | Guest headers as files | each of the five headers compiles from a source that includes it, under both toolchains |
+| 3.9 | Stage B: default flip, delete the four directories | suite green on a clean checkout with no built-in toolchain present |
 
 `3.1` is deliberately first and costs a day: if a krc image does not debug
 correctly in the current GUI, no amount of build-path work helps.
@@ -124,8 +129,9 @@ ctest --preset windows-ninja
 ```
 
 Run the suite twice, once per `KR32_TOOLCHAIN` value, on Windows and WSL, plus
-the 3.1 debug check and the OS-mode smoke test. Record the real output; nothing
-here is claimed to pass.
+the 3.1 debug check, the OS-mode smoke test, and a source that includes each of
+the five guest headers compiled under both toolchains. Record the real output;
+nothing here is claimed to pass.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the branch tip,
 and it is non-blocking per this plan.
@@ -166,6 +172,17 @@ open questions the plan was proposed with.
    [kernel.bin] [--bios bios.bin]` and `--embedded` keep working, and 3.6 tests
    both the embedded pair and explicit files. Rebuilding those images with krc is
    not part of this plan.
+4. **The krc path links krc's runtime, and stage B deletes KR32's.** Decided
+   2026-11-20T09:53:44-08:00. Keeping KR32's runtime is not implementable: krc's
+   assembler rejects KR32's runtime spelling, the `LL` instruction and KR32's
+   object format, and KR32's `libc.c` uses atomics krc's front end does not take.
+   The krc path links `crt0.s`, `libkrcrt.kro`, `fileio.s` and `eh.s` from krc's
+   staged runtime, so guest code built through krc uses krc's libc. Stage B
+   therefore deletes KR32's runtime with the four directories.
+5. **The five guest headers become files.** Decided
+   2026-11-20T09:53:44-08:00. They exist only as injected strings in
+   `include/kr32/cc/guest_headers.h`, which krc's preprocessor cannot see. They
+   are written as files so both toolchains include the same ones (item 3.8).
 
 ## 9. Approval
 
@@ -173,6 +190,7 @@ Approved by kevinwross on 2026-11-20T02:36:31-08:00.
 
 Approving this file authorises stage A in KR32 only: the CMake option, the krc
 branches of the two compile functions, the option and diagnostic mapping, the
-corpus write-up, and the tests. It does not authorise the default flip, the
-deletion of `src/cc`, `src/cxx`, `src/asm` or `src/link`, a debugger change, the
-removal of the `--os`/`--bios` load path, or any edit in KRCompiler or kr16.
+corpus write-up, the guest headers as files, and the tests. It does not authorise
+the default flip, the deletion of `src/cc`, `src/cxx`, `src/asm` or `src/link`, a
+debugger change, the removal of the `--os`/`--bios` load path, or any edit in
+KRCompiler or kr16.
