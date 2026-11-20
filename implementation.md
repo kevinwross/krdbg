@@ -903,6 +903,10 @@ Recorded 2026-11-20T11:42:43-08:00.
   code that includes a KR32 header.
 - G3.5: the adapter resolves `tests/fixtures/kr32/m3.c` from the image directory
   or the repository root; the test asserts the resolved source path exists.
+  A clean checkout (`git archive HEAD` extracted under `build/clean-checkout`,
+  adapter ON) configured, built and passed the same **106 tests, 0 failures**,
+  so the fixture and source path do not depend on the working tree's build
+  artifacts.
 - Side-by-side: `shots/g3-kr32.png` and `shots/g3-kr32-reference.png` both show
   `main` line 21 at PC `0x10078`, the same disassembly (`LEA R0,[R7+8]`,
   `STORE R0,[R7+16]`, ...), locals `point`/`total`/`input`, and
