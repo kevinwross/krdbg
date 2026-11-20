@@ -562,7 +562,7 @@ presenter, golden coverage and the full CI matrix.
 - [x] **G2.1** Windows x64 and WSL x64 build/test/golden pass.
   Evidence: `GATE WINDOWS: PASS` and `GATE LINUX X64: PASS` with the thirteen goldens.
 - [x] **G2.2** ARM64 build/test recorded (non-blocking).
-  Evidence: BitWhiz entry 2026-11-20T10:19:12-08:00 for main @ `c41e0de` (M2.2–M2.7) — Debug and Release pass, 85 checks, boundary 16 UI/public + 12 core/kdbg, empty/loaded hashes match. The M2.8 tip `ad4f8dc` awaits a tester entry; G2.2 is non-blocking.
+  Evidence: BitWhiz entry 2026-11-20T10:28:51-08:00 for main @ `ad4f8dc` — Debug and Release pass, 99 checks, boundary 16 UI/public + 12 core/kdbg, empty `56BCC5339740DCA6` / loaded `3DAD6F9400E135E2` match x64. The G2-closing commit `3886d47` is docs-only. Only empty/loaded are gate-rendered, so 11 of 13 goldens remain x64-only; G2.2 is non-blocking.
 - [x] **G2.3** All panels and toolbar actions behave per `PLAN.md` §6.
   Evidence: M2.2 panels, M2.3 COM, M2.4 toolbar actions and M2.6 video are checked above.
 - [x] **G2.4** Settings render from schema; layers, validation, restart and
@@ -783,7 +783,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
 | G2 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS`; Debug and Release CTest 99 tests, 0 failures; thirteen goldens match (empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`); no `SDL2.dll`; boundary 16 UI/public + 12 core/kdbg clean | `ad4f8dc` |
 | G2 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS`; Debug and Release CTest 99 tests, 0 failures; the same thirteen hashes; no `SDL2.dll` | `ad4f8dc` |
-| G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS (non-blocking) — BitWhiz entry 2026-11-20T10:19:12-08:00 for `c41e0de`: Debug and Release, 85 checks, boundary 16 UI/public + 12 core/kdbg, empty/loaded hashes match; M2.8 tip pending | `c41e0de` |
+| G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS (non-blocking) — BitWhiz entry 2026-11-20T10:28:51-08:00 for `ad4f8dc`: Debug and Release, 99 checks, boundary 16 UI/public + 12 core/kdbg, empty `56BCC5339740DCA6` / loaded `3DAD6F9400E135E2` match; `3886d47` is docs-only | `ad4f8dc` |
 | G3 | Windows x64 | TBD | TBD | TBD |
 | G3 | WSL x64 | TBD | TBD | TBD |
 | G4 | Windows x64 | TBD | TBD | TBD |
