@@ -14,6 +14,10 @@ which makes a KR16 `.kex` decodable.
 **Pinned:** `0f61260` on `KRCompiler` `adopt-krc` — `.kdbg` in `.kex` with the
 image base (4.6) and the KR16 debug-info emission that makes the payload real
 (4.10); both `.kex` forms decode with sources, lines, functions and variables.
+**Paused at 2.1, waiting on 4.11:** the krc path must assemble kr16's shipped
+`resources/libc.s`, which needs `.bss`, `.space`, `.align` and `.word`; krc's
+KR16 assembler accepts none of them yet. Decision 1 stands, and this plan
+resumes when item 4.11 is published.
 **Sibling plan:** [kr32](kr32-adopt-krc-toolchain.md). This one runs first.
 **Read at that commit:** `include/kr16/build.hpp`, `include/kr16/container.hpp`,
 `include/kr16/debug_session.hpp`, `src/debug/debug_session.cpp`,
