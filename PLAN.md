@@ -370,6 +370,9 @@ class IVideoSource {
 public:
     virtual ~IVideoSource() = default;
     virtual bool frame(FramebufferView& out) const = 0;
+    // Guest address of the first framebuffer byte, or 0 when the source has no
+    // addressable backing store. The memory panel's screen-pixel jump uses it.
+    virtual std::uint64_t framebuffer_base() const { return 0; }
 };
 
 class IDebugTarget {
@@ -457,7 +460,9 @@ Notes:
   at a time when `status().rx_ready` is false; bytes that cannot be accepted
   wait in a bounded 4 KiB UI queue, and a full queue sets overrun.
 - `IVideoSource` is pixels only. A cell-based console drawn by the guest is part
-  of the framebuffer image and is not parsed.
+  of the framebuffer image and is not parsed. `framebuffer_base()` is optional;
+  zero means there is no addressable backing store and screen-pixel jumps are
+  disabled.
 - `com_port()` and `video()` are independent. A target can expose a screen and
   no COM port, a COM port and no screen, both, or neither.
 - v1 exposes **one** COM port per target. If a later VM has several, the pointer

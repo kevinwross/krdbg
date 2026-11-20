@@ -6,12 +6,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
-#include <chrono>
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
@@ -20,6 +20,51 @@ namespace {
 
 class DemoHost final : public krdbg::IHostServices {
 public:
+    DemoHost() {
+        schema.groups = {
+            krdbg::SettingsGroup{"vm", "Virtual Machine", "VM memory", 10},
+            krdbg::SettingsGroup{"run", "Run", "Execution limits", 20},
+            krdbg::SettingsGroup{"env", "Environment", "Guest environment", 30},
+        };
+        krdbg::SettingDescriptor ram;
+        ram.id = "vm.ram_mb";
+        ram.group = "vm";
+        ram.label = "RAM";
+        ram.description = "Guest RAM size. Requires reload.";
+        ram.type = krdbg::SettingType::Int;
+        ram.default_json = "128";
+        ram.has_range = true;
+        ram.min = 16;
+        ram.max = 2048;
+        ram.step = 16;
+        ram.unit = "MiB";
+        ram.requires_restart = true;
+        schema.settings.push_back(ram);
+        krdbg::SettingDescriptor limit;
+        limit.id = "run.limit";
+        limit.group = "run";
+        limit.label = "Instruction limit";
+        limit.description = "Maximum instructions per run slice.";
+        limit.type = krdbg::SettingType::Int;
+        limit.default_json = "1000000";
+        limit.has_range = true;
+        limit.min = 1000;
+        limit.max = 100000000;
+        schema.settings.push_back(limit);
+        krdbg::SettingDescriptor env;
+        env.id = "env";
+        env.group = "env";
+        env.label = "Environment";
+        env.description = "KEY=VALUE entries passed to the guest.";
+        env.type = krdbg::SettingType::StringMap;
+        schema.settings.push_back(env);
+        values.values["vm.ram_mb"] = std::int64_t{128};
+        values.values["run.limit"] = std::int64_t{1000000};
+        values.values["env"] = std::map<std::string, std::string>{
+            {"PATH", "/bin"}, {"TERM", "dumb"}};
+        values.origins["vm.ram_mb"] = krdbg::SettingOrigin::User;
+    }
+
     bool choose_and_load(std::string& error) override {
         error = "LOAD is not available in the M0 shell";
         return false;
@@ -30,22 +75,25 @@ public:
         return false;
     }
     bool reload(std::string& error) override {
-        error = "RESET is not available in the M0 shell";
-        return false;
+        (void)error;
+        return true;
     }
     std::string clipboard_text() override { return {}; }
     void show_error(std::string_view message) override {
         std::fprintf(stderr, "krdbg: %.*s\n", static_cast<int>(message.size()),
                      message.data());
     }
-    krdbg::SettingsSchema settings_schema() const override { return {}; }
-    krdbg::SettingsSnapshot settings_values() const override { return {}; }
-    krdbg::SettingsApplyResult apply_settings(const krdbg::SettingsSnapshot& values,
+    krdbg::SettingsSchema settings_schema() const override { return schema; }
+    krdbg::SettingsSnapshot settings_values() const override { return values; }
+    krdbg::SettingsApplyResult apply_settings(const krdbg::SettingsSnapshot& next,
                                               krdbg::SettingsLayer layer) override {
-        (void)values;
         (void)layer;
+        values = next;
         return {};
     }
+
+    krdbg::SettingsSchema schema;
+    krdbg::SettingsSnapshot values;
 };
 
 struct Options {
@@ -53,6 +101,15 @@ struct Options {
     bool loaded = false;
     bool running = false;
     bool video = false;
+    bool error = false;
+    bool settings = false;
+    bool context = false;
+    bool tooltip = false;
+    bool variables = false;
+    bool com = false;
+    bool video16 = false;
+    bool no_com = false;
+    bool no_video = false;
     int frames = -1;
     std::string screenshot;
 };
@@ -60,7 +117,8 @@ struct Options {
 void print_usage() {
     std::printf(
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
-        "[--state empty|loaded|running|video] [--frames <n>]\n");
+        "[--state empty|loaded|running|video|video16|error|settings|context|"
+        "tooltip|variables|com|no-com|no-video] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -92,6 +150,34 @@ bool parse_options(int argc, char** argv, Options& options) {
             } else if (state == "video") {
                 options.loaded = true;
                 options.video = true;
+            } else if (state == "video16") {
+                options.loaded = true;
+                options.video = true;
+                options.video16 = true;
+            } else if (state == "error") {
+                options.loaded = true;
+                options.error = true;
+            } else if (state == "settings") {
+                options.loaded = true;
+                options.settings = true;
+            } else if (state == "context") {
+                options.loaded = true;
+                options.context = true;
+            } else if (state == "tooltip") {
+                options.loaded = true;
+                options.tooltip = true;
+            } else if (state == "variables") {
+                options.loaded = true;
+                options.variables = true;
+            } else if (state == "com") {
+                options.loaded = true;
+                options.com = true;
+            } else if (state == "no-com") {
+                options.loaded = true;
+                options.no_com = true;
+            } else if (state == "no-video") {
+                options.loaded = true;
+                options.no_video = true;
             } else {
                 std::fprintf(stderr, "krdbg: unknown state '%.*s'\n",
                              static_cast<int>(state.size()), state.data());
@@ -117,7 +203,12 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    auto target = std::make_unique<krdbg::FakeTarget>();
+    auto target =
+        std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
+    krdbg::FakeTarget* fake_target = target.get();
+    if (options.video16) {
+        fake_target->video_source().set_mode(320, 180);
+    }
     auto session = std::make_unique<krdbg::DebugSession>(
         std::move(target), std::optional<krdbg::DebugInfo>{krdbg::make_fake_debug_info()},
         std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
@@ -127,6 +218,46 @@ int main(int argc, char** argv) {
     if (options.loaded) {
         surface.set_program_info(
             krdbg::ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
+    }
+    if (options.error) {
+        surface.set_error("could not load examples/fake/fake.k32");
+    }
+    if (options.com) {
+        fake_target->com().reset();
+        fake_target->com().push_output("hello\nworld\n");
+    }
+    if (options.settings) {
+        const krdbg::Rect gear = surface.layout().toolbar_gear;
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseDown;
+        event.x = gear.x + gear.width / 2;
+        event.y = gear.y + gear.height / 2;
+        surface.handle_event(event);
+    }
+    if (options.context) {
+        const krdbg::Rect source = surface.layout().source;
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseDown;
+        event.button = 1;
+        event.x = source.x + 120;
+        event.y = source.y + 28 + 3 * 16 + 8;
+        surface.handle_event(event);
+    }
+    if (options.tooltip) {
+        const krdbg::Rect state = surface.layout().state;
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseMove;
+        event.x = state.x + 20;
+        event.y = state.y + 28 + 3 * 16 + 8;
+        surface.handle_event(event);
+    }
+    if (options.variables) {
+        const krdbg::Rect variables = surface.layout().variables;
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseDown;
+        event.x = variables.x + 20;
+        event.y = variables.y + 28 + 4 * 16 + 8;
+        surface.handle_event(event);
     }
     if (options.running) {
         krdbg::platform::Event event;

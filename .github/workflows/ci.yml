@@ -14,9 +14,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Gate G0 (Windows x64)
+      - name: Gate G2 (Windows x64)
         shell: pwsh
         run: ./scripts/gate-windows.ps1
+      - name: Upload Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-g2-evidence
+          path: |
+            goldens/**
+            build/gate/**
+            build/windows-msvc/Testing/**
+            build/windows-msvc-release/Testing/**
+          if-no-files-found: warn
 
   linux-x64:
     runs-on: ubuntu-latest
@@ -25,8 +36,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install SDL2 development package
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
-      - name: Gate G0 (Linux x64)
+      - name: Gate G2 (Linux x64)
         run: ./scripts/gate-linux.sh
+      - name: Upload Linux evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-g2-evidence
+          path: |
+            goldens/**
+            build/gate/**
+            build/linux-wsl/Testing/**
+            build/linux-wsl-release/Testing/**
+          if-no-files-found: warn
 
   arm64:
     # BitWhiz, the Raspberry Pi on the local network, polls GitHub every 7
@@ -37,5 +59,14 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Gate G0 (Linux ARM64)
+      - name: Gate G2 (Linux ARM64)
         run: ./scripts/gate-linux-arm64.sh
+      - name: Upload ARM64 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-g2-evidence
+          path: |
+            goldens/**
+            build/gate/**
+          if-no-files-found: warn

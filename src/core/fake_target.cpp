@@ -169,6 +169,25 @@ FakeTarget::FakeTarget(bool has_com, bool has_video)
     };
     layout_.groups.push_back(std::move(core));
 
+    RegisterGroup fpr;
+    fpr.id = "fpr";
+    fpr.title = "FPR";
+    fpr.kind = GroupKind::Values;
+    fpr.columns = 2;
+    fpr.registers = {
+        RegisterDef{"f0", "F0", 32, ValueFormat::Float32, RegisterRole::Other, true},
+        RegisterDef{"f1", "F1", 32, ValueFormat::Float32, RegisterRole::Other, true},
+    };
+    layout_.groups.push_back(std::move(fpr));
+
+    RegisterGroup matrix;
+    matrix.id = "matrix";
+    matrix.title = "MATRIX";
+    matrix.kind = GroupKind::Matrix;
+    matrix.matrix_rows = 2;
+    matrix.matrix_columns = 2;
+    layout_.groups.push_back(std::move(matrix));
+
     RegisterGroup flags;
     flags.id = "flags";
     flags.title = "FLAGS";
@@ -378,6 +397,14 @@ bool FakeTarget::read_value(std::string_view group, int index,
         value.width = 1;
         return true;
     }
+    if (group == "fpr") {
+        if (index < 0 || index >= static_cast<int>(fpr_.size())) {
+            return false;
+        }
+        value.bits = fpr_[static_cast<std::size_t>(index)];
+        value.width = 32;
+        return true;
+    }
     return false;
 }
 
@@ -408,6 +435,14 @@ bool FakeTarget::write_value(std::string_view group, int index, ScalarValue valu
         flags_ = value.bits != 0 ? (flags_ | mask) : (flags_ & ~mask);
         return true;
     }
+    if (group == "fpr") {
+        if (index < 0 || index >= static_cast<int>(fpr_.size())) {
+            return false;
+        }
+        fpr_[static_cast<std::size_t>(index)] =
+            static_cast<std::uint32_t>(value.bits);
+        return true;
+    }
     return false;
 }
 
@@ -423,20 +458,20 @@ bool FakeTarget::write_flags(std::uint64_t bits) {
 
 bool FakeTarget::read_matrix(std::string_view group, int row, int column,
                              float& value) const {
-    (void)group;
-    (void)row;
-    (void)column;
-    (void)value;
-    return false;
+    if (group != "matrix" || row < 0 || row >= 2 || column < 0 || column >= 2) {
+        return false;
+    }
+    value = matrix_[static_cast<std::size_t>(row * 2 + column)];
+    return true;
 }
 
 bool FakeTarget::write_matrix(std::string_view group, int row, int column,
                               float value) {
-    (void)group;
-    (void)row;
-    (void)column;
-    (void)value;
-    return false;
+    if (group != "matrix" || row < 0 || row >= 2 || column < 0 || column >= 2) {
+        return false;
+    }
+    matrix_[static_cast<std::size_t>(row * 2 + column)] = value;
+    return true;
 }
 
 bool FakeTarget::read_memory(std::uint64_t address, std::span<std::uint8_t> out) const {

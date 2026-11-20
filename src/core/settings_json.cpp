@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <variant>
@@ -697,6 +699,42 @@ bool snapshot_from_json(std::string_view json, const SettingsSchema& schema,
         if (snapshot.origins.count(id) == 0) {
             snapshot.origins[id] = SettingOrigin::Default;
         }
+    }
+    return true;
+}
+
+bool load_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        SettingsSnapshot& snapshot, std::string& error) {
+    std::ifstream input(path);
+    if (!input) {
+        error = "cannot open " + path;
+        return false;
+    }
+    std::string json((std::istreambuf_iterator<char>(input)),
+                     std::istreambuf_iterator<char>());
+    return snapshot_from_json(json, schema, snapshot, error);
+}
+
+bool save_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        const SettingsSnapshot& snapshot, std::string& error) {
+    std::error_code code;
+    const std::filesystem::path target(path);
+    if (target.has_parent_path()) {
+        std::filesystem::create_directories(target.parent_path(), code);
+        if (code) {
+            error = "cannot create " + target.parent_path().string();
+            return false;
+        }
+    }
+    std::ofstream output(path);
+    if (!output) {
+        error = "cannot write " + path;
+        return false;
+    }
+    output << snapshot_to_json(schema, snapshot) << '\n';
+    if (!output) {
+        error = "write failed for " + path;
+        return false;
     }
     return true;
 }

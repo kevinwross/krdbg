@@ -42,6 +42,7 @@ public:
     FakeVideoSource();
 
     bool frame(FramebufferView& out) const override;
+    std::uint64_t framebuffer_base() const override { return 0x2000; }
     void set_mode(int width, int height);
     [[nodiscard]] int width() const { return width_; }
     [[nodiscard]] int height() const { return height_; }
@@ -133,6 +134,8 @@ private:
     std::vector<Context> contexts_;
     std::uint32_t current_id_ = 1;
     std::uint64_t flags_ = 0;
+    std::array<std::uint32_t, 2> fpr_{0, 0};
+    std::array<float, 4> matrix_{1.0F, 2.0F, 3.0F, 4.0F};
     std::uint64_t instructions_ = 0;
     bool halted_ = false;
     bool stuck_ = false;

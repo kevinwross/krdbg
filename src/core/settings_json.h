@@ -18,4 +18,10 @@ std::string snapshot_to_json(const SettingsSchema& schema,
 bool snapshot_from_json(std::string_view json, const SettingsSchema& schema,
                         SettingsSnapshot& snapshot, std::string& error);
 
+// Layer files are host-owned: `.krdbg/settings.json` for the project.
+bool load_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        SettingsSnapshot& snapshot, std::string& error);
+bool save_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        const SettingsSnapshot& snapshot, std::string& error);
+
 } // namespace krdbg::settings_json

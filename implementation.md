@@ -70,7 +70,7 @@ recorded but does not block a milestone unless the gate says it does.
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
-| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1–M2.3, M2.4.1/2/4, M2.5.1–4/6/7, M2.6.1/2/4/5, M2.7 done` |
+| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1–M2.9 done; G2 pending CI/ARM64` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
@@ -439,15 +439,15 @@ presenter, golden coverage and the full CI matrix.
 - [x] **M2.2.2** Disassembly: address/breakpoint gutter, full instruction bytes,
       mnemonic/operands, PC highlight, `OVER/IN/OUT`.
   Evidence: `surface_disassembly_gutter_and_controls` toggles the address breakpoint at `0x1000` and steps with the instruction controls; the renderer draws every byte in `InstructionView::length`.
-- [ ] **M2.2.3** State: contexts list, register groups, flags, matrix, values,
+- [x] **M2.2.3** State: contexts list, register groups, flags, matrix, values,
       editing, FPR/float editor, control tooltips.
-  Evidence so far: registries and flags render and edit (`surface_state_edits_a_register_value`, `surface_state_hover_shows_a_tooltip`); the matrix group and FPR editor are implemented but need a matrix/FPR fixture test.
-- [ ] **M2.2.4** Memory: four rows, addr edit, PTR, page up/down, byte edit,
+  Evidence: `surface_state_edits_a_register_value`, `surface_state_edits_a_float_register_and_shows_matrix` and `surface_state_hover_shows_a_tooltip`.
+- [x] **M2.2.4** Memory: four rows, addr edit, PTR, page up/down, byte edit,
       screen-pixel jump.
-  Evidence so far: four 8-byte rows, addr edit, PTR, page buttons/keys and byte editing are implemented (`surface_memory_address_editing_commits_a_new_base`, `surface_memory_scrolls_by_wheel_track_and_drag`); screen-pixel jump needs a framebuffer base address.
-- [ ] **M2.2.5** Variables: locals/globals, aggregates/arrays collapsed,
+  Evidence: four 8-byte rows at 20 px, `surface_memory_address_editing_commits_a_new_base`, `surface_memory_scrolls_by_wheel_track_and_drag`, and `surface_video_pixel_jumps_to_memory` via `IVideoSource::framebuffer_base()`.
+- [x] **M2.2.5** Variables: locals/globals, aggregates/arrays collapsed,
       `+`/`-`/`->`, paging, register-held values, tooltips.
-  Evidence so far: locals/globals, `+`/`-` expansion, member recursion, register-held `held` and pointer `ptr` render (`surface_variables_expand_and_open_the_inspector`); variable hover tooltips and a distinct `->` pointer marker are pending.
+  Evidence: `surface_variables_expand_and_open_the_inspector` checks hover, expansion and the inspector; the tree draws `+`/`-` and `->` for pointers, and register-held `held`/`ptr` render.
 - [x] **M2.2.6** Inspector: right-click, members, scalar/nested values,
       outside-click close.
   Evidence: `surface_variables_expand_and_open_the_inspector` opens the inspector by right-click, renders members and closes on an outside click.
@@ -485,9 +485,9 @@ presenter, golden coverage and the full CI matrix.
 - [x] **M2.4.2** `RUN` toggles; `RESET` reloads/rebuilds; `LOAD` picker/build
       chain; `KERNEL` embedded pair; `LOAD`/`KERNEL` stop a running VM.
   Evidence: `surface_run_tick_advances_until_the_target_stops` and `surface_load_stops_a_running_target`; RESET/LOAD/KERNEL call the session/host and clear `running`.
-- [ ] **M2.4.3** Breakpoint preservation rules for RESET (line re-resolve,
+- [x] **M2.4.3** Breakpoint preservation rules for RESET (line re-resolve,
       address clear on source rebuild).
-  Evidence so far: line breakpoints survive RESTART (`surface_reset_preserves_breakpoints_and_clears_stats`); the source-rebuild address-clearing rule awaits the host load path.
+  Evidence: `surface_source_rebuild_reset_clears_address_breakpoints` and `session_restart_and_replace_preserve_breakpoints`.
 - [x] **M2.4.4** Settings apply/rebuild flow via host.
   Evidence: `surface_settings_apply_error_keeps_the_dialog_open` applies through `IHostServices::apply_settings` and calls `reload` for `APPLY & RELOAD`.
 
@@ -503,9 +503,9 @@ presenter, golden coverage and the full CI matrix.
   Evidence: `surface_settings_edit_apply_and_layers` drives a bool, int, layer and apply; the dialog draws groups, search, tooltips, U/P/D badges and float/int range validation.
 - [x] **M2.5.4** Environment `string_map` editor; secret masking.
   Evidence: maps edit as `KEY=VALUE;...` and `setting_text` renders `********` for `secret` descriptors unless actively editing.
-- [ ] **M2.5.5** Layered user/project settings; `SAVE TO`; clear override;
+- [x] **M2.5.5** Layered user/project settings; `SAVE TO`; clear override;
       project `.krdbg/settings.json`.
-  Evidence so far: `SAVE: USER/PROJECT` selects the `SettingsLayer`, Delete clears an override and the host receives the layer; writing `.krdbg/settings.json` is host-owned and not yet exercised.
+  Evidence: `surface_settings_edit_apply_and_layers` selects the layer and applies it; Delete clears an override; `settings_project_file_round_trips` saves/loads `build/settings-test/.krdbg/settings.json`.
 - [x] **M2.5.6** Transactional apply; `requires_restart` and `APPLY & RELOAD`.
   Evidence: rejected applies keep the dialog open; `APPLY & RELOAD` calls `reload` after a successful apply.
 - [x] **M2.5.7** Instruction limit and arguments as schema entries, not
@@ -517,10 +517,10 @@ presenter, golden coverage and the full CI matrix.
 - [x] **M2.6.1** `fit_rect()` for 4:3, 16:9, 16:10 and portrait; no stretch.
   Evidence: `video_fit_matches_4_3_16_9_16_10_and_portrait` checks each aspect and the one-pixel tolerance.
 - [x] **M2.6.2** Bottom-right `COM1 | VIDEO` tab; `fit WxH` label; `POP OUT`.
-  Evidence: the video golden `45C97E0E11204576` shows the tab, fit label and POP OUT control.
-- [ ] **M2.6.3** Separate video window: auto-open on first frame, `FIT`/`1:1`,
+  Evidence: the video golden `3DD9817F353B42F9` shows the tab, fit label and POP OUT control.
+- [x] **M2.6.3** Separate video window: auto-open on first frame, `FIT`/`1:1`,
       nearest-neighbour, close/reopen, function-key forwarding.
-  Evidence so far: `IVideoWindow` exists for Win32 and SDL2, `FIT`/`1:1`, nearest-neighbour `StretchDIBits`, POP OUT reopen and key forwarding are implemented; auto-open on the first frame is not wired.
+  Evidence: `surface_video_auto_opens_once`, `surface_video_tab_fit_popout_and_focus` and `null_video_window_creates_no_os_window`; Win32 `StretchDIBits` and SDL2 use nearest sampling, and `tick()` forwards keys.
 - [x] **M2.6.4** Screen focus and COM focus mutually exclusive.
   Evidence: `surface_video_tab_fit_popout_and_focus`; typing `A` while the preview has guest focus leaves the COM queue empty.
 - [x] **M2.6.5** No text-console parsing in the framebuffer view.
@@ -534,36 +534,52 @@ presenter, golden coverage and the full CI matrix.
 - [x] **M2.7.2** No SDL2 dependency in the Windows target; no `SDL2.dll`.
   Evidence: the Windows gate checks the dependency table and the tree, and reports `no SDL2.dll`.
 - [x] **M2.7.3** Windows and Linux x64 render the same golden hash.
-  Evidence: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5`, running `36C15F50552FF36A` and video `45C97E0E11204576` on both hosts.
+  Evidence: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`, running `9BC7D0730872AEC1` and video `3DD9817F353B42F9` on both hosts.
 
 ### M2.8 Golden and interaction coverage
 
-- [ ] **M2.8.1** Goldens: empty, loaded, running, error, settings, context menu,
+- [x] **M2.8.1** Goldens: empty, loaded, running, error, settings, context menu,
       tooltip, variable expansion, COM bytes, video 4:3/16:9, no-framebuffer,
       no-COM.
-- [ ] **M2.8.2** Interaction tests for panel focus, editing, breakpoints,
+  Evidence: thirteen `goldens/*.hash` files and the `golden_*` tests, including `video16`, `error`, `settings`, `context`, `tooltip`, `variables`, `com`, `no-video` and `no-com`.
+- [x] **M2.8.2** Interaction tests for panel focus, editing, breakpoints,
       settings, video, COM.
-- [ ] **M2.8.3** Stats, video, COM, settings and toolbar tests from `PLAN.md` §9.
+  Evidence: `surface_input_routes_toolbar_panels_and_running`, `surface_memory_address_editing_commits_a_new_base`, `surface_breakpoints_panel_toggles_and_opens_menu`, `surface_settings_edit_apply_and_layers`, `surface_video_tab_fit_popout_and_focus`, `surface_com_processes_output_and_keyboard_input`.
+- [x] **M2.8.3** Stats, video, COM, settings and toolbar tests from `PLAN.md` §9.
+  Evidence: `surface_run_tick_advances_until_the_target_stops`, `surface_reset_preserves_breakpoints_and_clears_stats`, `surface_load_stops_a_running_target`, `video_fit_*`, COM tests and the settings tests.
 
 ### M2.9 CI full matrix
 
-- [ ] **M2.9.1** Windows, Ubuntu and ARM64 jobs run the gate scripts.
-- [ ] **M2.9.2** ARM64 job is non-blocking until G6 but reports.
-- [ ] **M2.9.3** Artifact upload for test logs and goldens; no secrets.
+- [x] **M2.9.1** Windows, Ubuntu and ARM64 jobs run the gate scripts.
+  Evidence: `.github/workflows/ci.yml` calls `gate-windows.ps1`, `gate-linux.sh` and `gate-linux-arm64.sh`.
+- [x] **M2.9.2** ARM64 job is non-blocking until G6 but reports.
+  Evidence: the `arm64` job keeps `continue-on-error: true` and runs the gate script.
+- [x] **M2.9.3** Artifact upload for test logs and goldens; no secrets.
+  Evidence: `actions/upload-artifact@v4` uploads `goldens/**` and each build's `Testing/**` with `if: always()`; no credential or environment file is archived.
 
 ### Gate G2 — Full surface
 
-- [ ] **G2.1** Windows x64 and WSL x64 build/test/golden pass.
+- [x] **G2.1** Windows x64 and WSL x64 build/test/golden pass.
+  Evidence: `GATE WINDOWS: PASS` and `GATE LINUX X64: PASS` with the thirteen goldens.
 - [ ] **G2.2** ARM64 build/test recorded (non-blocking).
-- [ ] **G2.3** All panels and toolbar actions behave per `PLAN.md` §6.
-- [ ] **G2.4** Settings render from schema; layers, validation, restart and
+  Evidence: pending a BitWhiz tester entry for this revision.
+- [x] **G2.3** All panels and toolbar actions behave per `PLAN.md` §6.
+  Evidence: M2.2 panels, M2.3 COM, M2.4 toolbar actions and M2.6 video are checked above.
+- [x] **G2.4** Settings render from schema; layers, validation, restart and
       secrets pass tests.
-- [ ] **G2.5** COM three-register tests and video aspect/focus tests pass.
-- [ ] **G2.6** Stats `CLR`/IPS tests pass.
-- [ ] **G2.7** Windows artifact has no `SDL2.dll`.
-- [ ] **G2.8** No VM types or target conditionals in `src/ui`/`include/krdbg`.
+  Evidence: `surface_settings_edit_apply_and_layers`, `surface_settings_apply_error_keeps_the_dialog_open`, `settings_project_file_round_trips` and the JSON round-trips.
+- [x] **G2.5** COM three-register tests and video aspect/focus tests pass.
+  Evidence: COM tests, `video_fit_*`, `surface_video_tab_fit_popout_and_focus`.
+- [x] **G2.6** Stats `CLR`/IPS tests pass.
+  Evidence: `surface_toolbar_actions_reach_host_and_session`, `surface_reset_preserves_breakpoints_and_clears_stats`.
+- [x] **G2.7** Windows artifact has no `SDL2.dll`.
+  Evidence: the Windows gate reports `no SDL2.dll dependency and no SDL2.dll in the tree`.
+- [x] **G2.8** No VM types or target conditionals in `src/ui`/`include/krdbg`.
+  Evidence: boundary check reports `16 UI/public files clean; 12 core/kdbg files VM-clean`.
 - [ ] **G2.9** CI matrix green on Windows/Ubuntu; ARM64 reported.
-- [ ] **G2.10** Goldens and `PLAN.md` updated for every UI/interface change.
+  Evidence: pending the GitHub Actions run for this revision.
+- [x] **G2.10** Goldens and `PLAN.md` updated for every UI/interface change.
+  Evidence: `PLAN.md` records the surface observability, `tick`, video-base and member-storage contracts; all thirteen goldens are committed.
 
 ---
 
@@ -765,9 +781,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G1 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS` on `2aee61f`; 50 tests, 0 failures; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; CI run `44783518343` also passed `windows-x64` | `2aee61f` |
 | G1 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS` on `2aee61f`; 50 tests, 0 failures; same hashes; CI run `44783518343` also passed `linux-x64` | `2aee61f` |
 | G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
-| G2 | Windows x64 | TBD | TBD | TBD |
-| G2 | WSL x64 | TBD | TBD | TBD |
-| G2 | ARM64 | TBD | TBD | TBD |
+| G2 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS`; Debug and Release CTest 99 tests, 0 failures; thirteen goldens match (empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`); no `SDL2.dll`; boundary 16 UI/public + 12 core/kdbg clean | `pending` |
+| G2 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS`; Debug and Release CTest 99 tests, 0 failures; the same thirteen hashes; no `SDL2.dll` | `pending` |
+| G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PENDING — non-blocking tester entry for this revision; no Actions runner on BitWhiz (M0.8.5) | `pending` |
 | G3 | Windows x64 | TBD | TBD | TBD |
 | G3 | WSL x64 | TBD | TBD | TBD |
 | G4 | Windows x64 | TBD | TBD | TBD |
@@ -798,8 +814,8 @@ Recorded 2026-11-20T09:50:48-08:00.
 
 Recorded 2026-11-20T10:14:10-08:00.
 
-- `ctest --preset windows-msvc`: `krdbg_unit` **85 tests, 0 failures**; `platform_boundary` passed; boundary **16 UI/public files clean; 12 core/kdbg files VM-clean**.
-- Goldens: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5`, running `36C15F50552FF36A`, video `45C97E0E11204576`; Windows and WSL x64 produced the same four values.
+- `ctest --preset windows-msvc`: `krdbg_unit` **99 tests, 0 failures**; `platform_boundary` passed; boundary **16 UI/public files clean; 12 core/kdbg files VM-clean**.
+- Goldens: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`, running `9BC7D0730872AEC1`, video `3DD9817F353B42F9`; Windows and WSL x64 produced the same four values.
 - Settings JSON: `settings_schema_json_round_trips`, `settings_snapshot_json_round_trips_typed_values`, `settings_json_rejects_malformed_or_mistyped_input`.
 - Settings dialog: `surface_settings_edit_apply_and_layers` (bool/int edits, layer switch, apply) and `surface_settings_apply_error_keeps_the_dialog_open` (transactional failure, `APPLY & RELOAD`).
 - COM: `surface_com_processes_output_and_keyboard_input`, `surface_com_paste_is_lf_normalized_and_bounded`, `surface_hides_com_and_video_when_absent`.

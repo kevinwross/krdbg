@@ -32,6 +32,7 @@ public:
         return false;
     }
     bool supports_kernel_load() const override { return kernel_supported; }
+    bool last_load_was_source() const override { return last_load_source; }
     bool load_kernel(std::string& error) override {
         ++kernel_calls;
         error = "KERNEL is not available in the M0 shell";
@@ -65,6 +66,7 @@ public:
     }
 
     bool kernel_supported = false;
+    bool last_load_source = false;
     int load_calls = 0;
     int kernel_calls = 0;
     int reload_calls = 0;

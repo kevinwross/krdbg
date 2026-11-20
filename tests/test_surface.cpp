@@ -2,6 +2,7 @@
 
 #include "test_scene.h"
 
+#include <bit>
 #include <cstdio>
 #include <memory>
 
@@ -247,6 +248,9 @@ KRDBG_TEST(surface_state_edits_a_register_value) {
 KRDBG_TEST(surface_variables_expand_and_open_the_inspector) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect variables = scene.surface->layout().variables;
+    CHECK(scene.mouse_move(variables.x + 100,
+                           variables.y + 28 + 1 * 16 + 8));
+    CHECK(scene.surface->tooltip_visible());
     CHECK(scene.click(variables.x + 100, variables.y + 28 + 3 * 16 + 8, 1));
     CHECK(scene.surface->inspector_open());
     CHECK(scene.click(10, 10));
@@ -502,6 +506,62 @@ KRDBG_TEST(null_video_window_creates_no_os_window) {
     video->set_title("krdbg video test 2");
     video->destroy();
     CHECK(!video->valid());
+}
+
+KRDBG_TEST(surface_state_edits_a_float_register_and_shows_matrix) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect state = scene.surface->layout().state;
+    CHECK(scene.click(state.x + 20, state.y + 28 + 12 * 16 + 8));
+    CHECK(scene.send_key('1'));
+    CHECK(scene.send_key('.'));
+    CHECK(scene.send_key('5'));
+    CHECK(scene.send_key(krdbg::platform::key::Enter));
+    krdbg::ScalarValue value;
+    CHECK(scene.session->read_value("fpr", 0, value));
+    const float number =
+        std::bit_cast<float>(static_cast<std::uint32_t>(value.bits));
+    CHECK(number == 1.5F);
+    float matrix = 0.0F;
+    CHECK(scene.session->read_matrix("matrix", 0, 0, matrix));
+    CHECK(matrix == 1.0F);
+}
+
+KRDBG_TEST(surface_video_pixel_jumps_to_memory) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect video = scene.surface->layout().toolbar_video;
+    scene.click(video.x + video.width / 2, video.y + video.height / 2);
+    const krdbg::Rect preview = scene.surface->layout().video_preview;
+    const std::uint64_t before = scene.surface->memory_base();
+    CHECK(scene.click(preview.x + preview.width / 2,
+                      preview.y + preview.height / 2, 1));
+    CHECK_EQ(scene.surface->focused_panel(), SurfacePanel::Memory);
+    CHECK(scene.surface->memory_base() != before);
+}
+
+KRDBG_TEST(surface_video_auto_opens_once) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect video = scene.surface->layout().toolbar_video;
+    scene.click(video.x + video.width / 2, video.y + video.height / 2);
+    scene.surface->tick();
+    CHECK(scene.surface->video_popped());
+    const krdbg::Rect pop_out = scene.surface->layout().video_pop_out;
+    scene.click(pop_out.x + pop_out.width / 2, pop_out.y + pop_out.height / 2);
+    CHECK(!scene.surface->video_popped());
+    scene.surface->tick();
+    CHECK(!scene.surface->video_popped());
+}
+
+KRDBG_TEST(surface_source_rebuild_reset_clears_address_breakpoints) {
+    krdbg::test::TestScene scene(true);
+    scene.session->add_line_breakpoint("examples/fake/main.c", 5);
+    scene.session->add_address_breakpoint(0x1008);
+    scene.host.last_load_source = true;
+    const krdbg::Rect reset = scene.surface->layout().toolbar_reset;
+    scene.click(reset.x + reset.width / 2, reset.y + reset.height / 2);
+    const std::vector<krdbg::BreakpointView> breakpoints =
+        scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    CHECK(breakpoints[0].has_line);
 }
 
 KRDBG_TEST(surface_memory_address_editing_commits_a_new_base) {

@@ -136,6 +136,9 @@ public:
     void set_program_info(ProgramInfo program);
     [[nodiscard]] const ProgramInfo& program_info() const;
 
+    // Shows a host error in the status bar until the next successful action.
+    void set_error(std::string message);
+
     // Paints the complete surface. Does not create a window or a timer.
     void render(Canvas& canvas);
 
@@ -158,6 +161,7 @@ public:
     [[nodiscard]] int selected_frame() const;
     [[nodiscard]] bool settings_open() const;
     [[nodiscard]] bool video_popped() const;
+    [[nodiscard]] std::uint64_t memory_base() const;
     [[nodiscard]] std::string com_text() const;
     [[nodiscard]] int com_queued() const;
     [[nodiscard]] bool com_overrun() const;

@@ -137,6 +137,7 @@ class IVideoSource {
 public:
     virtual ~IVideoSource() = default;
     virtual bool frame(FramebufferView& out) const = 0;
+    virtual std::uint64_t framebuffer_base() const { return 0; }
 };
 
 // The complete VM-facing interface. The adapter implements this; krdbg never

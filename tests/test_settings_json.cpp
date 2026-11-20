@@ -2,6 +2,7 @@
 
 #include "settings_json.h"
 
+#include <filesystem>
 #include <map>
 #include <string>
 #include <variant>
@@ -117,4 +118,28 @@ KRDBG_TEST(settings_json_rejects_malformed_or_mistyped_input) {
     CHECK(!krdbg::settings_json::snapshot_from_json(
         "{\"values\":{\"vm.ram_mb\":\"many\"}}", make_schema(), snapshot, error));
     CHECK(!error.empty());
+}
+
+KRDBG_TEST(settings_project_file_round_trips) {
+    const SettingsSchema schema = make_schema();
+    SettingsSnapshot snapshot;
+    snapshot.values["vm.ram_mb"] = std::int64_t{512};
+    snapshot.origins["vm.ram_mb"] = SettingOrigin::Project;
+    snapshot.values["vm.mode"] = std::string("strict");
+    snapshot.origins["vm.mode"] = SettingOrigin::Project;
+
+    const std::filesystem::path directory =
+        std::filesystem::path("build") / "settings-test";
+    const std::filesystem::path file = directory / ".krdbg" / "settings.json";
+    std::error_code code;
+    std::filesystem::remove_all(directory, code);
+    std::string error;
+    CHECK(krdbg::settings_json::save_snapshot_file(file.string(), schema,
+                                                    snapshot, error));
+    SettingsSnapshot loaded;
+    CHECK(krdbg::settings_json::load_snapshot_file(file.string(), schema, loaded,
+                                                    error));
+    CHECK_EQ(std::get<std::int64_t>(loaded.values["vm.ram_mb"]), 512);
+    CHECK(loaded.origins["vm.ram_mb"] == SettingOrigin::Project);
+    std::filesystem::remove_all(directory, code);
 }

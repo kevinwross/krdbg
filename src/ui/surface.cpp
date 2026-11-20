@@ -262,6 +262,7 @@ struct DebuggerSurface::Impl {
     bool popup = false;
     bool video_tab = false;
     bool video_popped = false;
+    bool video_auto_opened = false;
     bool video_guest_focus = false;
     bool video_fit = true;
     std::unique_ptr<platform::IVideoWindow> video_window;
@@ -318,6 +319,7 @@ struct DebuggerSurface::Impl {
     bool settings_editing = false;
     std::string settings_buffer;
     std::string settings_error;
+    std::string error_text;
     mutable std::array<ScrollState, kPanelCount> scrolls{};
 };
 
@@ -348,6 +350,11 @@ void DebuggerSurface::Impl::recompute_layout() {
     int com_width = w - variables_width - breakpoints_width - stack_width;
     const bool com_visible =
         session->com_port() != nullptr || session->video() != nullptr;
+    if (session->video() == nullptr) {
+        video_tab = false;
+    } else if (session->com_port() == nullptr) {
+        video_tab = true;
+    }
     if (!com_visible) {
         stack_width = w - variables_width - breakpoints_width;
         com_width = 0;
@@ -389,9 +396,13 @@ void DebuggerSurface::Impl::recompute_layout() {
     layout.toolbar_gear = Rect{w - 30, 3, 24, 24};
     const int clr_width = Canvas::text_width("CLR", FontRole::Ui) + 18;
     layout.toolbar_clr = Rect{w - 40 - clr_width, 5, clr_width, 20};
-    const int video_width = Canvas::text_width("VIDEO", FontRole::Ui) + 18;
-    layout.toolbar_video =
-        Rect{layout.toolbar_clr.x - 6 - video_width, 5, video_width, 20};
+    if (session->video() != nullptr) {
+        const int video_width = Canvas::text_width("VIDEO", FontRole::Ui) + 18;
+        layout.toolbar_video =
+            Rect{layout.toolbar_clr.x - 6 - video_width, 5, video_width, 20};
+    } else {
+        layout.toolbar_video = {};
+    }
 
     const auto panel_controls = [](Rect panel, std::initializer_list<std::string> labels,
                                    std::vector<Rect>& out) {
@@ -1121,9 +1132,11 @@ void DebuggerSurface::Impl::draw_toolbar(Canvas& canvas) {
     }
     draw_button(canvas, layout.toolbar_clr, "CLR", ui::theme::kText,
                 ui::theme::kBorder);
-    draw_button(canvas, layout.toolbar_video, "VIDEO",
-                video_tab ? ui::theme::kAccent : ui::theme::kText,
-                video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    if (!layout.toolbar_video.empty()) {
+        draw_button(canvas, layout.toolbar_video, "VIDEO",
+                    video_tab ? ui::theme::kAccent : ui::theme::kText,
+                    video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    }
     for (int row = 0; row < 24; ++row) {
         for (int column = 0; column < 24; ++column) {
             if ((kGearIcon[row] & (1U << (23 - column))) != 0U) {
@@ -1139,7 +1152,9 @@ void DebuggerSurface::Impl::draw_toolbar(Canvas& canvas) {
         format_seconds(stats.run_seconds) + "   ips " +
         format_rate(stats.instructions_per_second());
     const int stats_width = Canvas::text_width(stats_text, FontRole::Ui);
-    const int stats_right = layout.toolbar_video.x - 12;
+    const int stats_right = layout.toolbar_video.empty()
+                                ? layout.toolbar_clr.x - 12
+                                : layout.toolbar_video.x - 12;
     canvas.text(std::max(10, stats_right - stats_width), 7, stats_text,
                 ui::theme::kStats, FontRole::Ui);
 }
@@ -1150,7 +1165,9 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
     canvas.fill(Rect{bar.x, bar.y, bar.width, 1}, ui::theme::kBorder);
 
     std::string left = "no program loaded";
-    if (running) {
+    if (!error_text.empty()) {
+        left = error_text;
+    } else if (running) {
         left = "running";
     } else if (program.loaded) {
         const std::vector<ContextInfo> contexts = session->contexts();
@@ -1164,7 +1181,9 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
         }
         left = "paused at " + hex_value(pc, session->layout().address_bits);
     }
-    canvas.text(10, bar.y + 4, left, ui::theme::kDim, FontRole::MonoSmall);
+    canvas.text(10, bar.y + 4, left,
+                error_text.empty() ? ui::theme::kDim : ui::theme::kBad,
+                FontRole::MonoSmall);
     const std::string right = running ? "F5 PAUSE" : "F5 RUN";
     canvas.text(bar.x + bar.width - Canvas::text_width(right, FontRole::MonoSmall) - 10,
                 bar.y + 4, right, ui::theme::kDim, FontRole::MonoSmall);
@@ -1501,7 +1520,12 @@ void DebuggerSurface::Impl::draw_variables_panel(Canvas& canvas) {
         }
         const int marker_x = rect.x + 8 + row.depth * 12;
         if (!row.header && row.expandable) {
-            canvas.text(marker_x, y, row.expanded ? "-" : "+",
+            const std::string& type =
+                row.has_member ? row.member.type_name : row.variable.type_name;
+            const bool pointer =
+                !type.empty() && type.back() == '*';
+            canvas.text(marker_x, y,
+                        pointer ? "->" : (row.expanded ? "-" : "+"),
                         ui::theme::kAccent, FontRole::MonoSmall);
         }
         canvas.text(marker_x + 10, y,
@@ -1798,7 +1822,10 @@ DebuggerSurface::Impl::ToolbarAction DebuggerSurface::Impl::toolbar_at(int x,
         return ToolbarAction::Kernel;
     }
     if (layout.toolbar_clr.contains(x, y)) return ToolbarAction::Clr;
-    if (layout.toolbar_video.contains(x, y)) return ToolbarAction::Video;
+    if (!layout.toolbar_video.empty() &&
+        layout.toolbar_video.contains(x, y)) {
+        return ToolbarAction::Video;
+    }
     if (layout.toolbar_gear.contains(x, y)) return ToolbarAction::Gear;
     return ToolbarAction::None;
 }
@@ -1816,14 +1843,26 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         return;
     case ToolbarAction::Reset:
         running = false;
+        error_text.clear();
+        if (host->last_load_was_source()) {
+            const std::vector<BreakpointView> breakpoints = session->breakpoints();
+            for (const BreakpointView& breakpoint : breakpoints) {
+                if (!breakpoint.has_line) {
+                    session->remove_breakpoint(breakpoint.id);
+                }
+            }
+        }
         if (!session->restart(error) && !error.empty()) {
+            error_text = error;
             host->show_error(error);
         }
         return;
     case ToolbarAction::Load:
         running = false;
         session->pause();
+        error_text.clear();
         if (!host->choose_and_load(error) && !error.empty()) {
+            error_text = error;
             host->show_error(error);
         }
         return;
@@ -1833,7 +1872,9 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         }
         running = false;
         session->pause();
+        error_text.clear();
         if (!host->load_kernel(error) && !error.empty()) {
+            error_text = error;
             host->show_error(error);
         }
         return;
@@ -1841,6 +1882,9 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         session->reset_stats();
         return;
     case ToolbarAction::Video:
+        if (layout.toolbar_video.empty()) {
+            return;
+        }
         video_tab = !video_tab;
         if (!video_tab) {
             video_guest_focus = false;
@@ -2161,16 +2205,19 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
     }
 
     if (panel == SurfacePanel::Com) {
-        if (layout.video_tab_com.contains(event.x, event.y)) {
+        if (session->com_port() != nullptr &&
+            layout.video_tab_com.contains(event.x, event.y)) {
             video_tab = false;
             video_guest_focus = false;
             return;
         }
-        if (layout.video_tab_video.contains(event.x, event.y)) {
+        if (session->video() != nullptr &&
+            layout.video_tab_video.contains(event.x, event.y)) {
             video_tab = true;
             return;
         }
-        if (layout.video_pop_out.contains(event.x, event.y)) {
+        if (session->video() != nullptr &&
+            layout.video_pop_out.contains(event.x, event.y)) {
             if (video_popped) {
                 if (video_window) {
                     video_window->destroy();
@@ -2191,6 +2238,35 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             return;
         }
         if (video_tab && layout.video_preview.contains(event.x, event.y)) {
+            if (event.button == 1) {
+                const IVideoSource* source = session->video();
+                FramebufferView frame;
+                const std::uint64_t base =
+                    source != nullptr ? source->framebuffer_base() : 0;
+                if (source != nullptr && base != 0 && source->frame(frame) &&
+                    frame.width > 0 && frame.height > 0) {
+                    const Rect fit = ui::fit_rect(
+                        frame.width, frame.height,
+                        layout.video_preview.width,
+                        layout.video_preview.height);
+                    const Rect target{
+                        layout.video_preview.x + fit.x,
+                        layout.video_preview.y + fit.y, fit.width, fit.height};
+                    if (target.contains(event.x, event.y)) {
+                        const int pixel_x =
+                            (event.x - target.x) * frame.width / target.width;
+                        const int pixel_y =
+                            (event.y - target.y) * frame.height / target.height;
+                        memory_base =
+                            base + static_cast<std::uint64_t>(
+                                       (pixel_y * frame.width + pixel_x) * 4);
+                        focus = SurfacePanel::Memory;
+                        video_guest_focus = false;
+                        scroll_state(SurfacePanel::Memory).offset = 0;
+                        return;
+                    }
+                }
+            }
             video_guest_focus = true;
             return;
         }
@@ -2316,6 +2392,21 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
                            ? instruction.mnemonic + " " + instruction.operands
                            : instruction.help;
             }
+        }
+    } else if (panel == SurfacePanel::Variables) {
+        update_scroll(SurfacePanel::Variables);
+        const int offset = scroll_state(SurfacePanel::Variables).offset;
+        for (const VarRow& row : variable_rows()) {
+            Rect rect = row.rect;
+            rect.y -= offset * kRowHeight;
+            if (!rect.contains(event.x, event.y) || row.header) {
+                continue;
+            }
+            const std::string& type =
+                row.has_member ? row.member.type_name : row.variable.type_name;
+            text = (row.has_member ? row.member.name : row.variable.name) + " : " +
+                   type + " = " + row.value;
+            break;
         }
     }
 
@@ -2640,7 +2731,9 @@ void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
     if (rect.empty()) {
         return;
     }
-    if (!video_tab) {
+    const bool video_only =
+        session->com_port() == nullptr && session->video() != nullptr;
+    if (!video_tab && !video_only) {
         draw_panel(canvas, rect, com_title(), com_status(),
                    lines_for(SurfacePanel::Com), SurfacePanel::Com);
     } else {
@@ -2670,19 +2763,23 @@ void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
                         kRunGreen);
         }
     }
-    draw_small_button(canvas, layout.video_tab_com, "COM1",
-                      !video_tab ? ui::theme::kAccent : ui::theme::kDim,
-                      !video_tab ? ui::theme::kAccent : ui::theme::kBorder);
-    draw_small_button(canvas, layout.video_tab_video, "VIDEO",
-                      video_tab ? ui::theme::kAccent : ui::theme::kDim,
-                      video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    if (session->com_port() != nullptr) {
+        draw_small_button(canvas, layout.video_tab_com, "COM1",
+                          !video_tab ? ui::theme::kAccent : ui::theme::kDim,
+                          !video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    }
+    if (session->video() != nullptr) {
+        draw_small_button(canvas, layout.video_tab_video, "VIDEO",
+                          video_tab ? ui::theme::kAccent : ui::theme::kDim,
+                          video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+        if (video_tab || video_only) {
+            draw_small_button(canvas, layout.video_fit, video_fit ? "FIT" : "1:1",
+                              ui::theme::kText, ui::theme::kBorder);
+        }
+    }
     draw_small_button(canvas, layout.video_pop_out,
                       video_popped ? "CLOSE" : "POP OUT", ui::theme::kText,
                       ui::theme::kBorder);
-    if (video_tab) {
-        draw_small_button(canvas, layout.video_fit, video_fit ? "FIT" : "1:1",
-                          ui::theme::kText, ui::theme::kBorder);
-    }
 }
 
 
@@ -3116,12 +3213,12 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         if (focus == SurfacePanel::Memory) {
             editing = true;
             edit_buffer.clear();
-        } else if (focus == SurfacePanel::Com && !video_tab) {
+        } else if (focus == SurfacePanel::Com && session->com_port() != nullptr && !video_tab) {
             enqueue_com_input(0x0A);
         }
         return true;
     case platform::key::Backspace:
-        if (focus == SurfacePanel::Com && !video_tab) {
+        if (focus == SurfacePanel::Com && session->com_port() != nullptr && !video_tab) {
             enqueue_com_input(0x7F);
         }
         return true;
@@ -3158,7 +3255,7 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
     default:
         break;
     }
-    if (focus == SurfacePanel::Com && !(video_tab && video_guest_focus)) {
+    if (focus == SurfacePanel::Com && session->com_port() != nullptr && !(video_tab && video_guest_focus)) {
         if (event.control && (event.key == 'V' || event.key == 'v')) {
             const std::string text = host->clipboard_text();
             for (std::size_t index = 0; index < text.size(); ++index) {
@@ -3219,6 +3316,7 @@ void DebuggerSurface::set_program_info(ProgramInfo program) {
     const bool changed = impl_->program.loaded != program.loaded;
     impl_->program = std::move(program);
     if (impl_->program.loaded) {
+        impl_->error_text.clear();
         impl_->memory_base = 0x2000;
         for (const MemoryRegion& region : impl_->session->layout().memory) {
             if (region.writable) {
@@ -3243,6 +3341,7 @@ void DebuggerSurface::set_program_info(ProgramInfo program) {
         impl_->editing = false;
         impl_->edit_buffer.clear();
         impl_->menu_open = false;
+        impl_->video_auto_opened = false;
     }
     impl_->clamp_scrolls();
 }
@@ -3251,11 +3350,29 @@ const ProgramInfo& DebuggerSurface::program_info() const {
     return impl_->program;
 }
 
+void DebuggerSurface::set_error(std::string message) {
+    impl_->error_text = std::move(message);
+}
+
 void DebuggerSurface::render(Canvas& canvas) {
     impl_->render(canvas);
 }
 
 void DebuggerSurface::tick() {
+    if (impl_->video_tab && impl_->session->video() != nullptr &&
+        !impl_->video_auto_opened) {
+        FramebufferView frame;
+        if (impl_->session->video()->frame(frame)) {
+            if (!impl_->video_window) {
+                impl_->video_window = platform::create_video_window();
+            }
+            if (impl_->video_window &&
+                impl_->video_window->create("krdbg video", 640, 480)) {
+                impl_->video_popped = true;
+            }
+            impl_->video_auto_opened = true;
+        }
+    }
     if (impl_->video_window && impl_->video_window->valid()) {
         platform::Event event;
         while (impl_->video_window->poll(event)) {
@@ -3335,6 +3452,10 @@ bool DebuggerSurface::settings_open() const {
 
 bool DebuggerSurface::video_popped() const {
     return impl_->video_popped;
+}
+
+std::uint64_t DebuggerSurface::memory_base() const {
+    return impl_->memory_base;
 }
 
 int DebuggerSurface::selected_frame() const {
