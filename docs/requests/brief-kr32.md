@@ -23,15 +23,17 @@ Read it before touching anything. Where this brief and the plan disagree, the pl
 
 ## Scope
 
-Stage A only: items 3.1–3.9 — the debug spike, the C++ corpus check, the krc
-branches of `compile_c_source` and `compile_cxx_source` behind
-`KR32_TOOLCHAIN=krc` (default `builtin`), option and diagnostic mapping, the
-listing from facade rows, the OS-mode smoke test, the guest headers as files, the
-installed package inputs, and the suite run under both toolchains.
+Stage A, plus stage B's migration half: items 3.1–3.9 and 3.10a — the debug spike,
+the C++ corpus check, the krc branches of `compile_c_source` and
+`compile_cxx_source` behind `KR32_TOOLCHAIN=krc` (default `builtin`), option and
+diagnostic mapping, the listing from facade rows, the OS-mode smoke test, the
+guest headers as files including `cons.h` replacing the generated `con.h`, the
+installed package inputs, the suite under both toolchains, and the UI/CLI/test
+migration with prebuilt OS images.
 
 Do not: flip the default or delete `src/cc`, `src/cxx`, `src/asm`, `src/link`
-(3.10), change the debugger, rebuild the kernel/BIOS, or edit KRCompiler, kr16 or
-krdbg.
+(3.10b, second approval), change the debugger, rebuild the kernel/BIOS, or edit
+KRCompiler, kr16 or krdbg.
 
 ## Design decisions already made
 

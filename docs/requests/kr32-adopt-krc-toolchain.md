@@ -67,18 +67,24 @@ not require a debugger change, unlike kr16.
 6. OS mode smoke test: the embedded kernel/BIOS pair is unchanged and still
    boots, and so does an explicit `--os <kernel> --bios <bios>` pair; the krc
    path applies to user programs only.
-7. The five guest headers — `<kr32/fb.h>`, `<kr32/gfx.h>`, `<kr32/con.h>`,
+7. The five guest headers — `<kr32/fb.h>`, `<kr32/gfx.h>`, `<kr32/cons.h>`,
    `<kr32/input.h>` and `<kr32/sys.h>` — written as files on disk, so both
-   toolchains find them through the include path.
+   toolchains find them through the include path. `cons.h` replaces the
+   generated `con.h`, whose name Windows reserves.
 8. The installed package: consume `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` from
    `find_package(krc-toolchain CONFIG REQUIRED)` and drop the build-tree paths
    from the krc branch's CMake inputs.
 
-**In scope (stage B, second approval)**
+**In scope (stage B, first half approved; second half on the second approval)**
 
-9. Default flips to `krc`; delete `src/cc`, `src/cxx`, `src/asm` and `src/link`
-   after a release in which both are available; with them go KR32's runtime and
-   the injected guest-header strings.
+9. Migration: the UI and CLI lose their built-in compile branches and commands,
+   the tests move to krc-built or prebuilt fixtures, the OS images come from a
+   prebuilt carrier, and the `cons.h` body lives in a tracked file. Ends with the
+   tree green under `builtin` and the built-in paths unreferenced.
+10. Deletion: the default flips to `krc`; delete `src/cc`, `src/cxx`, `src/asm`
+    and `src/link`, with KR32's runtime and the injected guest-header strings.
+    Ends with the gate green on a clean checkout after a release in which both
+    toolchains shipped.
 
 **Out of scope**
 
@@ -119,7 +125,8 @@ not require a debugger change, unlike kr16.
 | 3.7 | Suite twice | all existing tests pass with `builtin` and with `krc` |
 | 3.8 | Guest headers as files | each of the five headers compiles from a source that includes it, under both toolchains |
 | 3.9 | Consume the installed package | configure, build and test with an installed KRCompiler prefix and no build tree on the path; `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` replace the build-tree paths |
-| 3.10 | Stage B: default flip, delete the four directories | suite green on a clean checkout with no built-in toolchain present |
+| 3.10a | Stage B migration | the UI, CLI and tests no longer reference the built-in toolchain, the OS images come from a prebuilt carrier, `cons.h` is a tracked file, and the suite is green under `builtin` |
+| 3.10b | Stage B deletion | the default is `krc`, the four directories, the runtime and the injection are gone, and the suite is green on a clean checkout |
 
 `3.1` is deliberately first and costs a day: if a krc image does not debug
 correctly in the current GUI, no amount of build-path work helps.
@@ -197,14 +204,31 @@ open questions the plan was proposed with.
    and exports `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR`; the krc branch uses those
    and drops its build-tree paths (item 3.9). Stage B waits on this, so the flip
    does not depend on a directory a clean can delete.
+7. **`con.h` becomes `cons.h`.** Decided 2026-11-20T14:25:26-08:00. Windows
+   reserves `CON` with any extension, so `con.h` cannot be a tracked file, cannot
+   be checked out, and is generated today only because the body lives in a C++
+   string. Renaming the guest header to `<kr32/cons.h>` lets the body live in a
+   tracked file and removes the generator. This is a guest API change: any
+   external program including `<kr32/con.h>` breaks. No in-tree example uses it;
+   the rename lands in 3.10a with the includes and documentation updated.
+8. **Stage B is split into a migration and a deletion.** Decided
+   2026-11-20T14:25:26-08:00. The 3.10 trial showed a deletion-only diff at
+   23 files and 42,562 deletions, with 2 of 94 tests passing: the UI and CLI
+   still include the built-in headers, the tests build through `kr32 build`, the
+   `con.h` generator reads the deleted body, and the OS images are built by the
+   built-in assembler. 3.10a migrates those and ends green under `builtin`;
+   3.10b deletes and flips, and still needs the second approval with its gate.
 
 ## 9. Approval
 
-Approved by kevinwross on 2026-11-20T02:36:31-08:00.
+Approved by kevinwross on 2026-11-20T02:36:31-08:00; stage B's migration half
+approved 2026-11-20T14:25:26-08:00.
 
-Approving this file authorises stage A in KR32 only: the CMake option, the krc
-branches of the two compile functions, the option and diagnostic mapping, the
-corpus write-up, the guest headers as files, the installed-package inputs, and
-the tests. It does not authorise the default flip, the deletion of `src/cc`,
-`src/cxx`, `src/asm` or `src/link`, a debugger change, the removal of the
-`--os`/`--bios` load path, or any edit in KRCompiler or kr16.
+Approving this file authorises stage A in KR32, the `con.h` → `cons.h` rename,
+and stage B's migration (3.10a): the CMake option, the krc branches of the two
+compile functions, the option and diagnostic mapping, the corpus write-up, the
+guest headers as files, the installed-package inputs, the UI/CLI/test migration,
+the prebuilt OS images and the tests. It does not authorise the default flip, the
+deletion of `src/cc`, `src/cxx`, `src/asm` or `src/link` (3.10b, second
+approval), a debugger change, the removal of the `--os`/`--bios` load path, or any
+edit in KRCompiler or kr16.
