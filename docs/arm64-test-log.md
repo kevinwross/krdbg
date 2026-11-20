@@ -72,3 +72,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 50 checks, 0 failures, 48 passed with the two x64 golden comparisons excluded; `platform_boundary` 14 UI/public files clean and 10 core/kdbg files VM-clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M1.3–M1.4 landed; `krdbg_unit` grew from 42 to 50 checks and takes 1.16 s in Debug now that the session tests run. `include/krdbg/session.h` gained an optional `Clock` test seam, and `PLAN.md` §4.5 documents it in the same commit, so the interface rule holds. The boundary check gained a second assertion — `10 core/kdbg files VM-clean` — and both pass. The UI is untouched, so the frame hashes are unchanged.
+
+## 2026-11-20T09:31:48-08:00 — main @ 1c978f6
+
+- Host: BitWhiz
+- Range: ba568d0..1c978f6, 3 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; `session.cpp` and the surface/test link set rebuilt)
+- Test: CTest — pass (2/2: `krdbg_unit` 50 checks, 0 failures, 48 passed with the two x64 golden comparisons excluded; `platform_boundary` 14 UI/public files clean and 10 core/kdbg files VM-clean)
+- Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: `2aee61f` makes `replace_target` refresh the debug info together with the new target and extends the existing `replace_target` test to re-resolve a moved line breakpoint, so the check count stays at 50; `1c978f6` marks M1/G1 done using this run as the ARM64 evidence. The UI is untouched, so the frame hashes are unchanged.
