@@ -129,9 +129,10 @@ std::string format_scalar(const TypeInfo* type, std::span<const std::uint8_t> by
         return load_bits(bytes, little_endian) != 0 ? "true" : "false";
     }
     if (name == "char") {
-        const auto value = static_cast<char>(load_bits(bytes, little_endian) & 0xFFU);
+        const auto value =
+            static_cast<unsigned char>(load_bits(bytes, little_endian) & 0xFFU);
         if (value >= 32 && value < 127) {
-            return std::string("'") + value + "'";
+            return std::string("'") + static_cast<char>(value) + "'";
         }
         return std::to_string(static_cast<int>(value));
     }

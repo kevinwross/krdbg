@@ -40,6 +40,7 @@ KRDBG_TEST(debug_info_source_lookup_matches_path_name_and_suffix) {
     CHECK_EQ(krdbg::detail::find_source(info, "util.c")->name, "util.c");
     CHECK_EQ(krdbg::detail::find_source(info, "fake\\main.c")->name, "main.c");
     CHECK(krdbg::detail::find_source(info, "missing.c") == nullptr);
+    CHECK(krdbg::detail::find_source(info, "") == nullptr);
 }
 
 KRDBG_TEST(debug_info_type_lookup_is_by_id_and_name) {

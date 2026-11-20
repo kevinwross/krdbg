@@ -123,3 +123,24 @@ KRDBG_TEST(aggregate_expansion_reports_missing_storage_and_pointers) {
     CHECK_EQ(krdbg::detail::format_scalar(&pointer, address, true),
              std::string("0x00001234"));
 }
+
+KRDBG_TEST(scalar_formatting_handles_char_and_unsigned) {
+    TypeInfo character;
+    character.name = "char";
+    character.size = 1;
+    character.kind = krdbg::TypeKind::Builtin;
+    const std::array<std::uint8_t, 1> letter{'A'};
+    CHECK_EQ(krdbg::detail::format_scalar(&character, letter, true),
+             std::string("'A'"));
+    const std::array<std::uint8_t, 1> high{0xE9};
+    CHECK_EQ(krdbg::detail::format_scalar(&character, high, true),
+             std::string("233"));
+
+    TypeInfo unsigned_int;
+    unsigned_int.name = "unsigned int";
+    unsigned_int.size = 4;
+    unsigned_int.kind = krdbg::TypeKind::Builtin;
+    const std::array<std::uint8_t, 4> all_bits{0xFF, 0xFF, 0xFF, 0xFF};
+    CHECK_EQ(krdbg::detail::format_scalar(&unsigned_int, all_bits, true),
+             std::string("4294967295"));
+}

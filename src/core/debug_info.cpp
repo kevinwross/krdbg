@@ -229,6 +229,9 @@ const LineInfo* find_line(const DebugInfo& info, std::uint64_t pc) {
 
 const SourceFile* find_source(const DebugInfo& info, std::string_view path) {
     const std::string wanted = normalize_path(path);
+    if (wanted.empty()) {
+        return nullptr;
+    }
     for (const SourceFile& source : info.sources) {
         if (normalize_path(source.path) == wanted) {
             return &source;

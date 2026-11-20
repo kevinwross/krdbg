@@ -324,7 +324,7 @@ dependence on VM types.
       register-held aggregate expansion.
   Evidence: `src/core/variables.cpp` reads frame, register and absolute storage, formats scalars, and expands members; a 64-bit register-held `Point` expands to `x=1`, `y=2` in `test_variables`.
 - [x] **M1.1.5** Unit tests for lookup and merge.
-  Evidence: eleven new cases (three lookup, three merge, five variables) — `krdbg_unit` reports 36 tests, 0 failures on Windows Debug/Release and WSL x64.
+  Evidence: twelve new cases (three lookup, three merge, six variables) — `krdbg_unit` reports 37 tests, 0 failures on Windows Debug/Release and WSL x64.
 
 ### M1.2 KDBG reader
 
