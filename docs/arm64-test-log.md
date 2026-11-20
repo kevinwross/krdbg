@@ -62,3 +62,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 42 checks, 0 failures, 40 passed with the two x64 golden comparisons excluded; `platform_boundary` 14 files clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M1.2 and M1.5 landed — `src/kdbg/kdbg.cpp` and `include/krdbg/kdbg.h` over the vendored `third_party/krc-debug/` pair (KRCompiler `797dfacf` per `AGENTS.local.md`), with the `fake.k32` (4671 B) / `fake.kdbg` (1455 B) fixtures and `test_kdbg`. `krdbg_unit` grew from 37 to 42 checks. The boundary check now covers 14 files instead of 13 because `include/krdbg/kdbg.h` joined the public set, and it is clean. The UI is untouched, so the frame hashes are unchanged. 41 s because the two new KDBG translation units compiled.
+
+## 2026-11-20T09:28:28-08:00 — main @ ba568d0
+
+- Host: BitWhiz
+- Range: 649735b..ba568d0, 2 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the session engine, fake target and the new session tests compiled)
+- Test: CTest — pass (2/2: `krdbg_unit` 50 checks, 0 failures, 48 passed with the two x64 golden comparisons excluded; `platform_boundary` 14 UI/public files clean and 10 core/kdbg files VM-clean)
+- Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M1.3–M1.4 landed; `krdbg_unit` grew from 42 to 50 checks and takes 1.16 s in Debug now that the session tests run. `include/krdbg/session.h` gained an optional `Clock` test seam, and `PLAN.md` §4.5 documents it in the same commit, so the interface rule holds. The boundary check gained a second assertion — `10 core/kdbg files VM-clean` — and both pass. The UI is untouched, so the frame hashes are unchanged.
