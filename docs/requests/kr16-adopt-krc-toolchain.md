@@ -10,12 +10,11 @@ before branching.
 **Requested by:** kevinwross
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.6
 (the facade, the package, and `.kdbg` in `.kex`), 4.9 for the listing, 4.10, which
-makes a KR16 `.kex` decodable, and 4.11, the assembler directives kr16's libc
-needs.
-**Pinned:** `0defcce` on `KRCompiler` `adopt-krc` — `.kdbg` in `.kex` with the
-image base (4.6), the KR16 debug-info emission (4.10), and the KR16 assembler
-directives (4.11), so the krc path can assemble and link kr16's shipped
-`resources/libc.s`.
+makes a KR16 `.kex` decodable, 4.11 for kr16's assembler directives, and 4.13
+for the `__host_call` intrinsic its runtime needs.
+**Pinned:** `7d005d5` on `KRCompiler` `adopt-krc` — everything through 4.13, so
+the krc path can compile `resources/fileio.c`, assemble and link kr16's shipped
+`resources/libc.s`, and carry `.kdbg` in the `.kex`.
 **Sibling plan:** [kr32](kr32-adopt-krc-toolchain.md). This one runs first.
 **Read at that commit:** `include/kr16/build.hpp`, `include/kr16/container.hpp`,
 `include/kr16/debug_session.hpp`, `src/debug/debug_session.cpp`,
