@@ -132,3 +132,14 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M3 added `adapters/kr32`, `tests/test_kr32_adapter.cpp` and `goldens/kr32-loaded.hash`, but `KRDBG_KR32_ADAPTER` is **OFF** by default and the gate does not enable it, so **this entry covers the core changes only** — the adapter, its test and the KR32 golden have no ARM64 evidence, and `krdbg_unit` stays at 99 checks because `test_kr32_adapter.cpp` is only added when the adapter is on. Two facts for anyone enabling it here: the default `KRDBG_KR32_ROOT` is `../KR32`, which does not match this host's lowercase `../kr32` on a case-sensitive filesystem, so `-DKRDBG_KR32_ROOT` must be passed explicitly; and this host has a `kr32` checkout at `/home/kevinro/repos/kr32` whose revision is not pinned by krdbg.
+
+## 2026-11-20T11:54:14-08:00 — main @ 7539b23
+
+- Host: BitWhiz
+- Range: 9d63589..7539b23, 3 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (2/2 suites, 4 s: the gate rebuilt nothing because the changed file is not in its build)
+- Test: gate `krdbg_unit` 99 checks, 0 failures, x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Extra check, not the gate: configured `-DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=/home/kevinro/repos/kr32 -DKRDBG_PLATFORM=null -DCMAKE_BUILD_TYPE=Debug` in `build/adapter-check`, then built and ran it. **Build OK, 106 checks, 0 failures**, including the eight `kr32_*` cases. The changed file `tests/test_kr32_adapter.cpp` is compiled there, and `kr32_adapter_os_mode_loads_embedded_images_and_video` — the case that gained the OS serial-input assertions — passes. `kr32_ui_loaded_state_matches_the_committed_golden` also passes, so `goldens/kr32-loaded.hash` (`19D243A88CB8EF35`) is confirmed on ARM64, which the gate never checks.
+- Notes: the sibling KR32 tree used for the extra check is at `aa120ad`, which krdbg does not pin, and the check uses the null presenter; it is evidence for this host, not a reproducible gate row. The gate's own 4 s run proves nothing about the adapter test change, which is why the extra build was added.
