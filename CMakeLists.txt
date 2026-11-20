@@ -62,11 +62,24 @@ target_include_directories(krdbg_core
 )
 target_link_libraries(krdbg_core PRIVATE krdbg_warnings)
 
-# The KDBG translation is M1 work. The target exists now so the integration
-# contract and the link shape are fixed.
-add_library(krdbg_kdbg INTERFACE)
-target_include_directories(krdbg_kdbg INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(krdbg_kdbg INTERFACE krdbg_core)
+# KDBG translation. The decoder is the exact KRCompiler pair vendored under
+# third_party/krc-debug; only src/kdbg includes krc/debug/kdbg.h and only this
+# target sees a KdbgImage.
+option(KRDBG_KDBG_VENDORED
+    "Build the vendored krc::debug pair instead of find_package(krc-debug)" ON)
+add_library(krdbg_kdbg STATIC src/kdbg/kdbg.cpp)
+target_include_directories(krdbg_kdbg
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+if(KRDBG_KDBG_VENDORED)
+    target_sources(krdbg_kdbg PRIVATE third_party/krc-debug/src/kdbg.cpp)
+    target_include_directories(krdbg_kdbg
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/krc-debug/include")
+else()
+    find_package(krc-debug CONFIG REQUIRED)
+    target_link_libraries(krdbg_kdbg PRIVATE krc::debug)
+endif()
+target_link_libraries(krdbg_kdbg
+    PUBLIC krdbg_core PRIVATE krdbg_warnings)
 
 add_library(krdbg_ui STATIC
     src/ui/canvas.cpp
@@ -129,13 +142,15 @@ if(KRDBG_BUILD_TESTS)
         tests/test_lookup.cpp
         tests/test_merge.cpp
         tests/test_variables.cpp
+        tests/test_kdbg.cpp
         tests/test_surface.cpp
         tests/test_golden.cpp
     )
     target_link_libraries(krdbg_tests PRIVATE
-        krdbg_ui krdbg_platform_null krdbg_warnings)
+        krdbg_ui krdbg_kdbg krdbg_platform_null krdbg_warnings)
     target_compile_definitions(krdbg_tests PRIVATE
-        KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens")
+        KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
+        KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately
         # (PLAN.md M0.7.4); the x64 golden comparison stays an x64 check.
