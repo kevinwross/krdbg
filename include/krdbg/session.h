@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -49,9 +50,14 @@ struct ExecutionStats {
 // from here. See PLAN.md SS4.5.
 class DebugSession {
 public:
+    // The default uses std::chrono::steady_clock::now. Session tests pass a
+    // deterministic clock so run_seconds and IPS are reproducible.
+    using Clock = std::function<std::chrono::steady_clock::time_point()>;
+
     DebugSession(std::unique_ptr<IDebugTarget> target,
                  std::optional<DebugInfo> info,
-                 std::function<bool(IDebugTarget&, std::string&)> reload);
+                 std::function<bool(IDebugTarget&, std::string&)> reload,
+                 Clock clock = {});
     ~DebugSession();
     DebugSession(const DebugSession&) = delete;
     DebugSession& operator=(const DebugSession&) = delete;

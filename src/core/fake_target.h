@@ -72,6 +72,8 @@ public:
     void set_register(int index, std::uint64_t value);
     [[nodiscard]] std::uint64_t register_value(int index) const;
     void set_frame_base(std::uint64_t base);
+    void set_callers(std::vector<RawFrame> callers);
+    void set_step_stuck(bool stuck) { stuck_ = stuck; }
     FakeComPort& com() { return com_; }
     FakeVideoSource& video_source() { return video_; }
     void set_instructions_executed(std::uint64_t count) { instructions_ = count; }
@@ -116,6 +118,7 @@ private:
         std::uint64_t lr = 0;
         std::uint64_t acc = 0;
         std::array<std::uint64_t, 8> registers{};
+        std::vector<RawFrame> callers;  // return pc and caller frame base
     };
 
     Context& current();
@@ -128,6 +131,7 @@ private:
     std::uint64_t flags_ = 0;
     std::uint64_t instructions_ = 0;
     bool halted_ = false;
+    bool stuck_ = false;
     std::uint64_t entry_ = 0x1000;
     std::uint64_t frame_base_ = 0x2100;
     std::vector<std::uint8_t> memory_;

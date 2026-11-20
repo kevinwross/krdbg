@@ -275,7 +275,29 @@ StopResult FakeTarget::step_instruction() {
     if (halted_) {
         return StopResult{StopKind::Halted, "target is halted"};
     }
-    current().pc += layout_.instruction_alignment;
+    if (stuck_) {
+        ++instructions_;
+        return StopResult{StopKind::Retired, {}};
+    }
+    Context& context = current();
+    if (context.pc == 0x1008) {
+        context.callers.push_back(RawFrame{0x100C, context.fp});
+        context.fp = 0x2080;
+        context.pc = 0x1018;
+    } else if (context.pc == 0x1010) {
+        halted_ = true;
+    } else if (context.pc == 0x1020) {
+        if (context.callers.empty()) {
+            halted_ = true;
+        } else {
+            const RawFrame caller = context.callers.back();
+            context.callers.pop_back();
+            context.fp = caller.frame_base;
+            context.pc = caller.pc;
+        }
+    } else {
+        context.pc += layout_.instruction_alignment;
+    }
     ++instructions_;
     return StopResult{StopKind::Retired, {}};
 }
@@ -286,6 +308,9 @@ StopResult FakeTarget::run(std::uint64_t budget) {
             return StopResult{StopKind::Halted, "target is halted"};
         }
         step_instruction();
+    }
+    if (halted_) {
+        return StopResult{StopKind::Halted, "target is halted"};
     }
     return StopResult{StopKind::Retired, {}};
 }
@@ -309,10 +334,12 @@ bool FakeTarget::reset(std::string& error) {
         context.lr = entry_;
         context.acc = 0;
         context.registers.fill(0);
+        context.callers.clear();
     }
     flags_ = 0;
     instructions_ = 0;
     halted_ = false;
+    stuck_ = false;
     current_id_ = contexts_.front().id;
     com_.reset();
     com_.push_output("fake ready\n");
@@ -456,11 +483,13 @@ bool FakeTarget::disassemble(std::uint64_t address, InstructionView& out) const 
 }
 
 std::vector<RawFrame> FakeTarget::unwind() const {
-    return {
-        RawFrame{0x1020, frame_base_},
-        RawFrame{0x1010, frame_base_ - 0x80},
-        RawFrame{0x1000, frame_base_ - 0x100},
-    };
+    const Context& context = current();
+    std::vector<RawFrame> frames;
+    frames.push_back(RawFrame{context.pc, context.fp});
+    for (auto it = context.callers.rbegin(); it != context.callers.rend(); ++it) {
+        frames.push_back(*it);
+    }
+    return frames;
 }
 
 void FakeTarget::set_register(int index, std::uint64_t value) {
@@ -481,6 +510,11 @@ void FakeTarget::set_frame_base(std::uint64_t base) {
     frame_base_ = base;
     current().sp = base;
     current().fp = base;
+    current().callers.clear();
+}
+
+void FakeTarget::set_callers(std::vector<RawFrame> callers) {
+    current().callers = std::move(callers);
 }
 
 } // namespace krdbg

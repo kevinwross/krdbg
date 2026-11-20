@@ -46,7 +46,7 @@ KRDBG_TEST(fake_debug_info_has_an_aggregate_type_and_members) {
 
 KRDBG_TEST(fake_debug_info_has_register_frame_and_absolute_locations) {
     const DebugInfo info = krdbg::make_fake_debug_info();
-    CHECK_EQ(info.variables.size(), 7U);
+    CHECK_EQ(info.variables.size(), 9U);
 
     bool has_register = false;
     bool has_frame = false;

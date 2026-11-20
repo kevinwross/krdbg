@@ -118,6 +118,28 @@ DebugInfo make_fake_debug_info() {
     values.flags = VariableLocal;
     info.variables.push_back(values);
 
+    // A register-held aggregate: the 64-bit ACC register holds a Point's bytes.
+    VariableInfo held;
+    held.function = "main";
+    held.name = "held";
+    held.type = point_id;
+    held.size = 8;
+    held.location = Location{LocationKind::Register, 0, "core", 5, 0};
+    held.decl_line = 7;
+    held.flags = VariableLocal;
+    info.variables.push_back(held);
+
+    // A pointer local at frame -40. The test points it at the origin Point.
+    VariableInfo ptr;
+    ptr.function = "main";
+    ptr.name = "ptr";
+    ptr.type = 2;
+    ptr.size = 4;
+    ptr.location = Location{LocationKind::FrameOffset, -40, {}, 0, 0};
+    ptr.decl_line = 7;
+    ptr.flags = VariableLocal;
+    info.variables.push_back(ptr);
+
     VariableInfo counter;
     counter.function = "";
     counter.name = "global_counter";

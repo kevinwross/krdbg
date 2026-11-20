@@ -143,6 +143,7 @@ if(KRDBG_BUILD_TESTS)
         tests/test_merge.cpp
         tests/test_variables.cpp
         tests/test_kdbg.cpp
+        tests/test_session.cpp
         tests/test_surface.cpp
         tests/test_golden.cpp
     )

@@ -488,9 +488,14 @@ struct ExecutionStats {
 
 class DebugSession {
 public:
+    // The default uses std::chrono::steady_clock::now. Session tests pass a
+    // deterministic clock so run_seconds and IPS are reproducible.
+    using Clock = std::function<std::chrono::steady_clock::time_point()>;
+
     DebugSession(std::unique_ptr<IDebugTarget> target,
                  std::optional<DebugInfo> info,
-                 std::function<bool(IDebugTarget&, std::string&)> reload);
+                 std::function<bool(IDebugTarget&, std::string&)> reload,
+                 Clock clock = {});
 
     // Lifecycle.
     bool restart(std::string& error);
@@ -611,7 +616,9 @@ debug info, and resets the selected context if its id no longer exists.
 The session snapshots `target.instructions_executed()` at load, restart and
 reset, and accumulates `run_seconds` around every `step`/`run` call. Paused time,
 rendering, sleep and file I/O are excluded. `reset_stats()` only moves the
-baseline; it never changes VM state, breakpoints or the selected context.
+baseline; it never changes VM state, breakpoints or the selected context. The
+constructor's optional `Clock` is a test seam; a host leaves it empty and gets
+`steady_clock`.
 
 The model carries stable context ids, scopes, typed values, source mapping and
 memory access so a DAP front end can be added after v1 without changing the

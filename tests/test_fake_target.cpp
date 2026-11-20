@@ -26,14 +26,22 @@ KRDBG_TEST(fake_target_memory_round_trips_and_rejects_out_of_range) {
     CHECK(!target.write_memory(0x0FFF, written));
 }
 
-KRDBG_TEST(fake_target_unwind_reports_three_frames) {
+KRDBG_TEST(fake_target_unwind_follows_the_call_stack) {
     FakeTarget target;
-    const std::vector<RawFrame> frames = target.unwind();
-    CHECK_EQ(frames.size(), 3U);
-    CHECK_EQ(frames[0].pc, 0x1020U);
+    std::vector<RawFrame> frames = target.unwind();
+    CHECK_EQ(frames.size(), 1U);
+    CHECK_EQ(frames[0].pc, 0x1000U);
     CHECK_EQ(frames[0].frame_base, 0x2100U);
-    CHECK_EQ(frames[2].pc, 0x1000U);
-    CHECK_EQ(frames[2].frame_base, 0x2000U);
+
+    CHECK(target.set_pc(0x1008));
+    CHECK_EQ(target.step_instruction().kind, krdbg::StopKind::Retired);
+    CHECK_EQ(target.pc(), 0x1018U);
+    frames = target.unwind();
+    CHECK_EQ(frames.size(), 2U);
+    CHECK_EQ(frames[0].pc, 0x1018U);
+    CHECK_EQ(frames[0].frame_base, 0x2080U);
+    CHECK_EQ(frames[1].pc, 0x100CU);
+    CHECK_EQ(frames[1].frame_base, 0x2100U);
 }
 
 KRDBG_TEST(fake_target_disassembles_known_and_unknown_code) {
@@ -84,7 +92,7 @@ KRDBG_TEST(fake_target_steps_and_counts_instructions) {
     CHECK_EQ(target.instructions_executed(), 1U);
 
     CHECK_EQ(target.run(3).kind, krdbg::StopKind::Retired);
-    CHECK_EQ(target.pc(), 0x1010U);
+    CHECK_EQ(target.pc(), 0x101CU);
     CHECK_EQ(target.instructions_executed(), 4U);
 
     target.set_halted(true);

@@ -69,7 +69,7 @@ recorded but does not block a milestone unless the gate says it does.
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
-| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1, M1.2 and M1.5 done` |
+| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1–M1.5 done; G1 open` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
@@ -345,26 +345,39 @@ dependence on VM types.
 
 ### M1.3 Session
 
-- [ ] **M1.3.1** `DebugSession` ownership of target, `DebugInfo`, breakpoints,
+- [x] **M1.3.1** `DebugSession` ownership of target, `DebugInfo`, breakpoints,
       selected context, stats baseline.
-- [ ] **M1.3.2** Load/restart/replace target; source-origin rebuild flag;
+  Evidence: `src/core/session.cpp` keeps the target, optional `DebugInfo`, breakpoint table, selected context (via the target) and stats baseline in one `Impl`; every accessor reads that state.
+- [x] **M1.3.2** Load/restart/replace target; source-origin rebuild flag;
       breakpoint preservation rules.
-- [ ] **M1.3.3** Address and line breakpoints, enable/disable, run-to.
-- [ ] **M1.3.4** `step(StepMode)`, `run(budget)`, `run_to_*`, `pause`, guard
+  Evidence: `restart` calls the reload callback or `target.reset`, resets the stats baseline and re-resolves line breakpoints; `replace_target` keeps address breakpoints, re-resolves line breakpoints and repairs the selected context. The source-origin flag is `IHostServices::last_load_was_source()`; `session_restart_and_replace_preserve_breakpoints` covers the reload and preservation paths.
+- [x] **M1.3.3** Address and line breakpoints, enable/disable, run-to.
+  Evidence: `add_*_breakpoint`, `set_breakpoint_enabled`, `remove_breakpoint`, `run_to_address` and `run_to_line`; `session_breakpoints_disable_and_run_to` covers address, line, disabled and temporary run-to.
+- [x] **M1.3.4** `step(StepMode)`, `run(budget)`, `run_to_*`, `pause`, guard
       limits.
-- [ ] **M1.3.5** Call stack via `unwind()` plus function ranges; 64-frame cap.
-- [ ] **M1.3.6** Locals/globals, register/frame/absolute locations, members,
+  Evidence: all six step modes, budgeted run, both run-to forms, `pause()`, and 1M/10M step guards; `session_line_stepping_in_over_and_out` and `session_step_guard_stops_a_stuck_target` cover them.
+- [x] **M1.3.5** Call stack via `unwind()` plus function ranges; 64-frame cap.
+  Evidence: `call_stack()` maps each `RawFrame` to its function and caps at 64; `session_call_stack_and_frame_selection` checks two nested frames and a 100-frame unwind returning 64.
+- [x] **M1.3.6** Locals/globals, register/frame/absolute locations, members,
       pointer/array expansion.
-- [ ] **M1.3.7** Stats: instruction baseline, execution-only wall time, IPS.
+  Evidence: `locals`, `globals` and `members` resolve frame, register and absolute storage; struct/union members, array elements and one-level pointer dereference are expanded. `session_locals_globals_and_members` covers the register scalar, register-held `Point`, frame aggregate, array and pointer.
+- [x] **M1.3.7** Stats: instruction baseline, execution-only wall time, IPS.
+  Evidence: `stats()` subtracts the baseline and accumulates only step/run time around calls; `reset_stats` moves the baseline without touching PC or breakpoints. `session_stats_use_the_injected_clock_and_reset` uses the injected clock and checks 3 instructions in 1 ms = 3000 IPS.
 
 ### M1.4 Fake-target session tests
 
-- [ ] **M1.4.1** Line stepping in/over/out with nested calls.
-- [ ] **M1.4.2** Breakpoints: address, line, disabled, run-to, temporary.
-- [ ] **M1.4.3** Unwind and frame selection.
-- [ ] **M1.4.4** Register-held local and aggregate expansion.
-- [ ] **M1.4.5** Source switching across two source files.
-- [ ] **M1.4.6** Stats reset and deterministic fake clock.
+- [x] **M1.4.1** Line stepping in/over/out with nested calls.
+  Evidence: `session_line_stepping_in_over_and_out` covers line in, over and out across the `CALL`/`RET` pair, plus instruction over/out and a non-call line over.
+- [x] **M1.4.2** Breakpoints: address, line, disabled, run-to, temporary.
+  Evidence: `session_breakpoints_disable_and_run_to` stops on address and line breakpoints, runs past a disabled one, and checks temporary run-to breakpoints do not remain.
+- [x] **M1.4.3** Unwind and frame selection.
+  Evidence: `session_call_stack_and_frame_selection` checks the two frames' PCs, bases and functions, selects locals for both, and exercises the 64-frame cap.
+- [x] **M1.4.4** Register-held local and aggregate expansion.
+  Evidence: `argc` (register scalar) and `held` (a `Point` in the 64-bit ACC register) are read from registers; `held` expands to `x=1`, `y=2` through `members`.
+- [x] **M1.4.5** Source switching across two source files.
+  Evidence: `session_source_switches_with_the_frame` steps into `util_add` and checks the line's source id 2, the function, `source_for("util.c")` and locals at both frames.
+- [x] **M1.4.6** Stats reset and deterministic fake clock.
+  Evidence: `FakeClock` in `test_session.cpp` advances 1 ms per call; `session_stats_use_the_injected_clock_and_reset` checks instructions, seconds and IPS, then reset, restart and halt.
 
 ### M1.5 Fixtures
 
@@ -377,14 +390,21 @@ dependence on VM types.
 
 ### Gate G1 — Debug core
 
-- [ ] **G1.1** Windows x64 and WSL x64 configure/build/test pass.
+- [x] **G1.1** Windows x64 and WSL x64 configure/build/test pass.
+  Evidence: `scripts/gate-windows.ps1` → `GATE WINDOWS: PASS`; `scripts/gate-linux.sh` → `GATE LINUX X64: PASS`; 50 tests, 0 failures, goldens unchanged.
 - [ ] **G1.2** ARM64 build/test recorded (non-blocking).
-- [ ] **G1.3** KDBG fixture decode matches `krc --dump-symbols --json`.
-- [ ] **G1.4** Session tests cover line stepping, breakpoints, unwind,
+  PENDING: waiting for the BitWhiz tester entry for the M1.3/M1.4 revision; no ARM64 result is claimed yet.
+- [x] **G1.3** KDBG fixture decode matches `krc --dump-symbols --json`.
+  Evidence: `kdbg_translation_matches_krc_json_for_every_carried_field` parses the committed `fake.krc.json` and compares metadata, sources, functions, variables, types and members.
+- [x] **G1.4** Session tests cover line stepping, breakpoints, unwind,
       variables, stats.
-- [ ] **G1.5** No VM include or type in `krdbg_core` or `krdbg_kdbg`.
-- [ ] **G1.6** Vendored bootstrap, if used, carries provenance and passes parity.
-- [ ] **G1.7** `PLAN.md` unchanged or updated first for any interface change.
+  Evidence: the seven `test_session.cpp` cases cover all five areas; `krdbg_unit` is 50 tests / 0 failures on Windows and WSL.
+- [x] **G1.5** No VM include or type in `krdbg_core` or `krdbg_kdbg`.
+  Evidence: the boundary check now scans `src/core` and `src/kdbg` for `kr32`/`kr16` includes and reports `14 UI/public files clean; 10 core/kdbg files VM-clean`.
+- [x] **G1.6** Vendored bootstrap, if used, carries provenance and passes parity.
+  Evidence: `third_party/krc-debug/README.md` pins `797dfacf`; the parity test decodes both and compares with the `krc` JSON.
+- [x] **G1.7** `PLAN.md` unchanged or updated first for any interface change.
+  Evidence: the only interface change is the optional `DebugSession::Clock` test seam; PLAN.md §4.5 was updated before `session.h` and the change is source-compatible.
 
 ---
 
