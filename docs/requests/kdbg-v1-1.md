@@ -1,7 +1,10 @@
 # Request plan — KRCompiler: KDBG v1.1
 
-**Status:** PROPOSED. No file in KRCompiler changes until the owner approves this
-plan.
+**Status:** APPROVED 2026-11-20T11:11:16-08:00 by kevinwross.
+**Branch:** `kdbg-v1-1`, from `adopt-krc` at `0951c6e`. Do not commit to `master`
+and do not move `adopt-krc`; consumers pin SHAs on it.
+**Log:** `docs/kdbg-v1-1-log.md`, append-only, every entry headed by the exact
+`iso` from `local-datetime`.
 **Target repository:** `C:\Users\kevin\source\repos\KRCompiler`. Base the work on
 `adopt-krc` at `0951c6e`, which carries stage A of the toolchain adoption; the
 same tree is not on `master`. Confirm the merge/push state before branching.
@@ -147,20 +150,25 @@ be run and its real output recorded; nothing is claimed from this plan.
 - The IR has no base-type information and adding it changes layout or ABI: stop
   and return to the approver before touching codegen.
 
-## 8. Open questions for the approver
+## 8. Decisions
 
-1. **Bridge or direct emission?** This plan keeps the textual bridge and adds
-   letters to it. Emitting KDBG records directly from the backends would remove
-   the bridge but touch every producer and every consumer at once.
-2. **Where does `uint64_t` first matter?** If no `kr64` image can be produced
-   yet, K5 can land as encoding and tests only, with no producer, or wait.
-   Recommend landing it so the format is complete.
-3. **Who consumes first?** krdbg's M3/M4 are the stated reason; KR32's DAP and
-   kr16's reader can follow in their own plans. Confirm that ordering.
-4. **Minor bump only?** The plan keeps major `1` and sets minor `1`. A consumer
-   that pins the exact minor would need a reader change; none is known to.
+Resolved with the approver on 2026-11-20T11:11:16-08:00; these replace the four
+questions the plan was proposed with.
+
+1. **The bridge stays and is extended.** New record letters only; no direct
+   emission from the backends.
+2. **The 64-bit encoding lands now.** K5 ships as format and tests, with a
+   fixture; it does not wait for a `kr64` producer.
+3. **krdbg consumes first.** Its M3/M4 are the reason for the work; KR32's DAP
+   and kr16's reader follow in their own plans.
+4. **Minor bump only.** Major `1`, minor `1`; no known consumer pins the exact
+   minor.
+5. **Branch `kdbg-v1-1` from `0951c6e`,** not more commits on `adopt-krc`, whose
+   SHAs the consumers pin.
 
 ## 9. Approval
+
+Approved by kevinwross on 2026-11-20T11:11:16-08:00.
 
 Approving this file authorises, in KRCompiler only: the new bridge records, the
 new KDBG tags and sections, the minor version bump, the real `target_id`, the
