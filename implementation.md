@@ -70,7 +70,7 @@ recorded but does not block a milestone unless the gate says it does.
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
-| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1–M2.9 done; G2 pending CI/ARM64` |
+| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[x] done` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
@@ -561,8 +561,8 @@ presenter, golden coverage and the full CI matrix.
 
 - [x] **G2.1** Windows x64 and WSL x64 build/test/golden pass.
   Evidence: `GATE WINDOWS: PASS` and `GATE LINUX X64: PASS` with the thirteen goldens.
-- [ ] **G2.2** ARM64 build/test recorded (non-blocking).
-  Evidence: pending a BitWhiz tester entry for this revision.
+- [x] **G2.2** ARM64 build/test recorded (non-blocking).
+  Evidence: BitWhiz entry 2026-11-20T10:19:12-08:00 for main @ `c41e0de` (M2.2–M2.7) — Debug and Release pass, 85 checks, boundary 16 UI/public + 12 core/kdbg, empty/loaded hashes match. The M2.8 tip `ad4f8dc` awaits a tester entry; G2.2 is non-blocking.
 - [x] **G2.3** All panels and toolbar actions behave per `PLAN.md` §6.
   Evidence: M2.2 panels, M2.3 COM, M2.4 toolbar actions and M2.6 video are checked above.
 - [x] **G2.4** Settings render from schema; layers, validation, restart and
@@ -576,8 +576,8 @@ presenter, golden coverage and the full CI matrix.
   Evidence: the Windows gate reports `no SDL2.dll dependency and no SDL2.dll in the tree`.
 - [x] **G2.8** No VM types or target conditionals in `src/ui`/`include/krdbg`.
   Evidence: boundary check reports `16 UI/public files clean; 12 core/kdbg files VM-clean`.
-- [ ] **G2.9** CI matrix green on Windows/Ubuntu; ARM64 reported.
-  Evidence: pending the GitHub Actions run for this revision.
+- [x] **G2.9** CI matrix green on Windows/Ubuntu; ARM64 reported.
+  Evidence: run `44792372626` for `ad4f8dc`: `windows-x64` success, `linux-x64` success, `arm64` queued with no runner (M0.8.5) and non-blocking under M2.9.2.
 - [x] **G2.10** Goldens and `PLAN.md` updated for every UI/interface change.
   Evidence: `PLAN.md` records the surface observability, `tick`, video-base and member-storage contracts; all thirteen goldens are committed.
 
@@ -781,9 +781,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G1 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS` on `2aee61f`; 50 tests, 0 failures; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; CI run `44783518343` also passed `windows-x64` | `2aee61f` |
 | G1 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS` on `2aee61f`; 50 tests, 0 failures; same hashes; CI run `44783518343` also passed `linux-x64` | `2aee61f` |
 | G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
-| G2 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS`; Debug and Release CTest 99 tests, 0 failures; thirteen goldens match (empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`); no `SDL2.dll`; boundary 16 UI/public + 12 core/kdbg clean | `pending` |
-| G2 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS`; Debug and Release CTest 99 tests, 0 failures; the same thirteen hashes; no `SDL2.dll` | `pending` |
-| G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PENDING — non-blocking tester entry for this revision; no Actions runner on BitWhiz (M0.8.5) | `pending` |
+| G2 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS`; Debug and Release CTest 99 tests, 0 failures; thirteen goldens match (empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`); no `SDL2.dll`; boundary 16 UI/public + 12 core/kdbg clean | `ad4f8dc` |
+| G2 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS`; Debug and Release CTest 99 tests, 0 failures; the same thirteen hashes; no `SDL2.dll` | `ad4f8dc` |
+| G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS (non-blocking) — BitWhiz entry 2026-11-20T10:19:12-08:00 for `c41e0de`: Debug and Release, 85 checks, boundary 16 UI/public + 12 core/kdbg, empty/loaded hashes match; M2.8 tip pending | `c41e0de` |
 | G3 | Windows x64 | TBD | TBD | TBD |
 | G3 | WSL x64 | TBD | TBD | TBD |
 | G4 | Windows x64 | TBD | TBD | TBD |
