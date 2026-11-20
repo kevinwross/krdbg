@@ -10,7 +10,9 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 
 ## Plan
 
-**Status.** `DRAFT — do not implement until approved` — `PLAN.md` is "draft for review, 2026-11-18" and no product code has been written.
+**Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
+`implementation.md` are approved; no product code has been written. The next task
+is M0.1.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M0; §1–2 and the appendices are background.
 
@@ -75,6 +77,6 @@ Target-specific notes:
 
 ## Known traps
 
-- There is no CI workflow or ARM64 runner registration yet. M0.8 creates both, and G0/G6 stay blocked until the Raspberry Pi runner is available.
+- There is no CI workflow yet. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered for KRCompiler, and polls GitHub every 7 minutes; M0.8 confirms it for this repository or adds a registration, and G0/G6 stay blocked until it can run krdbg's jobs.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - `krc::debug` does not exist yet. The vendored KDBG bootstrap is temporary and must record its provenance and pass a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).

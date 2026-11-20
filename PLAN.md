@@ -1,6 +1,6 @@
 # krdbg — a shared, linked-in debugger surface for KR virtual machines
 
-**Status:** draft for review, 2026-11-18. No product code written.
+**Status:** approved 2026-11-20T03:04:50-08:00 by kevinwross. No product code written.
 **Decisions applied:** KR32 first; additive KDBG v1.1 owned by KRCompiler;
 typed register groups plus a reserved custom-state-panel hook; v1 includes core
 panels, register/flag editing, FPR/matrix, a separate video window and

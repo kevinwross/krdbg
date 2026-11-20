@@ -1,7 +1,7 @@
 # krdbg — Implementation Plan
 
-**Status:** DRAFT for review. No implementation starts until this file and
-`PLAN.md` are approved.
+**Status:** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross. Implementation may
+start; M0.1 is the next task.
 **Design of record:** [PLAN.md](PLAN.md). If this file and `PLAN.md` disagree,
 `PLAN.md` wins and this file is corrected.
 **Platforms:** Windows x64, Linux x64 (WSL), Linux ARM64 (Raspberry Pi).
@@ -213,7 +213,8 @@ on `refs/heads/main`.
       this file changes.
 - [ ] **M0.8.5** ARM64 runner registered with labels
       `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
-      `docs/ci-arm64.md`.
+      `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
+      queued job may wait that long before it starts.
 - [ ] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
 - [ ] **M0.8.7** Cache or artefact policy for build trees; no generated files
       committed.
@@ -661,7 +662,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner and labels | G0 / G6 | User + CI | `[ ]` |
+| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are confirmed in M0.8 (runner details confirmed 2026-11-20T03:09:09-08:00) |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
@@ -675,11 +676,15 @@ claim the prerequisite is met.
 
 ## 11. Review checklist for this file
 
-- [ ] The user approves `implementation.md`.
-- [ ] The user approves repository initialization and supplies a remote.
-- [ ] The user approves the platform gate policy and golden policy.
-- [ ] The user confirms the ARM64 runner owner and labels.
-- [ ] The milestone order and estimates are acceptable.
-- [ ] The first task to execute is M0.0.1.
+- [x] The user approves `implementation.md`.
+- [x] The user approves repository initialization and supplies a remote.
+- [x] The user approves the platform gate policy and golden policy.
+- [x] The user confirms the ARM64 runner owner and labels.
+- [x] The milestone order and estimates are acceptable.
+- [x] The first task to execute is M0.0.1.
 
-Until every box above is checked, no implementation starts.
+Approval is recorded at 2026-11-20T03:04:50-08:00; implementation starts at M0.1.
+The ARM64 runner is `BitWhiz`, a Raspberry Pi on the local network owned by
+kevinwross, polling GitHub every 7 minutes (§10). It is a prerequisite for
+G0.3/G0.9 and G6; M0.8 confirms the krdbg registration and its labels, and G0 may
+record that job `BLOCKED` until it can run this repository's jobs.
