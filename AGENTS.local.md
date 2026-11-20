@@ -11,9 +11,8 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. M0 is complete and G0 is closed; the Windows,
-WSL x64 and ARM64 evidence is recorded in `implementation.md` §9. The next task
-is M1.1.
+`implementation.md` are approved. G0 is closed; M0.8.5 remains blocked because the
+`arm64` CI job has never been assigned a runner. M1.1 is done and M1.2 is next.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M1; §1–2 and the appendices are background.
 
@@ -103,7 +102,7 @@ its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 
 ## Known traps
 
-- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered as the krdbg runner with the labels `[self-hosted, linux, arm64, raspberry-pi]`, and polls GitHub every 7 minutes. It is also registered for KRCompiler. Setup is in `docs/ci-arm64.md`.
+- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, reported by the owner as registered with the labels `[self-hosted, linux, arm64, raspberry-pi]` and polling every 7 minutes. It is also registered for KRCompiler. The `arm64` jobs have stayed queued with no runner assigned across four polls (runs `44777407987` and `44778060127`); check the runner service and label match before trusting a green ARM64 CI result. Setup is in `docs/ci-arm64.md`.
 - WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - `krc::debug` does not exist yet. The vendored KDBG bootstrap is temporary and must record its provenance and pass a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).

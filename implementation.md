@@ -68,7 +68,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[x] done` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1 done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -251,7 +251,7 @@ on `refs/heads/main`.
       `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
       `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
       queued job may wait that long before it starts.
-  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note; the `arm64` CI job is gated on repository variable `KRDBG_ARM64_RUNNER` and is skipped until the owner registers the runner and sets it. That registration is the owner's action and is not confirmed.
+  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note, and the owner reports BitWhiz registered and polling. The `arm64` jobs in runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`) were still queued with no runner assigned after 16 and 12 minutes, across four polls. The runner service and its label match need checking; this is not a green result.
 - [x] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
   Evidence: each CI job invokes one gate script; no configure/build/test command appears in the workflow.
 - [x] **M0.8.7** Cache or artefact policy for build trees; no generated files
@@ -293,7 +293,7 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `platform boundary: 13 UI/public files clean`; CTest `platform_boundary` passes on Windows and WSL.
 - [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
       the gate records `BLOCKED` for a missing runner.
-  Evidence: CI run `44733345483` for `b325a7f`: `windows-x64` success (gate step success), `linux-x64` success (SDL2 install and gate step success). `arm64` was queued with no runner and is recorded BLOCKED (M0.8.5), not green. The `arm64` job is now skipped until repository variable `KRDBG_ARM64_RUNNER` is set, so later runs complete honestly instead of queueing.
+  Evidence: CI runs `44733345483` (`b325a7f`), `44777407987` (`da4d19b`) and `44778060127` (`503f5de`): `windows-x64` and `linux-x64` succeeded in every run. The `arm64` jobs were queued with no runner for 16+ minutes across four polls and are recorded BLOCKED (M0.8.5), not green.
 - [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
   Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
@@ -694,7 +694,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS`. CI run `44733345483` also passed `windows-x64`. | `77c4e00` |
 | G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
 | G0 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: Debug and Release configure/build pass; CTest 2/2 with the x64 goldens excluded; empty `F15B00C153682DF8`, loaded `E47FA2651086D075` match x64 | `5fd5196` |
-| G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — run `44733345483` at `b325a7f`: `windows-x64` success, `linux-x64` success, `arm64` queued with no runner | `b325a7f` |
+| G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`): `windows-x64` and `linux-x64` success, `arm64` queued with no runner for 16+ minutes across four polls | `503f5de` |
 | G1 | Windows x64 | TBD | TBD | TBD |
 | G1 | WSL x64 | TBD | TBD | TBD |
 | G1 | ARM64 | TBD | TBD | TBD |
@@ -743,7 +743,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are documented in `docs/ci-arm64.md` but not yet confirmed (runner details confirmed 2026-11-20T03:09:09-08:00). The ARM64 gate itself has run through the tester session (G0.3, 5fd5196); the CI `arm64` job is still queued with no runner, so M0.8.5 and the ARM64 half of G0.9 stay BLOCKED. |
+| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` The owner reports BitWhiz registered with the labels `[self-hosted, linux, arm64, raspberry-pi]`; the setup is in `docs/ci-arm64.md`. The CI `arm64` jobs stayed queued with no runner for 16+ minutes across four polls (runs `44777407987`, `44778060127`), so M0.8.5 and the ARM64 half of G0.9 are BLOCKED. The ARM64 gate itself has run through the tester session (G0.3, `5fd5196`; M1.1 on `503f5de`). |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
