@@ -17,6 +17,9 @@
 #if defined(KRDBG_HAVE_KR32)
 #include "kr32_adapter.h"
 #endif
+#if defined(KRDBG_HAVE_KR16)
+#include "kr16_adapter.h"
+#endif
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
@@ -119,6 +122,7 @@ struct Options {
     std::string screenshot;
     std::string kr32_image;
     bool kr32_os = false;
+    std::string kr16_image;
 };
 
 void print_usage() {
@@ -126,7 +130,7 @@ void print_usage() {
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
-        "[--kr32-os] [--frames <n>]\n");
+        "[--kr32-os] [--kr16 <image.kex>] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -140,6 +144,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.kr32_image = argv[++index];
         } else if (argument == "--kr32-os") {
             options.kr32_os = true;
+        } else if (argument == "--kr16" && index + 1 < argc) {
+            options.kr16_image = argv[++index];
         } else if (argument == "--frames" && index + 1 < argc) {
             char* end = nullptr;
             const long frames = std::strtol(argv[++index], &end, 10);
@@ -271,6 +277,45 @@ int main(int argc, char** argv) {
                 }
                 break;
             }
+        }
+    }
+#endif
+#if defined(KRDBG_HAVE_KR16)
+    if (!session && !options.kr16_image.empty()) {
+        krdbg::kr16adapter::LoadedProgram loaded;
+        krdbg::kr16adapter::Options adapter_options;
+        adapter_options.source_roots = {
+            std::filesystem::current_path().string()};
+        std::string error;
+        if (!krdbg::kr16adapter::load_image(options.kr16_image,
+                                            adapter_options, loaded, error)) {
+            std::fprintf(stderr, "krdbg: KR16 load failed: %s\n", error.c_str());
+            return 1;
+        }
+        const std::string name =
+            std::filesystem::path(options.kr16_image).filename().string();
+        real_program = krdbg::ProgramInfo{
+            options.kr16_image, name, loaded.target->pc(), true};
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(loaded.target), loaded.info,
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+        const krdbg::DebugInfo& info = session->info();
+        for (std::size_t index = 0; index < info.functions.size(); ++index) {
+            if (info.functions[index].name != "main") {
+                continue;
+            }
+            std::uint64_t first_line = 0;
+            for (const krdbg::LineInfo& line : info.lines) {
+                if (line.function == index &&
+                    (first_line == 0 || line.address < first_line)) {
+                    first_line = line.address;
+                }
+            }
+            if (first_line != 0) {
+                session->run_to_address(first_line);
+                real_program->entry = session->pc();
+            }
+            break;
         }
     }
 #endif

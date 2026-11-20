@@ -108,6 +108,38 @@ if(KRDBG_KR32_ADAPTER)
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr32")
 endif()
 
+# Optional KR16 adapter. Same contract as KR32: OFF by default, and ON with a
+# missing tree stops configuration naming the expected path.
+option(KRDBG_KR16_ADAPTER "Build the optional KR16 IDebugTarget adapter" OFF)
+set(KRDBG_KR16_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../kr16" CACHE PATH
+    "KR16 source tree for KRDBG_KR16_ADAPTER=ON")
+if(KRDBG_KR16_ADAPTER)
+    if(NOT EXISTS "${KRDBG_KR16_ROOT}/CMakeLists.txt" OR
+       NOT EXISTS "${KRDBG_KR16_ROOT}/include/kr16/machine.hpp")
+        message(FATAL_ERROR
+            "KRDBG_KR16_ADAPTER=ON expects the KR16 source tree at "
+            "'${KRDBG_KR16_ROOT}' (CMakeLists.txt and "
+            "include/kr16/machine.hpp). Set KRDBG_KR16_ROOT to that tree; "
+            "krdbg never vendors or guesses KR16.")
+    endif()
+    set(KR16_BUILD_UI OFF CACHE BOOL "" FORCE)
+    set(KR16_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(KR16_TOOLCHAIN builtin CACHE STRING "" FORCE)
+    set(KR16_KDBG OFF CACHE BOOL "" FORCE)
+    set(KR16_SANITIZE OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${KRDBG_KR16_ROOT}" "${CMAKE_BINARY_DIR}/kr16"
+                     EXCLUDE_FROM_ALL)
+    if(MSVC)
+        # kr16 sets the static CRT for its own executables. The adapter is
+        # linked into krdbg's dynamic-CRT test/demo targets, so keep the library
+        # on the host runtime.
+        set_target_properties(kr16_core PROPERTIES
+            MSVC_RUNTIME_LIBRARY
+            "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr16")
+endif()
+
 add_library(krdbg_ui STATIC
     src/ui/canvas.cpp
     src/ui/embedded_fonts.cpp
@@ -161,6 +193,10 @@ if(KRDBG_KR32_ADAPTER)
     target_link_libraries(krdbg_demo PRIVATE krdbg_kr32)
     target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR32=1)
 endif()
+if(KRDBG_KR16_ADAPTER)
+    target_link_libraries(krdbg_demo PRIVATE krdbg_kr16)
+    target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR16=1)
+endif()
 
 enable_testing()
 
@@ -187,13 +223,20 @@ if(KRDBG_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui")
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
-        KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg")
+        KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg"
+        KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
     if(KRDBG_KR32_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr32_adapter.cpp)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr32)
         target_compile_definitions(krdbg_tests PRIVATE
-            KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.k32"
-            KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+            KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.k32")
+    endif()
+    if(KRDBG_KR16_ADAPTER)
+        target_sources(krdbg_tests PRIVATE tests/test_kr16_adapter.cpp)
+        target_link_libraries(krdbg_tests PRIVATE krdbg_kr16)
+        target_compile_definitions(krdbg_tests PRIVATE
+            KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kex"
+            KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
     endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately

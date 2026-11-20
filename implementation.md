@@ -666,38 +666,65 @@ abstraction with no UI conditionals.
 
 ### M4.1 Adapter
 
-- [ ] **M4.1.1** `adapters/kr16` target.
-- [ ] **M4.1.2** State: R0–R4, PC, SP, SR, C/Z/N/V/I; 4-digit addresses.
-- [ ] **M4.1.3** Disassembly, memory, unwind (R4), COM console block at `0xF000`
+- [x] **M4.1.1** `adapters/kr16` target.
+- [x] **M4.1.2** State: R0–R4, PC, SP, SR, C/Z/N/V/I; 4-digit addresses.
+- [x] **M4.1.3** Disassembly, memory, unwind (R4), COM console block at `0xF000`
       (OUT `0xF000`, `TX_READY` `0xF001`, IN `0xF004`, status `0xF005`), and
       input through `Machine::push_key`.
-- [ ] **M4.1.4** No framebuffer: `VIDEO` hidden; COM only.
-- [ ] **M4.1.5** `KERNEL` hidden (`supports_kernel_load == false`).
+- [x] **M4.1.4** No framebuffer: `VIDEO` hidden; COM only.
+- [x] **M4.1.5** `KERNEL` hidden (`supports_kernel_load == false`).
+
+`krdbg_kr16` is built only for `KRDBG_KR16_ADAPTER=ON`; `KRDBG_KR16_ROOT` must
+name a tree containing `CMakeLists.txt` and `include/kr16/machine.hpp`, and a
+missing tree stops configuration with that path. On MSVC the adapter keeps
+`kr16_core` on the dynamic CRT so it can link into the krdbg test/demo targets.
+The descriptor exposes five 16-bit GPRs, PC/SP/SR/CYCLES/STACK LIMIT, five
+flags, 16-bit addresses, 2-byte alignment, RAM/stack/IO/ROM regions, and a COM
+port only.
 
 ### M4.2 Debug info
 
-- [ ] **M4.2.1** KDBG path if `.kex` carries it; otherwise the legacy KR16
+- [x] **M4.2.1** KDBG path if `.kex` carries it; otherwise the legacy KR16
       `.debug_line`/`.debug_vars` adapter.
-- [ ] **M4.2.2** Source/line/function/variable mapping and source paths.
-- [ ] **M4.2.3** Unsupported records degrade cleanly.
+- [x] **M4.2.2** Source/line/function/variable mapping and source paths.
+- [x] **M4.2.3** Unsupported records degrade cleanly.
+
+The primary fixture carries KDBG and is reported as `DebugPath::Kdbg`. The
+legacy fixture has no `.kdbg` and is translated from `.debug_frames`,
+`.debug_vars`, `.debug_types`, `.debug_line` and `.debug_sources`; malformed or
+unrecognised records are skipped. KDBG locals use KR16's `R4 - offset` rule;
+the adapter converts the recorded positive offset to a negative frame offset.
+Source paths are slash-normalized before resolution so a Windows-recorded KDBG
+path resolves on Linux.
 
 ### M4.3 Integration
 
-- [ ] **M4.3.1** Load a KR16 image and stop at the entry/main.
-- [ ] **M4.3.2** Source breakpoint, line step, locals, globals, stack, memory.
-- [ ] **M4.3.3** COM output/input.
-- [ ] **M4.3.4** Address width, instruction size and register layout adapt with
+- [x] **M4.3.1** Load a KR16 image and stop at the entry/main.
+- [x] **M4.3.2** Source breakpoint, line step, locals, globals, stack, memory.
+- [x] **M4.3.3** COM output/input.
+- [x] **M4.3.4** Address width, instruction size and register layout adapt with
       no UI changes.
-- [ ] **M4.3.5** Goldens for the 16-bit profile.
+- [x] **M4.3.5** Goldens for the 16-bit profile.
+
+`tests/fixtures/kr16/m4.kex` is the deterministic krc-built KDBG fixture;
+`legacy.kex` exercises the fallback. `tests/test_kr16_adapter.cpp` covers
+breakpoint line 18, line-in/over/out across `add`, point members, caller-frame
+locals, globals, memory, 2/4-byte disassembly, COM `KR16\n` and input `A`, the
+legacy path, and the 16-bit UI. The UI screenshot is `shots/m4-kr16.png`.
 
 ### Gate G4 — KR16 slice
 
-- [ ] **G4.1** Windows x64 and WSL x64 build/test/integration pass.
+- [x] **G4.1** Windows x64 and WSL x64 build/test/integration pass.
 - [ ] **G4.2** ARM64 evidence recorded (non-blocking).
-- [ ] **G4.3** Same interactions work on KR16; only adapter code changed.
-- [ ] **G4.4** No `if (kr16)` or 16-bit special case in `src/ui`.
-- [ ] **G4.5** `.kex` debug path is documented or the legacy adapter is used.
-- [ ] **G4.6** Goldens updated.
+- [x] **G4.3** Same interactions work on KR16; only adapter code changed.
+- [x] **G4.4** No `if (kr16)` or 16-bit special case in `src/ui`.
+- [x] **G4.5** `.kex` debug path is documented or the legacy adapter is used.
+- [x] **G4.6** Goldens updated.
+
+G4 is closed for the blocking rows. G4.2 is pending the ARM64 tester entry and
+is non-blocking. `adapters/kr16` is the only source that includes a KR16 header;
+`src/ui` and the public headers are unchanged. The KDBG path is preferred, and
+the legacy `.debug_*` adapter is used only when `.kdbg` is absent.
 
 ---
 
@@ -817,8 +844,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G3 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=C:/Users/kevin/source/repos/KR32` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON Debug 106 tests, 0 failures, Release 106 tests, 0 failures; real-target golden `19D243A88CB8EF35` | `f349fac` |
 | G3 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=/mnt/c/Users/kevin/source/repos/KR32 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON 106 tests, 0 failures; real-target golden matches Windows | `f349fac` |
 | G3 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR32_ROOT=/home/kevinro/repos/kr32 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T11:49:04-08:00 @ `9d63589`: gate 99 checks, 0 failures; entry 2026-11-20T11:54:14-08:00 @ `7539b23`: adapter ON **106 checks, 0 failures**, real-target golden `19D243A88CB8EF35`; sibling KR32 `aa120ad` is host evidence, not pinned | `7539b23` |
-| G4 | Windows x64 | TBD | TBD | TBD |
-| G4 | WSL x64 | TBD | TBD | TBD |
+| G4 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=C:/Users/kevin/source/repos/kr16` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON Debug 107 tests, 0 failures, Release 107 tests, 0 failures; 16-bit golden `A1F5B45032915A96` | TBD |
+| G4 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=/mnt/c/Users/kevin/source/repos/kr16 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON 107 tests, 0 failures; 16-bit golden matches Windows | TBD |
+| G4 | ARM64 | not run | PENDING (non-blocking) — no M4 entry in `docs/arm64-test-log.md`; G4.1/G4.3–G4.6 are the blocking rows | — |
 | G5 | Windows x64 | TBD | TBD | TBD |
 | G5 | WSL x64 | TBD | TBD | TBD |
 | G6 | Windows x64 | TBD | TBD | TBD |
@@ -921,6 +949,59 @@ Recorded 2026-11-20T11:42:43-08:00.
   including `kr32_ui_loaded_state_matches_the_committed_golden`. The extra build
   used `/home/kevinro/repos/kr32` at `aa120ad` and the null presenter, so it is
   host evidence rather than a reproducible gate row.
+
+
+
+### M4.1–M4.3 and G4 evidence
+
+Recorded 2026-11-20T12:51:17-08:00.
+
+- Bare configuration: `scripts/gate-windows.ps1` and `scripts/gate-linux.sh`
+  both end `GATE ...: PASS`; CTest 2/2; the unit binary is **99 tests, 0
+  failures**; no `SDL2.dll`.
+- Windows adapter ON (Debug): `cmake -S . -B build/windows-kr16 -G Ninja
+  -DCMAKE_BUILD_TYPE=Debug -DKRDBG_KR16_ADAPTER=ON
+  -DKRDBG_KR16_ROOT=C:/Users/kevin/source/repos/kr16`, then
+  `cmake --build build/windows-kr16 --target krdbg_tests`; **107 tests, 0
+  failures**.
+- Windows adapter ON (Release): the same configure in
+  `build/windows-kr16-release` with `CMAKE_BUILD_TYPE=Release`; **107 tests, 0
+  failures**.
+- WSL adapter ON: `cmake -S . -B build/linux-kr16 -G Ninja
+  -DCMAKE_BUILD_TYPE=Debug -DKRDBG_KR16_ADAPTER=ON
+  -DKRDBG_KR16_ROOT=/mnt/c/Users/kevin/source/repos/kr16
+  -DKRDBG_PLATFORM=sdl2`; **107 tests, 0 failures**, including the same 16-bit
+  golden.
+- Missing-tree failure: configuring with
+  `-DKRDBG_KR16_ADAPTER=ON
+  -DKRDBG_KR16_ROOT=C:/Users/kevin/source/repos/does-not-exist` stops with
+  `KRDBG_KR16_ADAPTER=ON expects the KR16 source tree at
+  'C:/Users/kevin/source/repos/does-not-exist' (CMakeLists.txt and
+  include/kr16/machine.hpp).`
+- Fixtures: `tests/fixtures/kr16/m4.kex` is 2,620 bytes from
+  `krc --target=kr16 -O0 -c`; SHA-256
+  `D2709C451D4736CBEEFE42D50D2CE65A2EEF45351473AD78AA50CA9008938D58`,
+  deterministic. `legacy.kex` is 1,954 bytes from `kr16 cc -g -O0` + `kr16 ld`;
+  SHA-256 `DE35D84DB99BA95012F05F32206ED312B35A24CF86D650B890E832FCE1B132D0`,
+  deterministic, and has no `.kdbg`.
+- Integration: `tests/test_kr16_adapter.cpp` covers entry PC `0x100`, source
+  breakpoint line 18, line-in/over/out across `add`, `point.x=3`/`point.y=4`,
+  caller-frame locals, `global_counter 7 -> 14`, call stack `add`/`main`,
+  memory, 2/4-byte disassembly, COM status/TX/RX/overrun, output `KR16\n`,
+  input `A` read as `65`, restart with the line breakpoint preserved, and the
+  legacy `.debug_*` fallback. The legacy fixture maps sources, lines, functions
+  and variables.
+- UI: `goldens/kr16-loaded.hash` is `A1F5B45032915A96`; Windows and WSL agree.
+  `shots/m4-kr16.png` shows four-digit addresses, R0–R4, PC/SP/SR, C/Z/N/V/I,
+  COM only, and no `VIDEO` or `KERNEL` button.
+- G4.4: the boundary check reports `16 UI/public files clean; 12 core/kdbg
+  files VM-clean`; no `src/ui` or public-header source changed. The only KR16
+  mentions there are comments naming reference material.
+- G4.5: KDBG is preferred and `DebugPath::Kdbg` is reported for the krc-built
+  fixture; `DebugPath::Legacy` is reported for the older `.debug_*` image and
+  is used only when `.kdbg` is absent.
+- G4.2: not run; `docs/arm64-test-log.md` has no M4 entry. The ARM64 row is
+  non-blocking per the milestone instruction.
 
 
 

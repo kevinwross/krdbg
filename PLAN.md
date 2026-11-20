@@ -1649,8 +1649,8 @@ is too UI-shaped):
   present.
 - Kernel: KR16 has no embedded kernel/BIOS pair equivalent to KR32OS, so
   `supports_kernel_load()` is false and the `KERNEL` button is hidden.
-- Debug info: KR16's legacy `.debug_line`/`.debug_vars`/`.debug_types` today,
-  KDBG once the `.kex` writer embeds it.
+- Debug info: KDBG from a `krc`-built `.kex`. Older images without `.kdbg` fall
+  back to the legacy `.debug_line`/`.debug_vars`/`.debug_types` sections.
 
 This adapter is the real test of the abstraction: if it needs UI changes, the
 abstraction is wrong. Target: **zero `if (target == kr16)` in krdbg.**
@@ -1683,10 +1683,11 @@ link krdbg, done.
 - krdbg has no dependency on a VM. Optional in-tree adapters
   (`adapters/kr32`, `adapters/kr16`) are development bridges behind CMake
   options; long-term they belong in the VM repos, because the VM owns its ABI.
-  `KRDBG_KR32_ADAPTER` defaults to `OFF`; when it is `ON`, `KRDBG_KR32_ROOT`
-  must name a KR32 tree containing `CMakeLists.txt` and
-  `include/kr32/core/machine.h`, and a missing tree stops configuration with
-  that path. A bare checkout and CI build the adapter-OFF configuration only.
+  `KRDBG_KR32_ADAPTER` and `KRDBG_KR16_ADAPTER` default to `OFF`. When an
+  adapter is `ON`, its `KRDBG_KR32_ROOT`/`KRDBG_KR16_ROOT` must name a tree
+  containing `CMakeLists.txt` and the VM's `machine` header, and a missing tree
+  stops configuration with that path. A bare checkout and CI build the
+  adapter-OFF configuration only.
 - Version the interface (`krdbg::version`) so a VM can check compatibility at
   compile time.
 
