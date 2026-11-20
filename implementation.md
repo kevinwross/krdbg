@@ -69,7 +69,7 @@ recorded but does not block a milestone unless the gate says it does.
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
-| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1 done` |
+| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1, M1.2 and M1.5 done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
@@ -251,7 +251,7 @@ on `refs/heads/main`.
       `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
       `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
       queued job may wait that long before it starts.
-  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note, and the owner reports BitWhiz registered and polling. The `arm64` jobs in runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`) were still queued with no runner assigned after 16 and 12 minutes, across four polls. The runner service and its label match need checking; this is not a green result.
+  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note. The `arm64` jobs in runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`) stayed queued with no runner assigned for 16+ minutes across four polls. The BitWhiz tester inspected the host at `50b6a0d` and found no `actions.runner.*` unit, no `Runner.Listener` process, and no runner installation or `_work` directory. Install and register the GitHub Actions runner before this can be green.
 - [x] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
   Evidence: each CI job invokes one gate script; no configure/build/test command appears in the workflow.
 - [x] **M0.8.7** Cache or artefact policy for build trees; no generated files
@@ -328,15 +328,20 @@ dependence on VM types.
 
 ### M1.2 KDBG reader
 
-- [ ] **M1.2.1** Integrate `krc::debug`; or the vendored `kdbg.*` bootstrap with
+- [x] **M1.2.1** Integrate `krc::debug`; or the vendored `kdbg.*` bootstrap with
       a pinned commit and provenance note.
-- [ ] **M1.2.2** Decode `.kdbg` from a `.k32` section; clear errors for
+  Evidence: `third_party/krc-debug/` holds the exact KRCompiler `kdbg.h`/`kdbg.cpp` from `797dfacf7bbbc3e7744a40e627e7777a1c63b9c9`, with the MIT licence and README provenance. `KRDBG_KDBG_VENDORED=OFF` with `CMAKE_PREFIX_PATH` at the KRCompiler install tree configures, builds and passes the tests against `krc::debug`.
+- [x] **M1.2.2** Decode `.kdbg` from a `.k32` section; clear errors for
       truncated, bad-CRC, missing-section and wrong-version input.
-- [ ] **M1.2.3** Translate `KdbgImage` to `DebugInfo`; no `KdbgImage` outside
+  Evidence: `read_section` uses `decode_kdbg_image` (section lookup plus image-base check); `read_payload` decodes a raw payload. Tests cover truncated header, bad magic, wrong major version, header CRC, section-table bounds, record length and a missing section, each returning a distinct error.
+- [x] **M1.2.3** Translate `KdbgImage` to `DebugInfo`; no `KdbgImage` outside
       `krdbg_kdbg`.
-- [ ] **M1.2.4** Parity test against `krc --dump-symbols --json` for a fixture.
-- [ ] **M1.2.5** Corrupt-input tests (short header, bad section offset, bad
+  Evidence: `src/kdbg/kdbg.cpp` is the only file that includes `krc/debug/kdbg.h`; `include/krdbg/kdbg.h` exposes only `DebugInfo`; the platform-boundary check reports 14 clean UI/public files.
+- [x] **M1.2.4** Parity test against `krc --dump-symbols --json` for a fixture.
+  Evidence: `tests/fixtures/kdbg/fake.krc.json` is the `krc` dump; `kdbg_translation_matches_krc_json_for_every_carried_field` parses it and compares every field the neutral model carries (metadata, sources, functions, variables, types and members).
+- [x] **M1.2.5** Corrupt-input tests (short header, bad section offset, bad
       record length, CRC mismatch).
+  Evidence: `kdbg_rejects_truncated_bad_crc_and_bad_version` and `kdbg_rejects_a_bad_section_table_and_a_missing_section` cover all four cases plus bad magic, wrong version and a missing section.
 
 ### M1.3 Session
 
@@ -363,9 +368,12 @@ dependence on VM types.
 
 ### M1.5 Fixtures
 
-- [ ] **M1.5.1** A small `.k32` fixture with `.kdbg` from `krc`/`krld`.
-- [ ] **M1.5.2** A `.kdbg` binary fixture for decode tests.
-- [ ] **M1.5.3** Document how to regenerate fixtures; deterministic output.
+- [x] **M1.5.1** A small `.k32` fixture with `.kdbg` from `krc`/`krld`.
+  Evidence: `tests/fixtures/kdbg/fake.k32` (4671 bytes) was linked by KRCompiler `krld` 0.1.0 from `fake.c` at commit `797dfacf`; `kdbg_section_translates_the_k32_fixture` decodes it.
+- [x] **M1.5.2** A `.kdbg` binary fixture for decode tests.
+  Evidence: `tests/fixtures/kdbg/fake.kdbg` (1455 bytes) is the raw payload from the same image; `kdbg_payload_and_section_translate_identically` decodes both.
+- [x] **M1.5.3** Document how to regenerate fixtures; deterministic output.
+  Evidence: `tests/fixtures/kdbg/README.md` and `regenerate.py` document the commands; re-running produced byte-identical fixtures (SHA-256 `9EB4454F...D5C3`, `6EA7445D...B14F`, `A3217701...513C`).
 
 ### Gate G1 — Debug core
 
@@ -743,8 +751,8 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` The owner reports BitWhiz registered with the labels `[self-hosted, linux, arm64, raspberry-pi]`; the setup is in `docs/ci-arm64.md`. The CI `arm64` jobs stayed queued with no runner for 16+ minutes across four polls (runs `44777407987`, `44778060127`), so M0.8.5 and the ARM64 half of G0.9 are BLOCKED. The ARM64 gate itself has run through the tester session (G0.3, `5fd5196`; M1.1 on `503f5de`). |
-| `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
+| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` The owner reports BitWhiz registered with the labels `[self-hosted, linux, arm64, raspberry-pi]`; the setup is in `docs/ci-arm64.md`. The CI `arm64` jobs stayed queued with no runner for 16+ minutes across four polls (runs `44777407987`, `44778060127`). The tester inspected the host at `50b6a0d` and found no Actions runner unit, process, installation or `_work` directory. M0.8.5 and the ARM64 half of G0.9 are BLOCKED until the runner is installed. The ARM64 tester gate itself passes (G0.3, `5fd5196`; M1.1 on `50b6a0d`). |
+| `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout and CI never depend on a local KRCompiler install. |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
 | `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[ ]` |
