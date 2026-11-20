@@ -108,6 +108,7 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         info.end = function.end;
         info.source = 0;
         info.line = 0;
+        info.frame = function.frame;
         out.functions.push_back(std::move(info));
     }
     std::stable_sort(out.functions.begin(), out.functions.end(),
@@ -139,7 +140,7 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         out.symbols.push_back(std::move(info));
     }
 
-    out.variables.reserve(image.variables.size());
+    out.variables.reserve(image.variables.size() + image.symbols.size());
     for (const krc::debug::KdbgVariable& variable : image.variables) {
         VariableInfo info;
         info.function = variable.function;
@@ -149,6 +150,36 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         info.location = Location{LocationKind::FrameOffset,
                                  static_cast<std::int64_t>(variable.offset), {}, 0, 0};
         info.flags = variable.function.empty() ? VariableGlobal : VariableLocal;
+        out.variables.push_back(std::move(info));
+    }
+
+    // KDBG records data symbols separately from locals. Expose the data ones as
+    // absolute globals; skip function symbols and anything already declared.
+    for (const krc::debug::KdbgSymbol& symbol : image.symbols) {
+        if (symbol.size == 0) {
+            continue;
+        }
+        const bool is_function =
+            std::any_of(out.functions.begin(), out.functions.end(),
+                        [&symbol](const FunctionInfo& function) {
+                            return function.name == symbol.name;
+                        });
+        const bool already_declared =
+            std::any_of(out.variables.begin(), out.variables.end(),
+                        [&symbol](const VariableInfo& variable) {
+                            return variable.function.empty() &&
+                                   variable.name == symbol.name;
+                        });
+        if (is_function || already_declared) {
+            continue;
+        }
+        VariableInfo info;
+        info.name = symbol.name;
+        info.type = type_id(out, symbol.type);
+        info.size = symbol.size;
+        info.location =
+            Location{LocationKind::Absolute, 0, {}, 0, symbol.address};
+        info.flags = VariableGlobal;
         out.variables.push_back(std::move(info));
     }
 }

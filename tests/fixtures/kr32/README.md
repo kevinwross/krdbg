@@ -1,0 +1,25 @@
+# KR32 M3 fixture
+
+`m3.k32` is a deterministic 5747-byte KR32 executable built with `krc` and
+`krld` from KRCompiler at `47fa4e5` or later. It carries a `.kdbg` section used
+by the krdbg KR32 adapter tests.
+
+- Source: `m3.c`
+- Runtime: `crt0.s` from KRCompiler `targets/kr32/runtime/`, plus `getchar.s`
+  here; no libc is linked.
+- Source path recorded in KDBG: `tests/fixtures/kr32/m3.c`
+- SHA-256: `84CC57C417A2C4BD3931DC0E996A8CD518057545794F13869E79CC0F52E73AF0`
+- Rebuild command: `tests/fixtures/kr32/regenerate.ps1`
+
+The image is small and deterministic, so it is checked in. The script accepts:
+
+```powershell
+$env:KRDBG_KRC = "path/to/krc.exe"
+$env:KRDBG_KRLD = "path/to/krld.exe"
+$env:KRDBG_SYSROOT = "path/to/krc-install/share/krc/sysroot"
+$env:KRDBG_KR32_RUNTIME = "path/to/KRCompiler/targets/kr32/runtime"
+./tests/fixtures/kr32/regenerate.ps1
+```
+
+Run it from the repository root. The script writes `m3.k32` in this directory;
+a second run produces the same SHA-256.

@@ -6,12 +6,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+
+#if defined(KRDBG_HAVE_KR32)
+#include "kr32_adapter.h"
+#endif
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
@@ -112,13 +117,16 @@ struct Options {
     bool no_video = false;
     int frames = -1;
     std::string screenshot;
+    std::string kr32_image;
+    bool kr32_os = false;
 };
 
 void print_usage() {
     std::printf(
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
-        "tooltip|variables|com|no-com|no-video] [--frames <n>]\n");
+        "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
+        "[--kr32-os] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -128,6 +136,10 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.headless = true;
         } else if (argument == "--screenshot" && index + 1 < argc) {
             options.screenshot = argv[++index];
+        } else if (argument == "--kr32" && index + 1 < argc) {
+            options.kr32_image = argv[++index];
+        } else if (argument == "--kr32-os") {
+            options.kr32_os = true;
         } else if (argument == "--frames" && index + 1 < argc) {
             char* end = nullptr;
             const long frames = std::strtol(argv[++index], &end, 10);
@@ -203,26 +215,90 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    auto target =
-        std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
-    krdbg::FakeTarget* fake_target = target.get();
-    if (options.video16) {
-        fake_target->video_source().set_mode(320, 180);
+    std::unique_ptr<krdbg::DebugSession> session;
+    krdbg::FakeTarget* fake_target = nullptr;
+    std::optional<krdbg::ProgramInfo> real_program;
+#if defined(KRDBG_HAVE_KR32)
+    if (options.kr32_os || !options.kr32_image.empty()) {
+        krdbg::kr32adapter::LoadedProgram loaded;
+        krdbg::kr32adapter::Options adapter_options;
+        adapter_options.source_roots = {
+            std::filesystem::current_path().string()};
+        std::string error;
+        if (options.kr32_os) {
+            if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
+                                                      error)) {
+                std::fprintf(stderr, "krdbg: KR32OS load failed: %s\n",
+                             error.c_str());
+                return 1;
+            }
+            real_program =
+                krdbg::ProgramInfo{"<embedded KR32OS>", "KR32OS", 0, true};
+        } else if (!krdbg::kr32adapter::load_standalone(
+                       options.kr32_image, adapter_options, loaded, error)) {
+            std::fprintf(stderr, "krdbg: KR32 load failed: %s\n", error.c_str());
+            return 1;
+        } else {
+            const std::string name =
+                std::filesystem::path(options.kr32_image).filename().string();
+            real_program = krdbg::ProgramInfo{
+                options.kr32_image, name, loaded.target->pc(), true};
+        }
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(loaded.target), loaded.info,
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+        if (options.kr32_os) {
+            session->run(2'000'000);
+            real_program->entry = session->pc();
+        } else {
+            // Start on main's first source line, as KR32's own debugger does
+            // after running the startup stub.
+            const krdbg::DebugInfo& info = session->info();
+            for (std::size_t index = 0; index < info.functions.size(); ++index) {
+                if (info.functions[index].name != "main") {
+                    continue;
+                }
+                std::uint64_t first_line = 0;
+                for (const krdbg::LineInfo& line : info.lines) {
+                    if (line.function == index &&
+                        (first_line == 0 || line.address < first_line)) {
+                        first_line = line.address;
+                    }
+                }
+                if (first_line != 0) {
+                    session->run_to_address(first_line);
+                    real_program->entry = session->pc();
+                }
+                break;
+            }
+        }
     }
-    auto session = std::make_unique<krdbg::DebugSession>(
-        std::move(target), std::optional<krdbg::DebugInfo>{krdbg::make_fake_debug_info()},
-        std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+#endif
+    if (!session) {
+        auto target =
+            std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
+        fake_target = target.get();
+        if (options.video16) {
+            fake_target->video_source().set_mode(320, 180);
+        }
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(target),
+            std::optional<krdbg::DebugInfo>{krdbg::make_fake_debug_info()},
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+    }
     DemoHost host;
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
-    if (options.loaded) {
+    if (real_program.has_value()) {
+        surface.set_program_info(*real_program);
+    } else if (options.loaded) {
         surface.set_program_info(
             krdbg::ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
     }
     if (options.error) {
         surface.set_error("could not load examples/fake/fake.k32");
     }
-    if (options.com) {
+    if (options.com && fake_target != nullptr) {
         fake_target->com().reset();
         fake_target->com().push_output("hello\nworld\n");
     }

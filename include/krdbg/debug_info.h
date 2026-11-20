@@ -54,6 +54,10 @@ struct FunctionInfo {
     std::uint64_t end = 0;       // exclusive
     std::uint32_t source = 0;
     std::uint32_t line = 0;
+    // ABI frame offset from the frame-pointer register to the saved caller
+    // frame (saved FP at +frame, return PC at +frame+pointer size). An adapter
+    // that cannot unwind leaves this zero.
+    std::uint32_t frame = 0;
 };
 
 struct SymbolInfo {

@@ -213,7 +213,9 @@ KRDBG_TEST(kdbg_translation_matches_krc_json_for_every_carried_field) {
     }
 
     const auto& variables = expected["variables"].array;
-    CHECK_EQ(variables.size(), info.variables.size());
+    // Locals come first; data symbols are appended as absolute globals and are
+    // not part of krc's `variables` dump.
+    CHECK(info.variables.size() >= variables.size());
     for (std::size_t index = 0; index < variables.size() &&
                                 index < info.variables.size();
          ++index) {

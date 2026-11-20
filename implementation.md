@@ -590,42 +590,69 @@ KR32 adapter, and the session works end to end.
 
 ### M3.1 Adapter
 
-- [ ] **M3.1.1** `adapters/kr32` target linked by the host, not by `krdbg_ui`.
-- [ ] **M3.1.2** `IDebugTarget` implementation: state layout, contexts, step,
+- [x] **M3.1.1** `adapters/kr32` target linked by the host, not by `krdbg_ui`.
+- [x] **M3.1.2** `IDebugTarget` implementation: state layout, contexts, step,
       memory, disassembly, unwind, reset.
-- [ ] **M3.1.3** `IComPort` via syscall 33/34 and OS serial; `IVideoSource` via
+- [x] **M3.1.3** `IComPort` via syscall 33/34 and OS serial; `IVideoSource` via
       `FramebufferDevice`.
-- [ ] **M3.1.4** KR32 ABI unwind: R7 frame base, saved FP, return PC.
-- [ ] **M3.1.5** Target descriptor: R0–R15, PC/SP/FLAGS, FPRs, tile, control
+- [x] **M3.1.4** KR32 ABI unwind: R7 frame base, saved FP, return PC.
+- [x] **M3.1.5** Target descriptor: R0–R15, PC/SP/FLAGS, FPRs, tile, control
       registers, memory regions.
+
+`krdbg_kr32` is built only for `KRDBG_KR32_ADAPTER=ON`, and the host
+(`krdbg_demo`) links it; `krdbg_ui` stays VM-free. `KRDBG_KR32_ROOT` must name a
+tree containing `CMakeLists.txt` and `include/kr32/core/machine.h`; a missing
+tree stops configuration with that path in the error. The descriptor exposes
+16 GPRs, PC/SP/FP/TICKS/TSP/MCTL/PTBR/FAR, six flags, 16 FPRs, five control
+registers, a 16x16 tile matrix, RAM/ROM/framebuffer/MMIO regions.
 
 ### M3.2 Loading
 
-- [ ] **M3.2.1** Load a `.k32` executable through KR32's container loader.
-- [ ] **M3.2.2** Load the `.kdbg` section into `DebugInfo`; source paths resolve.
-- [ ] **M3.2.3** Restart/reload preserving the correct breakpoints.
-- [ ] **M3.2.4** OS mode: embedded kernel/BIOS, merged debug info, video.
+- [x] **M3.2.1** Load a `.k32` executable through KR32's container loader.
+- [x] **M3.2.2** Load the `.kdbg` section into `DebugInfo`; source paths resolve.
+- [x] **M3.2.3** Restart/reload preserving the correct breakpoints.
+- [x] **M3.2.4** OS mode: embedded kernel/BIOS, merged debug info, video.
+
+Standalone loading parses the container, installs syscall vectors 32/33/34,
+and decodes `.kdbg` via `krdbg_kdbg`; KDBG data symbols become absolute globals.
+Source paths are resolved against the image directory and configured roots.
+OS mode writes `BootInfo`, boots the embedded pair, exposes the 800x600
+`FramebufferDevice`, and merges KDBG payloads when present. The checked-in
+KR32OS images carry the legacy `.debug_info` bridge rather than `.kdbg`, so in
+this checkout OS mode has video and serial but no OS source/locals; a KDBG-built
+OS pair is an external KRCompiler/KR32OS prerequisite.
 
 ### M3.3 Integration
 
-- [ ] **M3.3.1** Source breakpoint stops at the expected line.
-- [ ] **M3.3.2** Line step in/over/out across a call.
-- [ ] **M3.3.3** Locals, struct member expansion, globals.
-- [ ] **M3.3.4** Call stack and frame selection.
-- [ ] **M3.3.5** Memory and disassembly views.
-- [ ] **M3.3.6** COM output and input.
-- [ ] **M3.3.7** Video preview/window for an OS image.
-- [ ] **M3.3.8** Side-by-side visual review against the KR32 GUI.
+- [x] **M3.3.1** Source breakpoint stops at the expected line.
+- [x] **M3.3.2** Line step in/over/out across a call.
+- [x] **M3.3.3** Locals, struct member expansion, globals.
+- [x] **M3.3.4** Call stack and frame selection.
+- [x] **M3.3.5** Memory and disassembly views.
+- [x] **M3.3.6** COM output and input.
+- [x] **M3.3.7** Video preview/window for an OS image.
+- [x] **M3.3.8** Side-by-side visual review against the KR32 GUI.
+
+`tests/fixtures/kr32/m3.k32` is a deterministic 5,747-byte krc/krld image with
+`.kdbg`; `tests/test_kr32_adapter.cpp` exercises every row above against it and
+the embedded OS pair. The side-by-side captures are `shots/g3-kr32.png` (krdbg)
+and `shots/g3-kr32-reference.png` (KR32 GUI), both stopped at `main` line 21.
 
 ### Gate G3 — KR32 slice
 
-- [ ] **G3.1** Windows x64 and WSL x64 build/test/integration pass.
+- [x] **G3.1** Windows x64 and WSL x64 build/test/integration pass.
 - [ ] **G3.2** ARM64 evidence recorded (non-blocking).
-- [ ] **G3.3** Breakpoint, step, locals/struct/globals, stack, memory,
+- [x] **G3.3** Breakpoint, step, locals/struct/globals, stack, memory,
       disassembly and COM all verified on a real `.k32`.
-- [ ] **G3.4** The adapter is the only KR32-specific code; no `if (kr32)` in UI.
-- [ ] **G3.5** Source paths resolve from a clean checkout.
-- [ ] **G3.6** Goldens updated for the real target.
+- [x] **G3.4** The adapter is the only KR32-specific code; no `if (kr32)` in UI.
+- [x] **G3.5** Source paths resolve from a clean checkout.
+- [x] **G3.6** Goldens updated for the real target.
+
+G3 is closed for the blocking rows. G3.2 remains pending because the ARM64
+tester log has no M3 entry; it is non-blocking per the milestone instructions.
+`adapters/kr32` is the only source that includes a KR32 header; the existing
+boundary check passes, and the only KR32 mentions in `src/ui`/`include/krdbg`
+are comments naming the reference UI and palette.
 
 ---
 
@@ -784,8 +811,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G2 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS`; Debug and Release CTest 99 tests, 0 failures; thirteen goldens match (empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2`); no `SDL2.dll`; boundary 16 UI/public + 12 core/kdbg clean | `ad4f8dc` |
 | G2 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS`; Debug and Release CTest 99 tests, 0 failures; the same thirteen hashes; no `SDL2.dll` | `ad4f8dc` |
 | G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS (non-blocking) — BitWhiz entry 2026-11-20T10:28:51-08:00 for `ad4f8dc`: Debug and Release, 99 checks, boundary 16 UI/public + 12 core/kdbg, empty `56BCC5339740DCA6` / loaded `3DAD6F9400E135E2` match; `3886d47` is docs-only | `ad4f8dc` |
-| G3 | Windows x64 | TBD | TBD | TBD |
-| G3 | WSL x64 | TBD | TBD | TBD |
+| G3 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=C:/Users/kevin/source/repos/KR32` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON Debug 106 tests, 0 failures, Release 106 tests, 0 failures; real-target golden `19D243A88CB8EF35` | `de13608` |
+| G3 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=/mnt/c/Users/kevin/source/repos/KR32 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON 106 tests, 0 failures; real-target golden matches Windows | `de13608` |
+| G3 | ARM64 | not run | PENDING (non-blocking) — no M3 entry in `docs/arm64-test-log.md`; G3.1/G3.3–G3.6 are the blocking rows | — |
 | G4 | Windows x64 | TBD | TBD | TBD |
 | G4 | WSL x64 | TBD | TBD | TBD |
 | G5 | Windows x64 | TBD | TBD | TBD |
@@ -822,6 +850,69 @@ Recorded 2026-11-20T10:14:10-08:00.
 - Video: `video_fit_matches_4_3_16_9_16_10_and_portrait`, `video_fit_rejects_empty_dimensions`, `surface_video_tab_fit_popout_and_focus`.
 - Panels: `surface_source_gutter_controls_switch_and_pin`, `surface_disassembly_gutter_and_controls`, `surface_state_edits_a_register_value`, `surface_variables_expand_and_open_the_inspector`, `surface_breakpoints_panel_toggles_and_opens_menu`, `surface_call_stack_selects_a_frame`.
 - Run/reset: `surface_run_tick_advances_until_the_target_stops`, `surface_reset_preserves_breakpoints_and_clears_stats`, `surface_load_stops_a_running_target`.
+
+### M3.1–M3.3 and G3 evidence
+
+Recorded 2026-11-20T11:42:43-08:00.
+
+- Bare configuration (`KRDBG_KR32_ADAPTER` absent, therefore `OFF`):
+  `scripts/gate-windows.ps1` and `scripts/gate-linux.sh` both end
+  `GATE ...: PASS`; CTest 2/2; the unit binary is **99 tests, 0 failures**;
+  empty `56BCC5339740DCA6` and loaded `3DAD6F9400E135E2`; no `SDL2.dll`.
+- Windows adapter ON (Debug): `cmake -S . -B build/windows-kr32 -G Ninja
+  -DCMAKE_BUILD_TYPE=Debug -DKRDBG_KR32_ADAPTER=ON
+  -DKRDBG_KR32_ROOT=C:/Users/kevin/source/repos/KR32`, then
+  `cmake --build build/windows-kr32 --target krdbg_tests`; **106 tests, 0
+  failures**.
+- Windows adapter ON (Release): same configure with
+  `build/windows-kr32-release` and `CMAKE_BUILD_TYPE=Release`; **106 tests, 0
+  failures**.
+- WSL adapter ON: `cmake -S . -B build/linux-kr32 -G Ninja
+  -DCMAKE_BUILD_TYPE=Debug -DKRDBG_KR32_ADAPTER=ON
+  -DKRDBG_KR32_ROOT=/mnt/c/Users/kevin/source/repos/KR32
+  -DKRDBG_PLATFORM=sdl2`, then `cmake --build build/linux-kr32 --target
+  krdbg_tests`; **106 tests, 0 failures**, including the same real-target
+  golden.
+- Missing-tree failure: configuring with
+  `-DKRDBG_KR32_ADAPTER=ON
+  -DKRDBG_KR32_ROOT=C:/Users/kevin/source/repos/does-not-exist` stops with
+  `KRDBG_KR32_ADAPTER=ON expects the KR32 source tree at
+  'C:/Users/kevin/source/repos/does-not-exist' (CMakeLists.txt and
+  include/kr32/core/machine.h).`
+- Fixture: `tests/fixtures/kr32/m3.k32` is 5,747 bytes, built from `m3.c` with
+  `krc -O0 -c` plus `krld` and KRCompiler's `crt0.s`; `krc --dump-symbols`
+  reports KDBG `functions=2 symbols=1 variables=5`; SHA-256
+  `84CC57C417A2C4BD3931DC0E996A8CD518057545794F13869E79CC0F52E73AF0`
+  reproduces byte-for-byte. `README.md` and `regenerate.ps1` in that directory
+  carry the recipe.
+- Integration: `tests/test_kr32_adapter.cpp` passes the source breakpoint at
+  line 22, line-in to `add:14`, line-over the call to `main:25`, line-out back
+  to `main:24/25`, `point.x=3`/`point.y=4` member expansion, caller-frame
+  `locals(1)`, `global_counter 7 -> 14`, call stack `add`/`main`, memory read,
+  disassembly, COM output `KR32\n`, COM input `A` read back as `65`, restart
+  with the line breakpoint preserved, and the embedded OS framebuffer.
+- Real-target UI: `goldens/kr32-loaded.hash` is
+  `19D243A88CB8EF35`; the deterministic test clock makes Windows and WSL agree.
+- OS mode: `load_embedded_os` boots the embedded pair, writes `BootInfo`, and
+  returns a non-empty 800x600 framebuffer. The checked-in images carry legacy
+  `.debug_info`, so no OS source/locals are available; the KDBG merge branch is
+  exercised only when a payload exists.
+- G3.4: the existing boundary check reports `16 UI/public files clean; 12
+  core/kdbg files VM-clean`; the only KR32 mentions in `src/ui`/`include/krdbg`
+  are comments naming the reference UI/palette. `adapters/kr32` is the only
+  code that includes a KR32 header.
+- G3.5: the adapter resolves `tests/fixtures/kr32/m3.c` from the image directory
+  or the repository root; the test asserts the resolved source path exists.
+- Side-by-side: `shots/g3-kr32.png` and `shots/g3-kr32-reference.png` both show
+  `main` line 21 at PC `0x10078`, the same disassembly (`LEA R0,[R7+8]`,
+  `STORE R0,[R7+16]`, ...), locals `point`/`total`/`input`, and
+  `global_counter=7`. KRDBG additionally exposes FPR/tile/control groups and a
+  wider source pane; KR32 shows its inline flag row and its own console. The
+  differences are presentation, not target behavior.
+- G3.2: not run; `docs/arm64-test-log.md` has no M3 entry. The ARM64 row is
+  non-blocking per the milestone instruction.
+
+
 
 ### M0.9.1 Doctor output
 

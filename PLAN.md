@@ -580,6 +580,10 @@ struct DebugInfo {
     std::map<std::string, TypeId> type_by_name;
 };
 
+// `FunctionInfo` also carries `frame`, the ABI offset from the frame-pointer
+// register to the saved caller frame. KR32 uses R7 + frame for the saved FP and
+// +4 for the return PC; adapters that cannot unwind leave it zero.
+
 // Concatenates a second payload, renumbering source ids and merging type
 // tables. KR32's --os mode needs this: the kernel and BIOS images each carry
 // their own debug info.
@@ -1679,6 +1683,10 @@ link krdbg, done.
 - krdbg has no dependency on a VM. Optional in-tree adapters
   (`adapters/kr32`, `adapters/kr16`) are development bridges behind CMake
   options; long-term they belong in the VM repos, because the VM owns its ABI.
+  `KRDBG_KR32_ADAPTER` defaults to `OFF`; when it is `ON`, `KRDBG_KR32_ROOT`
+  must name a KR32 tree containing `CMakeLists.txt` and
+  `include/kr32/core/machine.h`, and a missing tree stops configuration with
+  that path. A bare checkout and CI build the adapter-OFF configuration only.
 - Version the interface (`krdbg::version`) so a VM can check compatibility at
   compile time.
 

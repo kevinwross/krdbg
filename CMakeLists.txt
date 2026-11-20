@@ -82,6 +82,32 @@ endif()
 target_link_libraries(krdbg_kdbg
     PUBLIC krdbg_core PRIVATE krdbg_warnings)
 
+# Optional in-tree VM adapter. OFF by default: a bare checkout and CI must build
+# without KR32. When ON, KRDBG_KR32_ROOT names the source tree explicitly; no
+# other path is searched.
+option(KRDBG_KR32_ADAPTER "Build the optional KR32 IDebugTarget adapter" OFF)
+set(KRDBG_KR32_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../KR32" CACHE PATH
+    "KR32 source tree for KRDBG_KR32_ADAPTER=ON")
+if(KRDBG_KR32_ADAPTER)
+    if(NOT EXISTS "${KRDBG_KR32_ROOT}/CMakeLists.txt" OR
+       NOT EXISTS "${KRDBG_KR32_ROOT}/include/kr32/core/machine.h")
+        message(FATAL_ERROR
+            "KRDBG_KR32_ADAPTER=ON expects the KR32 source tree at "
+            "'${KRDBG_KR32_ROOT}' (CMakeLists.txt and "
+            "include/kr32/core/machine.h). Set KRDBG_KR32_ROOT to that tree; "
+            "krdbg never vendors or guesses KR32.")
+    endif()
+    set(KR32_BUILD_UI OFF CACHE BOOL "" FORCE)
+    set(KR32_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(KR32_BUILD_CXX_TOOL OFF CACHE BOOL "" FORCE)
+    set(KR32_EMBED_OS ON CACHE BOOL "" FORCE)
+    set(KR32_TOOLCHAIN builtin CACHE STRING "" FORCE)
+    set(KR32_WARNINGS_AS_ERRORS ${KRDBG_WARNINGS_AS_ERRORS} CACHE BOOL "" FORCE)
+    add_subdirectory("${KRDBG_KR32_ROOT}" "${CMAKE_BINARY_DIR}/kr32"
+                     EXCLUDE_FROM_ALL)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr32")
+endif()
+
 add_library(krdbg_ui STATIC
     src/ui/canvas.cpp
     src/ui/embedded_fonts.cpp
@@ -131,6 +157,10 @@ endif()
 add_executable(krdbg_demo apps/demo/main.cpp)
 target_link_libraries(krdbg_demo PRIVATE
     krdbg_ui ${KRDBG_PLATFORM_TARGET} krdbg_warnings)
+if(KRDBG_KR32_ADAPTER)
+    target_link_libraries(krdbg_demo PRIVATE krdbg_kr32)
+    target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR32=1)
+endif()
 
 enable_testing()
 
@@ -158,6 +188,13 @@ if(KRDBG_BUILD_TESTS)
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
         KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg")
+    if(KRDBG_KR32_ADAPTER)
+        target_sources(krdbg_tests PRIVATE tests/test_kr32_adapter.cpp)
+        target_link_libraries(krdbg_tests PRIVATE krdbg_kr32)
+        target_compile_definitions(krdbg_tests PRIVATE
+            KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.k32"
+            KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately
         # (PLAN.md M0.7.4); the x64 golden comparison stays an x64 check.

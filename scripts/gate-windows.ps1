@@ -30,7 +30,8 @@ function Initialize-Msvc {
     if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
         throw "cl.exe is not on PATH after vcvarsall x64"
     }
-    Write-Host "toolchain: $(& cl.exe 2>&1 | Select-Object -First 1)"
+    $clVersion = (cmd.exe /d /c "cl.exe 2>&1" | Select-Object -First 1)
+    Write-Host "toolchain: $clVersion"
 }
 
 function Invoke-Checked {

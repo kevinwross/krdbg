@@ -438,12 +438,19 @@ StopResult DebugSession::step(StepMode mode) {
     }
     case StepMode::LineIn: {
         const LineKey start_key = line_key(info, target.pc());
+        const std::uint64_t start_depth = impl_->depth();
         result = target.step_instruction();
         finish_first();
         if (result.kind == StopKind::Retired && !hit_breakpoint &&
             start_key.valid) {
             std::uint64_t guard = 0;
-            while (same_line(start_key, line_key(info, target.pc()))) {
+            while (true) {
+                const LineKey current = line_key(info, target.pc());
+                const bool entered = impl_->depth() > start_depth;
+                if (current.valid &&
+                    (entered || !same_line(start_key, current))) {
+                    break;
+                }
                 if (!advance()) {
                     break;
                 }
@@ -458,13 +465,29 @@ StopResult DebugSession::step(StepMode mode) {
     case StepMode::LineOver: {
         const std::uint64_t depth = impl_->depth();
         const LineKey start_key = line_key(info, target.pc());
+        const LineInfo* start_line = line_at(target.pc());
+        const std::uint32_t start_function =
+            start_line != nullptr ? start_line->function : kInvalidFunction;
         result = target.step_instruction();
         finish_first();
         if (result.kind != StopKind::Retired || hit_breakpoint) {
             break;
         }
         std::uint64_t guard = 0;
-        while (impl_->depth() > depth) {
+        while (true) {
+            const LineKey current = line_key(info, target.pc());
+            const LineInfo* current_line = line_at(target.pc());
+            const bool inside_call = impl_->depth() > depth;
+            const bool same_function =
+                current_line != nullptr &&
+                current_line->function == start_function;
+            const bool left_start =
+                start_function != kInvalidFunction
+                    ? (same_function && !same_line(start_key, current))
+                    : (current.valid && !same_line(start_key, current));
+            if (!inside_call && left_start) {
+                break;
+            }
             if (!advance()) {
                 break;
             }
@@ -473,25 +496,18 @@ StopResult DebugSession::step(StepMode mode) {
                 break;
             }
         }
-        if (result.kind == StopKind::Retired && !hit_breakpoint &&
-            start_key.valid) {
-            while (impl_->depth() == depth &&
-                   same_line(start_key, line_key(info, target.pc()))) {
-                if (!advance()) {
-                    break;
-                }
-                if (++guard > kStepGuard) {
-                    result = StopResult{StopKind::Budget, "step guard"};
-                    break;
-                }
-            }
-        }
         break;
     }
     case StepMode::LineOut: {
         const std::uint64_t depth = impl_->depth();
+        std::uint64_t return_pc = 0;
+        const std::vector<RawFrame> frames = target.unwind();
+        if (frames.size() > 1) {
+            return_pc = frames[1].pc;
+        }
         std::uint64_t guard = 0;
-        while (impl_->depth() >= depth) {
+        while (return_pc != 0 ? target.pc() != return_pc
+                              : impl_->depth() >= depth) {
             if (!advance()) {
                 break;
             }

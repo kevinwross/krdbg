@@ -6,14 +6,20 @@
 
 int main(int argc, char** argv) {
     std::string exclude;
+    std::string filter;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
         if (argument == "--exclude" && index + 1 < argc) {
             exclude = argv[++index];
+        } else if (argument == "--filter" && index + 1 < argc) {
+            filter = argv[++index];
         }
     }
     for (const krdbg::test::Case& test : krdbg::test::registry()) {
         const std::string name = test.name;
+        if (!filter.empty() && name.find(filter) == std::string::npos) {
+            continue;
+        }
         if (!exclude.empty() && name.find(exclude) != std::string::npos) {
             std::cout << "[ SKIP ] " << test.name << "\n";
             continue;
