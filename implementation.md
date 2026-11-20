@@ -68,7 +68,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.3, G0.4 (WSL) and G0.6 (ARM64) blocked` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.4 (WSL) blocked` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] planned` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -125,7 +125,7 @@ on `refs/heads/main`.
   Evidence: all eight targets are declared; every build in §9 linked them. `krdbg_kdbg` is an interface target until the M1 translation lands.
 - [x] **M0.1.3** `CMakePresets.json`: `windows-msvc`, `linux-wsl`,
       `linux-arm64`; Debug and Release where applicable.
-  Evidence: `windows-msvc`, `windows-msvc-release`, `linux-wsl`, `linux-wsl-release`, `linux-arm64` and `linux-arm64-release` are declared; the Windows and WSL presets configured and built. The ARM64 presets have not run here (G0.3).
+  Evidence: `windows-msvc`, `windows-msvc-release`, `linux-wsl`, `linux-wsl-release`, `linux-arm64` and `linux-arm64-release` are declared; the Windows and WSL presets configured and built here, and the ARM64 presets ran on BitWhiz (G0.3).
 - [x] **M0.1.4** Compile definitions for platform selection; no `#ifdef` in
       surface code.
   Evidence: `KRDBG_PLATFORM` selects the presenter in CMake and each platform library supplies `create_window()`; `src/ui` and `include/krdbg` contain no platform `#ifdef`, enforced by the boundary check.
@@ -230,8 +230,8 @@ on `refs/heads/main`.
   Evidence: `golden_empty_state_matches_the_committed_hash` and `golden_loaded_state_matches_the_committed_hash` pass in `krdbg_unit`; the gate scripts also compare the demo output.
 - [x] **M0.7.3** Windows and Linux x64 produce the same hash; record both.
   Evidence: MSVC Debug/Release and GCC Debug/Release all printed `F15B00C153682DF8` (empty) and `E47FA2651086D075` (loaded), recorded in §9.
-- [ ] **M0.7.4** ARM64 records its hash and functional result separately.
-  BLOCKED: no ARM64 tester entry for this revision in `docs/arm64-test-log.md` — the ARM64 hash cannot be recorded until `BitWhiz` runs the gate.
+- [x] **M0.7.4** ARM64 records its hash and functional result separately.
+  Evidence: `docs/arm64-test-log.md` entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: `scripts/gate-linux-arm64.sh` passed Debug and Release, CTest 2/2 with the x64 golden comparisons excluded, and recorded empty `F15B00C153682DF8` / loaded `E47FA2651086D075`. ARM64 rasterization is byte-identical to the x64 goldens, so no `goldens/*.arm64.hash` is needed.
 
 ### M0.8 CI and gate scripts
 
@@ -243,7 +243,7 @@ on `refs/heads/main`.
   Evidence: `./scripts/gate-linux.sh` ran in WSL Ubuntu and printed `GATE LINUX X64: PASS`; the script uses only CMake, CTest, sed and find, and the SDL presenter, with no WSL path.
 - [x] **M0.8.3** `scripts/gate-linux-arm64.sh`: build/CTest/headless on the Pi;
       hash recorded separately.
-  Evidence: the wrapper delegates to `gate-linux.sh --arch arm64`, which selects the `linux-arm64` presets, requires `uname -m` to be ARM64 and records the hash in `build/gate/arm64-hashes.txt`; it has not run here.
+  Evidence: the wrapper delegates to `gate-linux.sh --arch arm64`, which selects the `linux-arm64` presets, requires `uname -m` to be ARM64 and records the hash in `build/gate/arm64-hashes.txt`. The tester's 5fd5196 run found the hash lines reused the last preset in their labels; fixed to `${presets[$index]}` in this change and the x64 gate reran PASS.
 - [x] **M0.8.4** `.github/workflows/ci.yml`: `windows-x64`, `linux-x64`
       (Ubuntu, supplementary to the WSL gate), and `arm64` self-hosted job.
   Evidence: the workflow declares all three jobs; `arm64` is non-blocking until G6.
@@ -278,15 +278,15 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `scripts/gate-windows.ps1` configured, built and tested `windows-msvc` and `windows-msvc-release`; 2/2 CTest entries passed in each and the script printed `GATE WINDOWS: PASS`.
 - [x] **G0.2** WSL x64 configure/build/test pass.
   Evidence: `scripts/gate-linux.sh` ran in WSL Ubuntu; Debug and Release built and 2/2 CTest entries passed in each; `GATE LINUX X64: PASS`.
-- [ ] **G0.3** ARM64 configure/build/test pass.
-  BLOCKED: no `docs/arm64-test-log.md` entry exists for this revision — `BitWhiz` has not run `scripts/gate-linux-arm64.sh`. This session does not run or wait for the tester.
+- [x] **G0.3** ARM64 configure/build/test pass.
+  Evidence: `docs/arm64-test-log.md` entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196` (an ancestor of the current tip; only the log changed since): `scripts/gate-linux-arm64.sh` passed configure and build for Debug and Release, and CTest passed 2/2 — `krdbg_unit` with the x64 golden comparisons excluded and `platform_boundary` with 13 files clean.
 - [ ] **G0.4** `krdbg_demo` opens a 1440x900 window with the fake loaded state
       on Windows and WSL.
   BLOCKED on the WSL half: `krdbg_demo --state loaded` opened a 1456x939 window (1440x900 client) on Windows and was captured, but WSL reports empty `DISPLAY` and `WAYLAND_DISPLAY`; the SDL2 path was exercised with `SDL_VIDEODRIVER=dummy --frames 3`, not a visible window.
 - [x] **G0.5** Headless screenshot hash is stable and committed.
   Evidence: `goldens/empty.hash` and `goldens/loaded.hash`; the golden CTest cases pass and the gate scripts reproduce both values.
-- [ ] **G0.6** Windows and WSL x64 hashes match; ARM64 result recorded.
-  BLOCKED on the ARM64 half: Windows (MSVC) and WSL (GCC), Debug and Release, all printed `F15B00C153682DF8` and `E47FA2651086D075`; no ARM64 hash exists yet (G0.3).
+- [x] **G0.6** Windows and WSL x64 hashes match; ARM64 result recorded.
+  Evidence: Windows (MSVC) and WSL (GCC), Debug and Release, all printed `F15B00C153682DF8` and `E47FA2651086D075`; the ARM64 tester recorded the same two hashes for `5fd5196` in `docs/arm64-test-log.md`.
 - [x] **G0.7** Windows artifact has no `SDL2.dll` dependency.
   Evidence: `dumpbin /dependents build\windows-msvc-release\krdbg_demo.exe` lists no `SDL2.dll`, and a recursive tree scan found none.
 - [x] **G0.8** Platform-boundary check passes (`src/ui`/`include/krdbg` clean).
@@ -688,7 +688,7 @@ Record the real command and result. Do not pre-fill expected output.
 |---|---|---|---|---|
 | G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS`. CI run `44733345483` also passed `windows-x64`. | `77c4e00` |
 | G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
-| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | BLOCKED — no ARM64 tester entry for this revision; the CI `arm64` job is queued with no runner | — |
+| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: Debug and Release configure/build pass; CTest 2/2 with the x64 goldens excluded; empty `F15B00C153682DF8`, loaded `E47FA2651086D075` match x64 | `5fd5196` |
 | G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — run `44733345483` at `b325a7f`: `windows-x64` success, `linux-x64` success, `arm64` queued with no runner | `b325a7f` |
 | G1 | Windows x64 | TBD | TBD | TBD |
 | G1 | WSL x64 | TBD | TBD | TBD |
@@ -733,7 +733,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are documented in `docs/ci-arm64.md` but not yet confirmed (runner details confirmed 2026-11-20T03:09:09-08:00). G0.3 and the ARM64 half of G0.6/G0.9 stay BLOCKED until it runs this repository's job. |
+| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are documented in `docs/ci-arm64.md` but not yet confirmed (runner details confirmed 2026-11-20T03:09:09-08:00). The ARM64 gate itself has run through the tester session (G0.3, 5fd5196); the CI `arm64` job is still queued with no runner, so M0.8.5 and the ARM64 half of G0.9 stay BLOCKED. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
