@@ -1000,6 +1000,9 @@ Recorded 2026-11-20T12:51:17-08:00.
 - G4.5: KDBG is preferred and `DebugPath::Kdbg` is reported for the krc-built
   fixture; `DebugPath::Legacy` is reported for the older `.debug_*` image and
   is used only when `.kdbg` is absent.
+- Clean checkout: `git archive HEAD` extracted under `build/clean-m4`, adapter
+  ON, configured, built and passed the same **107 tests, 0 failures**; the
+  fixture source path resolves inside the extracted tree.
 - G4.2: not run; `docs/arm64-test-log.md` has no M4 entry. The ARM64 row is
   non-blocking per the milestone instruction.
 
