@@ -42,3 +42,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 36 checks, 0 failures, 34 passed with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M1.1 landed (`DebugInfo`, `merge_debug_info`, lookup and value resolution plus `test_lookup`, `test_merge`, `test_variables`), so `krdbg_unit` grew from 25 to 36 checks and this run took 36 s because the new translation units compiled. The UI is untouched, so the frame hashes are unchanged.
+
+## 2026-11-20T09:08:08-08:00 — main @ 50b6a0d
+
+- Host: BitWhiz
+- Range: 503f5de..50b6a0d, 2 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; only the changed core and test translation units compiled)
+- Test: CTest — pass (2/2: `krdbg_unit` 37 checks, 0 failures, 35 passed with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
+- Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: range is `1dfd4c9` (empty source lookup and char formatting) plus `50b6a0d` (runner status), and the UI is untouched, so the frame hashes are unchanged. Runner check requested by the `AGENTS.local.md` trap: **no GitHub Actions runner is present on this host** — no `actions.runner.*` systemd unit, no `Runner.Listener` process, and no runner installation or `_work` directory under `/home`, `/opt`, `/srv` or `/var/lib`. That is consistent with the `arm64` jobs staying queued; the tester gate here is independent of CI and still runs.
