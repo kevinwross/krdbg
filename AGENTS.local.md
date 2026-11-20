@@ -11,9 +11,9 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. M0.1–M0.9 are implemented and the Windows and
-WSL x64 gates pass; G0 is open on ARM64 evidence and the WSL window check. The
-next task is M1.1 after G0.
+`implementation.md` are approved. M0 is complete and G0 is closed; the Windows,
+WSL x64 and ARM64 evidence is recorded in `implementation.md` §9. The next task
+is M1.1.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M1; §1–2 and the appendices are background.
 
@@ -41,7 +41,7 @@ platform you changed.
 |---|---|---|---|
 | Windows | x64 | BigBrain with `scripts/gate-windows.ps1` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
 | Linux | x64 | WSL Ubuntu on BigBrain with `scripts/gate-linux.sh` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
-| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; no ARM64 test-log entry for the M0 revision yet |
+| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; M0 gate pass on 2026-11-20 (tester log) |
 
 Target-specific notes:
 
@@ -95,14 +95,15 @@ cmake --preset linux-arm64 && cmake --build --preset linux-arm64 && ctest --pres
 **Doctor.** `.agents/templates/doctor.msvc.ps1` — run it when a build cannot find
 its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 
-**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH` in a plain shell); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`. WSL Ubuntu x64: GCC 15.2.0, CMake 4.2.3, Ninja 1.13.2, SDL2 2.32.10 (`libsdl2-dev`). ARM64: not yet verified for this project.
+**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH` in a plain shell); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`. WSL Ubuntu x64: GCC 15.2.0, CMake 4.2.3, Ninja 1.13.2, SDL2 2.32.10 (`libsdl2-dev`). ARM64 `BitWhiz`: Debian g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1, SDL2 2.32.4 (from the tester log).
 
-**Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets. Both gates passed at M0.
+**Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets; WSLg presented the loaded window. All three platform gates passed at M0, ARM64 via the `BitWhiz` tester log.
 
 **Install (requires approval).** Nothing was installed for M0. Windows uses the MSVC, CMake and Ninja already bundled with Visual Studio 18; WSL uses the existing GCC, CMake, Ninja and `libsdl2-dev` packages. Never install a compiler, SDK, CMake, Ninja or SDL to make a gate pass: report the missing tool.
 
 ## Known traps
 
-- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered for KRCompiler, and polls GitHub every 7 minutes; its krdbg registration and labels are not confirmed yet, so G0/G6 stay blocked until it can run krdbg's jobs. Setup is in `docs/ci-arm64.md`.
+- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered for KRCompiler, and polls GitHub every 7 minutes; its krdbg registration and labels are not confirmed yet, so G0/G6 stay blocked until it can run krdbg's jobs. The `arm64` CI job is gated on repository variable `KRDBG_ARM64_RUNNER` so it is skipped, not queued, until the runner exists. Setup is in `docs/ci-arm64.md`.
+- WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - `krc::debug` does not exist yet. The vendored KDBG bootstrap is temporary and must record its provenance and pass a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).

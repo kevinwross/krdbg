@@ -68,8 +68,8 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.4 (WSL) blocked` |
-| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] planned` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[x] done` |
+| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
@@ -178,7 +178,7 @@ on `refs/heads/main`.
   Evidence: `src/platform/win32/window.cpp` presents with top-down `StretchDIBits`; a `krdbg_demo --state loaded` window captured at 1456x939 (1440x900 client) on 2026-11-20.
 - [x] **M0.4.3** SDL2 presenter for Linux: one window, ARGB texture, event
       mapping, clean shutdown.
-  Evidence: `src/platform/sdl2/window.cpp` built on WSL and `SDL_VIDEODRIVER=dummy ./build/linux-wsl/krdbg_demo --frames 3` exited 0. A visible window was not verified: WSL reports no `DISPLAY` or `WAYLAND_DISPLAY` (G0.4).
+  Evidence: `src/platform/sdl2/window.cpp` built on WSL; `cd build/linux-wsl && DISPLAY=:0 ./krdbg_demo --state loaded` from `wsl -e sh -lc` opened a `krdbg (Ubuntu)` window and was captured as `shots/g0-4-wsl.png` (1516x997, non-blank). WSLg supplies `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0` and `/mnt/wslg`.
 - [x] **M0.4.4** Null/headless presenter for tests; no OS window created.
   Evidence: `krdbg_platform_null` always builds and `null_presenter_creates_no_os_window` passes.
 - [x] **M0.4.5** No `SDL2.dll` next to the Windows executable; verify with
@@ -251,7 +251,7 @@ on `refs/heads/main`.
       `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
       `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
       queued job may wait that long before it starts.
-  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note, but the krdbg registration on `BitWhiz` and its labels are the owner's action and are not confirmed.
+  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note; the `arm64` CI job is gated on repository variable `KRDBG_ARM64_RUNNER` and is skipped until the owner registers the runner and sets it. That registration is the owner's action and is not confirmed.
 - [x] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
   Evidence: each CI job invokes one gate script; no configure/build/test command appears in the workflow.
 - [x] **M0.8.7** Cache or artefact policy for build trees; no generated files
@@ -280,9 +280,9 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `scripts/gate-linux.sh` ran in WSL Ubuntu; Debug and Release built and 2/2 CTest entries passed in each; `GATE LINUX X64: PASS`.
 - [x] **G0.3** ARM64 configure/build/test pass.
   Evidence: `docs/arm64-test-log.md` entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196` (an ancestor of the current tip; only the log changed since): `scripts/gate-linux-arm64.sh` passed configure and build for Debug and Release, and CTest passed 2/2 — `krdbg_unit` with the x64 golden comparisons excluded and `platform_boundary` with 13 files clean.
-- [ ] **G0.4** `krdbg_demo` opens a 1440x900 window with the fake loaded state
+- [x] **G0.4** `krdbg_demo` opens a 1440x900 window with the fake loaded state
       on Windows and WSL.
-  BLOCKED on the WSL half: `krdbg_demo --state loaded` opened a 1456x939 window (1440x900 client) on Windows and was captured, but WSL reports empty `DISPLAY` and `WAYLAND_DISPLAY`; the SDL2 path was exercised with `SDL_VIDEODRIVER=dummy --frames 3`, not a visible window.
+  Evidence: Windows `shots/g0-4-windows.png` (1456x939 including the frame, 1440x900 client). WSL `shots/g0-4-wsl.png` (1516x997 including WSLg's frame, PrintWindow, non-blank), captured from `cd build/linux-wsl && DISPLAY=:0 ./krdbg_demo --state loaded` under `wsl -e sh -lc`; WSLg provides `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0` and `/mnt/wslg`.
 - [x] **G0.5** Headless screenshot hash is stable and committed.
   Evidence: `goldens/empty.hash` and `goldens/loaded.hash`; the golden CTest cases pass and the gate scripts reproduce both values.
 - [x] **G0.6** Windows and WSL x64 hashes match; ARM64 result recorded.
@@ -293,7 +293,7 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `platform boundary: 13 UI/public files clean`; CTest `platform_boundary` passes on Windows and WSL.
 - [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
       the gate records `BLOCKED` for a missing runner.
-  Evidence: CI run `44733345483` for `b325a7f`: `windows-x64` success (gate step success), `linux-x64` success (SDL2 install and gate step success). `arm64` is queued with no runner, recorded BLOCKED (M0.8.5).
+  Evidence: CI run `44733345483` for `b325a7f`: `windows-x64` success (gate step success), `linux-x64` success (SDL2 install and gate step success). `arm64` was queued with no runner and is recorded BLOCKED (M0.8.5), not green. The `arm64` job is now skipped until repository variable `KRDBG_ARM64_RUNNER` is set, so later runs complete honestly instead of queueing.
 - [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
   Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
@@ -706,6 +706,11 @@ Record the real command and result. Do not pre-fill expected output.
 | G6 | Linux x64 | TBD | TBD | TBD |
 | G6 | ARM64 | TBD | TBD | TBD |
 | G6 | CI | TBD | TBD | TBD |
+
+### G0.4 window captures
+
+- Windows: `shots/g0-4-windows.png` — 1456x939 including the frame (1440x900 client), PrintWindow, non-blank.
+- WSL: `shots/g0-4-wsl.png` — 1516x997 including WSLg's frame, PrintWindow, non-blank; command `cd build/linux-wsl && DISPLAY=:0 ./krdbg_demo --state loaded` from `wsl -e sh -lc` (WSLg: `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, `/mnt/wslg` present).
 
 ### M0.9.1 Doctor output
 
