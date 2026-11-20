@@ -8,12 +8,18 @@
 -->
 # AGENTS.md — krdbg
 
-krdbg is a planned target-agnostic debugger surface for KR virtual machines: one C++20 UI (`krdbg_ui`) over a neutral session model (`krdbg_core`), linked in-process, with per-VM adapters and KDBG as the debug format; Windows uses a Win32 GDI presenter with no DLL, Linux uses SDL2. No product code exists yet: `PLAN.md` is the design of record and is still draft for review, so implementation waits on that plan's approval gate.
+krdbg is a target-agnostic debugger surface for KR virtual machines: one C++20 UI (`krdbg_ui`) over a neutral session model (`krdbg_core`), linked in-process, with per-VM adapters and KDBG as the debug format; Windows uses a Win32 GDI presenter with no DLL, Linux uses SDL2. M0 (build skeleton, canvas, platform presenters, fake target, surface shell, golden baseline and gate scripts) is implemented; `PLAN.md` is the design of record and M1 is next.
 <!-- project:summary -->
 
 ```sh
-# No build, test, or lint commands exist yet: M0 in PLAN.md creates the CMake
-# project and presets. Do not invent one; record the real commands here when M0 lands.
+# Gate entry points (M0). Windows needs the Visual Studio developer environment;
+# the gate script initializes it, configures/builds Debug and Release, runs CTest
+# and checks the goldens.
+powershell -File scripts/gate-windows.ps1
+
+# Linux x64 (WSL or Ubuntu) and Linux ARM64:
+./scripts/gate-linux.sh
+./scripts/gate-linux-arm64.sh
 ```
 <!-- project:commands -->
 

@@ -11,23 +11,25 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved; no product code has been written. The next task
-is M0.1.
+`implementation.md` are approved. M0.1–M0.9 are implemented and the Windows and
+WSL x64 gates pass; G0 is open on ARM64 evidence and the WSL window check. The
+next task is M1.1 after G0.
 
-**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M0; §1–2 and the appendices are background.
+**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M1; §1–2 and the appendices are background.
 
 **Standing constraints.** Freeze the four interfaces (`target.h`, `session.h`, `settings.h`, `surface.h`) before implementation starts. `krdbg_ui` depends on `krdbg_core`, never the reverse, and neither depends on a VM. The UI contains no VM types, register numbers, instruction widths, or target conditionals. KDBG is the only debug format; legacy dialects are optional adapters. Windows ships a Win32 GDI presenter with no SDL2 DLL; Linux x64 and ARM64 use SDL2. `krc::debug` is a KRCompiler prerequisite; a vendored bootstrap is temporary and must carry provenance and a parity test.
 
 ## Definition of done
 
 - [ ] The current milestone's acceptance criteria in `PLAN.md` §8 are met
-- [ ] Build and tests pass (the commands arrive with M0; record them here then)
+- [ ] Build and tests pass (use the gate commands in Environment)
 - [ ] Golden screenshots or frame hashes added or updated for every UI change (from M0)
 - [ ] `PLAN.md` updated first for any interface or contract change; it remains the design of record
 - [ ] No VM types or target conditionals in `krdbg/ui`; no SDL2 DLL in the Windows deliverable
 - [ ] Change committed; no secrets, debug output, or unrelated edits
 
-Until M0 lands there is no build system, so the only executable check is the doctor command in the Environment section.
+The gate scripts in Environment are the executable checks; run the one for the
+platform you changed.
 
 ## Platform targets
 
@@ -37,9 +39,9 @@ Until M0 lands there is no build system, so the only executable check is the doc
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | <windows-latest in CI, or name the dev machines> | PLAN.md §4.8; no build yet |
-| Linux | x64 | <ubuntu-latest in CI> | PLAN.md §4.8; no build yet |
-| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | PLAN.md §4.8 and §8 M6; no build yet |
+| Windows | x64 | BigBrain with `scripts/gate-windows.ps1` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
+| Linux | x64 | WSL Ubuntu on BigBrain with `scripts/gate-linux.sh` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
+| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; no ARM64 test-log entry for the M0 revision yet |
 
 Target-specific notes:
 
@@ -65,18 +67,42 @@ Target-specific notes:
 
 **Repository.** `https://github.com/kevinwross/krdbg.git`, branch `main`, initial commit `6106cfe`. Remote operations use the host's stored GitHub credentials.
 
-**Build entry point.** None yet — M0 creates the CMake skeleton and presets. Until then there is nothing to configure or build; do not invent commands.
+**Build entry point.** Windows: `scripts/gate-windows.ps1` initializes the
+Visual Studio developer environment with `vcvarsall.bat x64`, then configures,
+builds and tests the `windows-msvc` and `windows-msvc-release` presets and checks
+the goldens and the no-`SDL2.dll` rule. Linux x64: `scripts/gate-linux.sh`;
+Linux ARM64: `scripts/gate-linux-arm64.sh`. CI calls the same scripts
+(`.github/workflows/ci.yml`).
 
-**Doctor.** `.agents/templates/doctor.msvc.ps1` — the delivered starting point. Exits 0 on BigBrain and reports the MSVC, Windows SDK, and CMake it resolved; run it when a build cannot find its toolchain.
+The presets can be driven directly once the environment is initialized:
 
-**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH`); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`; all found with `vswhere` via the doctor. The Linux and ARM64 toolchain is not yet verified for this project; the plan requires C++20 and SDL2 (`PLAN.md` §4.8).
+```sh
+# Windows, from a Visual Studio developer shell:
+cmake --preset windows-msvc
+cmake --build --preset windows-msvc
+ctest --preset windows-msvc
+# Release: windows-msvc-release
 
-**Verified on** BigBrain **at** 2026-11-20T01:41:25-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting MSVC 14.51.36231 and CMake 4.3.1-msvc1; neither `cmake` nor `ninja` is on `PATH`. No build has been attempted.
+# Linux x64 (WSL or Ubuntu):
+cmake --preset linux-wsl && cmake --build --preset linux-wsl && ctest --preset linux-wsl
+# Release: linux-wsl-release
 
-**Install (requires approval).** Nothing yet. M0 will need CMake and a C++20 compiler; Linux needs SDL2 as a system package, and Windows must not require an `SDL2.dll`.
+# Linux ARM64 on the Pi:
+cmake --preset linux-arm64 && cmake --build --preset linux-arm64 && ctest --preset linux-arm64
+# Release: linux-arm64-release
+```
+
+**Doctor.** `.agents/templates/doctor.msvc.ps1` — run it when a build cannot find
+its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
+
+**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH` in a plain shell); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`. WSL Ubuntu x64: GCC 15.2.0, CMake 4.2.3, Ninja 1.13.2, SDL2 2.32.10 (`libsdl2-dev`). ARM64: not yet verified for this project.
+
+**Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets. Both gates passed at M0.
+
+**Install (requires approval).** Nothing was installed for M0. Windows uses the MSVC, CMake and Ninja already bundled with Visual Studio 18; WSL uses the existing GCC, CMake, Ninja and `libsdl2-dev` packages. Never install a compiler, SDK, CMake, Ninja or SDL to make a gate pass: report the missing tool.
 
 ## Known traps
 
-- There is no CI workflow yet. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered for KRCompiler, and polls GitHub every 7 minutes; M0.8 confirms it for this repository or adds a registration, and G0/G6 stay blocked until it can run krdbg's jobs.
+- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, registered for KRCompiler, and polls GitHub every 7 minutes; its krdbg registration and labels are not confirmed yet, so G0/G6 stay blocked until it can run krdbg's jobs. Setup is in `docs/ci-arm64.md`.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - `krc::debug` does not exist yet. The vendored KDBG bootstrap is temporary and must record its provenance and pass a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).

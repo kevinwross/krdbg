@@ -8,5 +8,7 @@ and KDBG as the debug format.
 - Implementation plan and gates: [implementation.md](implementation.md)
 - Standing instructions: [AGENTS.md](AGENTS.md)
 
-Status: pre-implementation. No build system exists yet; M0 in
-`implementation.md` creates it.
+Status: M0 is implemented — the CMake project and presets, portable canvas,
+Win32 and SDL2 presenters, fake target, surface shell, golden baseline and gate
+scripts. G0 remains open on ARM64 evidence and the WSL window check; M1 is the
+next milestone. Build commands are in `AGENTS.local.md`.

@@ -68,7 +68,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.0 done` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.3/G0.4 (WSL)/G0.6 (ARM64)/G0.9 open` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] planned` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -116,135 +116,189 @@ on `refs/heads/main`.
 
 ### M0.1 CMake skeleton
 
-- [ ] **M0.1.1** Top-level `CMakeLists.txt`: C++20, warnings-as-errors option,
+- [x] **M0.1.1** Top-level `CMakeLists.txt`: C++20, warnings-as-errors option,
       static libraries, no VM dependencies.
-- [ ] **M0.1.2** Targets: `krdbg_core`, `krdbg_kdbg`, `krdbg_ui`,
+  Evidence: `CMakeLists.txt` sets C++20 and a `krdbg_warnings` target (`/W4 /permissive- /WX`, `-Wall -Wextra -Wpedantic -Werror`, `-ffp-contract=off`); Windows Debug/Release and WSL x64 builds passed.
+- [x] **M0.1.2** Targets: `krdbg_core`, `krdbg_kdbg`, `krdbg_ui`,
       `krdbg_platform_win32`, `krdbg_platform_sdl2`, `krdbg_platform_null`,
       `krdbg_tests`, `krdbg_demo`.
-- [ ] **M0.1.3** `CMakePresets.json`: `windows-msvc`, `linux-wsl`,
+  Evidence: all eight targets are declared; every build in §9 linked them. `krdbg_kdbg` is an interface target until the M1 translation lands.
+- [x] **M0.1.3** `CMakePresets.json`: `windows-msvc`, `linux-wsl`,
       `linux-arm64`; Debug and Release where applicable.
-- [ ] **M0.1.4** Compile definitions for platform selection; no `#ifdef` in
+  Evidence: `windows-msvc`, `windows-msvc-release`, `linux-wsl`, `linux-wsl-release`, `linux-arm64` and `linux-arm64-release` are declared; the Windows and WSL presets configured and built. The ARM64 presets have not run here (G0.3).
+- [x] **M0.1.4** Compile definitions for platform selection; no `#ifdef` in
       surface code.
-- [ ] **M0.1.5** A platform-boundary check that fails if `windows.h`, `SDL2.h`,
+  Evidence: `KRDBG_PLATFORM` selects the presenter in CMake and each platform library supplies `create_window()`; `src/ui` and `include/krdbg` contain no platform `#ifdef`, enforced by the boundary check.
+- [x] **M0.1.5** A platform-boundary check that fails if `windows.h`, `SDL2.h`,
       GDI types, or VM headers appear in `src/ui` or `include/krdbg`.
-- [ ] **M0.1.6** Empty test target with one trivial test, so CTest is wired.
+  Evidence: `cmake -DROOT=... -P cmake/check-platform-boundary.cmake` printed `platform boundary: 13 UI/public files clean` on Windows and WSL; CTest `platform_boundary` passes.
+- [x] **M0.1.6** Empty test target with one trivial test, so CTest is wired.
+  Evidence: CTest `krdbg_unit` runs `krdbg_tests`; 2/2 CTest entries passed on Windows Debug/Release and WSL x64.
 
 ### M0.2 Third-party and fonts
 
-- [ ] **M0.2.1** Vendor `stb_truetype.h` with its license and provenance.
-- [ ] **M0.2.2** Embed Inter Regular/Bold and JetBrains Mono Regular with OFL
+- [x] **M0.2.1** Vendor `stb_truetype.h` with its license and provenance.
+  Evidence: `third_party/stb/stb_truetype.h` is v1.26 unchanged, with the licence text in the header and `third_party/stb/README.md` recording the source.
+- [x] **M0.2.2** Embed Inter Regular/Bold and JetBrains Mono Regular with OFL
       licenses and a generation script; same fonts as KR32.
-- [ ] **M0.2.3** Linux: find system SDL2; fail configuration with a clear
+  Evidence: three subset TTFs and the two OFL texts are in `third_party/fonts/`; `embed_fonts.py` generated `src/ui/embedded_fonts.cpp` and `.h`, and `subset.sh` documents regeneration.
+- [x] **M0.2.3** Linux: find system SDL2; fail configuration with a clear
       message if absent. Windows: do not require or link SDL2.
-- [ ] **M0.2.4** Add a dependency/license index under `third_party/` or
+  Evidence: `find_package(SDL2 CONFIG QUIET)` with a `pkg-config` fallback and `FATAL_ERROR` when neither resolves; Windows never calls either and links only `user32`/`gdi32`.
+- [x] **M0.2.4** Add a dependency/license index under `third_party/` or
       `docs/`; no unlicensed assets.
+  Evidence: `docs/licenses.md` lists every asset, version, licence, location and provenance.
 
 ### M0.3 Canvas
 
-- [ ] **M0.3.1** `Color`, `Rect`, `FontRole`, `Canvas` with `clear`, `fill`,
+- [x] **M0.3.1** `Color`, `Rect`, `FontRole`, `Canvas` with `clear`, `fill`,
       `frame`, `line`, `pixel`, `text`, `text_width`, `text_height`,
       `pixel_at`, `hash`.
-- [ ] **M0.3.2** ARGB8888 packing, alpha blending, clipping at window edges.
-- [ ] **M0.3.3** TTF glyph atlas for the four roles: UI 14, UI bold 14, mono 15,
+  Evidence: `include/krdbg/canvas.h` and `src/ui/canvas.cpp` implement every operation; the canvas tests exercise each one.
+- [x] **M0.3.2** ARGB8888 packing, alpha blending, clipping at window edges.
+  Evidence: `canvas_alpha_blends_over_the_destination` and `canvas_clips_rectangles_at_the_edge` pass.
+- [x] **M0.3.3** TTF glyph atlas for the four roles: UI 14, UI bold 14, mono 15,
       mono small 13; deterministic rasterization.
-- [ ] **M0.3.4** PPM (P6) writer and stable FNV/hash; no image library.
-- [ ] **M0.3.5** Unit tests: fill/frame coordinates, text width, pixel hash
+  Evidence: `shared_fonts()` loads the three embedded faces into roles 14/14/15/13; text tests pass and the empty/loaded hashes are identical under MSVC and GCC.
+- [x] **M0.3.4** PPM (P6) writer and stable FNV/hash; no image library.
+  Evidence: `write_ppm` and FNV-1a `hash()`; `canvas_ppm_header_and_bytes_are_p6` and `canvas_hash_is_stable_and_pixel_sensitive` pass.
+- [x] **M0.3.5** Unit tests: fill/frame coordinates, text width, pixel hash
       stability, PPM header and bytes.
+  Evidence: eight `test_canvas.cpp` cases passed on Windows and WSL x64 (see §9).
 
 ### M0.4 Platform windows
 
-- [ ] **M0.4.1** `IWindow` and `Event` (`Quit`, `Resize`, `KeyDown`, `KeyUp`,
+- [x] **M0.4.1** `IWindow` and `Event` (`Quit`, `Resize`, `KeyDown`, `KeyUp`,
       `MouseDown`, `MouseUp`, `MouseMove`, `Wheel`), file dialog and clipboard
       stubs.
-- [ ] **M0.4.2** Minimal Win32 GDI presenter: create window, present the
+  Evidence: `include/krdbg/window.h` declares the events, `IWindow`, `create_window()`, `open_file_dialog()` and `clipboard_text()`; the null presenter test passes.
+- [x] **M0.4.2** Minimal Win32 GDI presenter: create window, present the
       software Canvas with `StretchDIBits`, map keys/mouse/resize, clean
       shutdown.
-- [ ] **M0.4.3** SDL2 presenter for Linux: one window, ARGB texture, event
+  Evidence: `src/platform/win32/window.cpp` presents with top-down `StretchDIBits`; a `krdbg_demo --state loaded` window captured at 1456x939 (1440x900 client) on 2026-11-20.
+- [x] **M0.4.3** SDL2 presenter for Linux: one window, ARGB texture, event
       mapping, clean shutdown.
-- [ ] **M0.4.4** Null/headless presenter for tests; no OS window created.
-- [ ] **M0.4.5** No `SDL2.dll` next to the Windows executable; verify with
+  Evidence: `src/platform/sdl2/window.cpp` built on WSL and `SDL_VIDEODRIVER=dummy ./build/linux-wsl/krdbg_demo --frames 3` exited 0. A visible window was not verified: WSL reports no `DISPLAY` or `WAYLAND_DISPLAY` (G0.4).
+- [x] **M0.4.4** Null/headless presenter for tests; no OS window created.
+  Evidence: `krdbg_platform_null` always builds and `null_presenter_creates_no_os_window` passes.
+- [x] **M0.4.5** No `SDL2.dll` next to the Windows executable; verify with
       `dumpbin /dependents` and an artifact scan.
+  Evidence: `scripts/gate-windows.ps1` ran `dumpbin /dependents` and a tree scan; neither found `SDL2.dll` (G0.7).
 
 ### M0.5 Fake target
 
-- [ ] **M0.5.1** `FakeTarget` implementing `IDebugTarget`: configurable
+- [x] **M0.5.1** `FakeTarget` implementing `IDebugTarget`: configurable
       registers, flags, memory, disassembly, unwind frames, one or more
       contexts, COM port and framebuffer.
-- [ ] **M0.5.2** A deterministic sample program with a known PC, a call stack,
+  Evidence: `src/core/fake_target.{h,cpp}` implements every `IDebugTarget` method plus context, register, frame-base and device configuration.
+- [x] **M0.5.2** A deterministic sample program with a known PC, a call stack,
       locals/globals, a 4:3 and a 16:9 framebuffer mode, and COM output bytes.
-- [ ] **M0.5.3** `FakeDebugInfo` builder covering sources, lines, functions,
+  Evidence: PC starts at `0x1000`, `unwind()` returns three frames, the fake debug info carries locals/globals, framebuffer modes are 320x240 and 384x216, and COM starts with `fake ready\n`.
+- [x] **M0.5.3** `FakeDebugInfo` builder covering sources, lines, functions,
       variables, types and one aggregate.
-- [ ] **M0.5.4** Unit tests for the fake target's memory, unwind, disassembly
+  Evidence: `make_fake_debug_info()` returns two sources, seven lines, two functions, seven variables and four types including the `Point` struct and `int[4]`.
+- [x] **M0.5.4** Unit tests for the fake target's memory, unwind, disassembly
       and COM handshake.
+  Evidence: eight `test_fake_target.cpp` cases and three `test_debug_info.cpp` cases passed on Windows and WSL x64.
 
 ### M0.6 Surface shell and headless baseline
 
-- [ ] **M0.6.1** `DebuggerSurface` layout: toolbar 30 px, status bar 22 px,
+- [x] **M0.6.1** `DebuggerSurface` layout: toolbar 30 px, status bar 22 px,
       source/disassembly/state top row, memory under source, variables/
       breakpoints/call-stack/COM bottom row, 1440x900 default.
-- [ ] **M0.6.2** KR32 theme constants and panel headers; empty state.
-- [ ] **M0.6.3** Toolbar shell: `RUN RESET LOAD KERNEL`, stats (`instr`, `time`,
+  Evidence: `surface_layout_matches_the_1440x900_baseline` asserts toolbar 30, status 22 at y=878, memory under source, and the four bottom panels filling 1440.
+- [x] **M0.6.2** KR32 theme constants and panel headers; empty state.
+  Evidence: `src/ui/theme.h` carries the KR32 palette and geometry; the empty render shows SOURCE, DISASSEMBLY, STATE, MEMORY, VARIABLES, BREAKPOINTS (0), CALL STACK and CONSOLE headers.
+- [x] **M0.6.3** Toolbar shell: `RUN RESET LOAD KERNEL`, stats (`instr`, `time`,
       `ips`), `CLR`, `VIDEO`, gear; no step/breakpoint/Build buttons.
-- [ ] **M0.6.4** Headless render path: `krdbg_demo --headless --screenshot
+  Evidence: the toolbar draws RUN/RESET/LOAD, `KERNEL` only when the host supports it (hidden in the demo), stats, VIDEO, CLR and the gear; no other actions exist.
+- [x] **M0.6.4** Headless render path: `krdbg_demo --headless --screenshot
       <out.ppm>` prints the frame hash and writes the PPM.
-- [ ] **M0.6.5** A `--state empty` and `--state loaded` fake mode for goldens.
-- [ ] **M0.6.6** Visual review against `shots/kr32-gui-source.png`; record
+  Evidence: `build/windows-msvc-release/krdbg_demo.exe --headless --state loaded --screenshot build/gate/windows-loaded.ppm` printed `frame hash E47FA2651086D075 1440x900` and wrote the PPM.
+- [x] **M0.6.5** A `--state empty` and `--state loaded` fake mode for goldens.
+  Evidence: `--state empty` printed `F15B00C153682DF8` and `--state loaded` printed `E47FA2651086D075`, both at 1440x900.
+- [x] **M0.6.6** Visual review against `shots/kr32-gui-source.png`; record
       deliberate differences (VIDEO/COM tabs, no Build).
+  Evidence: the loaded window was captured and compared with `shots/kr32-gui-source.png`; layout, palette and panel headers match. Deliberate differences: no STEP/OVER/OUT/BKPT/BUILD toolbar buttons, no Build action, VIDEO and COM are panel headers in M0, and source/disassembly content waits for M1 debug info.
 
 ### M0.7 Golden baseline
 
-- [ ] **M0.7.1** Commit the first golden hash for the empty state and one loaded
+- [x] **M0.7.1** Commit the first golden hash for the empty state and one loaded
       fake state; store hashes as text, not large PPMs.
-- [ ] **M0.7.2** A test that runs the headless render and compares the hash.
-- [ ] **M0.7.3** Windows and Linux x64 produce the same hash; record both.
+  Evidence: `goldens/empty.hash` (`F15B00C153682DF8`) and `goldens/loaded.hash` (`E47FA2651086D075`) are committed as two text lines.
+- [x] **M0.7.2** A test that runs the headless render and compares the hash.
+  Evidence: `golden_empty_state_matches_the_committed_hash` and `golden_loaded_state_matches_the_committed_hash` pass in `krdbg_unit`; the gate scripts also compare the demo output.
+- [x] **M0.7.3** Windows and Linux x64 produce the same hash; record both.
+  Evidence: MSVC Debug/Release and GCC Debug/Release all printed `F15B00C153682DF8` (empty) and `E47FA2651086D075` (loaded), recorded in §9.
 - [ ] **M0.7.4** ARM64 records its hash and functional result separately.
+  BLOCKED: no ARM64 tester entry for this revision in `docs/arm64-test-log.md` — the ARM64 hash cannot be recorded until `BitWhiz` runs the gate.
 
 ### M0.8 CI and gate scripts
 
-- [ ] **M0.8.1** `scripts/gate-windows.ps1`: configure, build Debug/Release,
+- [x] **M0.8.1** `scripts/gate-windows.ps1`: configure, build Debug/Release,
       CTest, headless hash check, no-`SDL2.dll` check.
-- [ ] **M0.8.2** `scripts/gate-linux.sh`: same checks; runs inside WSL x64 and
+  Evidence: the script ran end to end and printed `GATE WINDOWS: PASS` (see §9).
+- [x] **M0.8.2** `scripts/gate-linux.sh`: same checks; runs inside WSL x64 and
       on Ubuntu with no WSL-specific code.
-- [ ] **M0.8.3** `scripts/gate-linux-arm64.sh`: build/CTest/headless on the Pi;
+  Evidence: `./scripts/gate-linux.sh` ran in WSL Ubuntu and printed `GATE LINUX X64: PASS`; the script uses only CMake, CTest, sed and find, and the SDL presenter, with no WSL path.
+- [x] **M0.8.3** `scripts/gate-linux-arm64.sh`: build/CTest/headless on the Pi;
       hash recorded separately.
-- [ ] **M0.8.4** `.github/workflows/ci.yml`: `windows-x64`, `linux-x64`
+  Evidence: the wrapper delegates to `gate-linux.sh --arch arm64`, which selects the `linux-arm64` presets, requires `uname -m` to be ARM64 and records the hash in `build/gate/arm64-hashes.txt`; it has not run here.
+- [x] **M0.8.4** `.github/workflows/ci.yml`: `windows-x64`, `linux-x64`
       (Ubuntu, supplementary to the WSL gate), and `arm64` self-hosted job.
-      This assumes GitHub Actions; if the remote uses another provider, only
-      this file changes.
+  Evidence: the workflow declares all three jobs; `arm64` is non-blocking until G6.
 - [ ] **M0.8.5** ARM64 runner registered with labels
       `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
       `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
       queued job may wait that long before it starts.
-- [ ] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
-- [ ] **M0.8.7** Cache or artefact policy for build trees; no generated files
+  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note, but the krdbg registration on `BitWhiz` and its labels are the owner's action and are not confirmed.
+- [x] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
+  Evidence: each CI job invokes one gate script; no configure/build/test command appears in the workflow.
+- [x] **M0.8.7** Cache or artefact policy for build trees; no generated files
       committed.
+  Evidence: `docs/ci.md` records no cache in M0, `build/` is ignored, no artifacts are uploaded yet, and `src/ui/embedded_fonts.cpp` is the only committed generated file.
 
 ### M0.9 Commands and environment record
 
-- [ ] **M0.9.1** Run `.agents/templates/doctor.msvc.ps1`; record its real output.
-- [ ] **M0.9.2** Record the real configure/build/test/gate commands in
+- [x] **M0.9.1** Run `.agents/templates/doctor.msvc.ps1`; record its real output.
+  Evidence: exit 0; the output is quoted in §9 and its resolved toolchain is in `AGENTS.local.md`.
+- [x] **M0.9.2** Record the real configure/build/test/gate commands in
       `AGENTS.local.md` (Environment and Build entry point).
-- [ ] **M0.9.3** Record the WSL and ARM64 commands in the same place.
-- [ ] **M0.9.4** If a tool is missing, stop and report it; do not install.
+  Evidence: `AGENTS.local.md` has the gate entry points and the preset commands that were actually run.
+- [x] **M0.9.3** Record the WSL and ARM64 commands in the same place.
+  Evidence: `AGENTS.local.md` records `scripts/gate-linux.sh`, `scripts/gate-linux-arm64.sh` and the `linux-wsl`/`linux-arm64` preset commands.
+- [x] **M0.9.4** If a tool is missing, stop and report it; do not install.
+  Evidence: no tool was missing and nothing was installed; Windows used the bundled MSVC/CMake/Ninja and WSL used the existing GCC/CMake/Ninja/SDL2.
 
 ### Gate G0 — Build and visual baseline
 
 Pass only when all of these are checked and §9 has the real output.
 
-- [ ] **G0.1** Windows x64 Debug and Release configure/build/test pass.
-- [ ] **G0.2** WSL x64 configure/build/test pass.
+- [x] **G0.1** Windows x64 Debug and Release configure/build/test pass.
+  Evidence: `scripts/gate-windows.ps1` configured, built and tested `windows-msvc` and `windows-msvc-release`; 2/2 CTest entries passed in each and the script printed `GATE WINDOWS: PASS`.
+- [x] **G0.2** WSL x64 configure/build/test pass.
+  Evidence: `scripts/gate-linux.sh` ran in WSL Ubuntu; Debug and Release built and 2/2 CTest entries passed in each; `GATE LINUX X64: PASS`.
 - [ ] **G0.3** ARM64 configure/build/test pass.
+  BLOCKED: no `docs/arm64-test-log.md` entry exists for this revision — `BitWhiz` has not run `scripts/gate-linux-arm64.sh`. This session does not run or wait for the tester.
 - [ ] **G0.4** `krdbg_demo` opens a 1440x900 window with the fake loaded state
       on Windows and WSL.
-- [ ] **G0.5** Headless screenshot hash is stable and committed.
+  BLOCKED on the WSL half: `krdbg_demo --state loaded` opened a 1456x939 window (1440x900 client) on Windows and was captured, but WSL reports empty `DISPLAY` and `WAYLAND_DISPLAY`; the SDL2 path was exercised with `SDL_VIDEODRIVER=dummy --frames 3`, not a visible window.
+- [x] **G0.5** Headless screenshot hash is stable and committed.
+  Evidence: `goldens/empty.hash` and `goldens/loaded.hash`; the golden CTest cases pass and the gate scripts reproduce both values.
 - [ ] **G0.6** Windows and WSL x64 hashes match; ARM64 result recorded.
-- [ ] **G0.7** Windows artifact has no `SDL2.dll` dependency.
-- [ ] **G0.8** Platform-boundary check passes (`src/ui`/`include/krdbg` clean).
+  BLOCKED on the ARM64 half: Windows (MSVC) and WSL (GCC), Debug and Release, all printed `F15B00C153682DF8` and `E47FA2651086D075`; no ARM64 hash exists yet (G0.3).
+- [x] **G0.7** Windows artifact has no `SDL2.dll` dependency.
+  Evidence: `dumpbin /dependents build\windows-msvc-release\krdbg_demo.exe` lists no `SDL2.dll`, and a recursive tree scan found none.
+- [x] **G0.8** Platform-boundary check passes (`src/ui`/`include/krdbg` clean).
+  Evidence: `platform boundary: 13 UI/public files clean`; CTest `platform_boundary` passes on Windows and WSL.
 - [ ] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
       the gate records `BLOCKED` for a missing runner.
-- [ ] **G0.10** `AGENTS.local.md` has the real commands; no invented command
+  NOT RUN: the workflow has not executed this revision yet. The ARM64 job is also BLOCKED on the runner registration (M0.8.5). The result is recorded in §9 after the push.
+- [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
+  Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
 - [ ] **G0.11** The tree is clean and the initial commit exists.
+  PENDING: the M0 change is committed and pushed as the final step; `6106cfe` is the initial commit and the evidence commit records the result.
 
 ---
 
@@ -632,10 +686,10 @@ Record the real command and result. Do not pre-fill expected output.
 
 | Gate | Platform | Command / script | Result | Commit |
 |---|---|---|---|---|
-| G0 | Windows x64 | `scripts/gate-windows.ps1` | TBD | TBD |
-| G0 | WSL x64 | `scripts/gate-linux.sh` | TBD | TBD |
-| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | TBD | TBD |
-| G0 | CI | `.github/workflows/ci.yml` | TBD | TBD |
+| G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS` | pending |
+| G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS` | pending |
+| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | BLOCKED — no ARM64 tester entry for this revision | — |
+| G0 | CI | `.github/workflows/ci.yml` | NOT RUN — the workflow has not executed this revision | pending |
 | G1 | Windows x64 | TBD | TBD | TBD |
 | G1 | WSL x64 | TBD | TBD | TBD |
 | G1 | ARM64 | TBD | TBD | TBD |
@@ -653,6 +707,23 @@ Record the real command and result. Do not pre-fill expected output.
 | G6 | ARM64 | TBD | TBD | TBD |
 | G6 | CI | TBD | TBD | TBD |
 
+### M0.9.1 Doctor output
+
+Command: `.agents/templates/doctor.msvc.ps1` on BigBrain, 2026-11-20T04:06:19-08:00.
+Exit code: 0.
+
+```text
+msvc      14.51.36231
+cl        C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe
+studio    C:\Program Files\Microsoft Visual Studio\18\Community
+sdk       C:\Program Files (x86)\Windows Kits\10\Include
+cmake     cmake version 4.3.1-msvc1 (developer environment)
+
+doctor: this machine can build, but only from the Visual Studio developer environment
+        initialise it with: "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+        or run the project build entry point, which does that for you
+```
+
 ---
 
 ## 10. Blocked or external prerequisites
@@ -662,7 +733,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are confirmed in M0.8 (runner details confirmed 2026-11-20T03:09:09-08:00) |
+| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` BitWhiz is registered for KRCompiler; the krdbg registration and the labels `[self-hosted, linux, arm64, raspberry-pi]` are documented in `docs/ci-arm64.md` but not yet confirmed (runner details confirmed 2026-11-20T03:09:09-08:00). G0.3 and the ARM64 half of G0.6/G0.9 stay BLOCKED until it runs this repository's job. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[ ]` |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |

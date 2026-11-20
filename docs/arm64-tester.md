@@ -50,21 +50,18 @@ force-push), test the tip and write `history rewritten` in the entry.
 
 ## 4. Build and test
 
-**There is no build system yet.** Until the repository contains
-`CMakePresets.json` (milestone M0.1), the only correct action on a
-non-documentation push is:
+The repository has a CMake project and presets. The entry point is the "Build
+entry point" row in `AGENTS.local.md`:
 
-- append one entry saying `No build system: M0.1 has not landed`;
-- stop.
+```sh
+./scripts/gate-linux-arm64.sh
+```
 
-Do not invent a configure command. Do not create a build directory.
+The script configures and builds the `linux-arm64` Debug and Release presets,
+runs CTest, prints the ARM64 empty/loaded frame hashes and records them in
+`build/gate/arm64-hashes.txt`. It never compares ARM64 against the x64 hash.
 
-When the build system lands, its entry point is the "Build entry point" row in
-`AGENTS.local.md`, and the ARM64 gate is `scripts/gate-linux-arm64.sh` (M0.8.3).
-Follow those; this section is then superseded. Until then, the repository is
-documentation only — the plans in `docs/requests/` and the top-level files — and
-there is nothing to build.
-
+Do not invent a configure command. Do not install a missing tool; report it.
 Record how long each step took. This machine is slower than the developer's; a
 long runtime is expected, not a finding.
 
@@ -78,10 +75,10 @@ Append to `docs/arm64-test-log.md` on `main`. One entry per tested SHA:
 - Host: <hostname>
 - Range: 3bc3942..6d638c4, 4 commits
 - Docs-only: no
-- Build: none — no build system (M0.1 not landed)
-- Test: not run
-- Skipped: everything; nothing to build
-- Next: watch `main` for the M0.1 CMake skeleton
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release)
+- Test: CTest — pass (functional checks; x64 golden comparison excluded)
+- Hash: empty `<hash>`, loaded `<hash>` (recorded in build/gate/arm64-hashes.txt)
+- Notes: <anything the developer should know>
 ```
 
 Rules:
