@@ -178,7 +178,8 @@ open questions the plan was proposed with.
    object format, and KR32's `libc.c` uses atomics krc's front end does not take.
    The krc path links `crt0.s`, `libkrcrt.kro`, `fileio.s` and `eh.s` from krc's
    staged runtime, so guest code built through krc uses krc's libc. Stage B
-   therefore deletes KR32's runtime with the four directories.
+   therefore deletes KR32's runtime with the four directories, and waits on
+   KRCompiler 4.12, which installs that runtime with the package.
 5. **The five guest headers become files.** Decided
    2026-11-20T09:53:44-08:00. They exist only as injected strings in
    `include/kr32/cc/guest_headers.h`, which krc's preprocessor cannot see. They

@@ -61,6 +61,9 @@ consumers, then a third (krdbg) for the debug reader.
    KR32 backend writes, so `attach_kdbg` can build `.kdbg` for a `.kex`.
 10. KR16 assembler directives — `.bss`, `.space`, `.align` and `.word` — so krc can
     assemble kr16's shipped `resources/libc.s`.
+11. The target sysroot and runtime installed with the package — headers, `crt0.s`,
+    `libkrcrt.kro`, `fileio.s` and `eh.s` — so a consumer builds without a
+    KRCompiler build tree.
 
 **Out of scope**
 
@@ -161,6 +164,7 @@ record type.
 | 4.9 | Neutral listing model | a fixture's rows reproduce the built-in listing's statements and addresses; the host formats the file |
 | 4.10 | KR16 debug-info emission | a krc-built `.kex` decodes with sources, lines, functions and a variable; `attach_kdbg` runs for a KR16 link |
 | 4.11 | KR16 assembler directives | `kr16/resources/libc.s` assembles under krc to the same linked image bytes as kr16's own assembler, and a krc-built `hello` links it and prints the same output |
+| 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.k32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
 
 Items 4.2 and 4.3 are the review boundary: 4.2 proves the facade is a pure
 refactor, 4.3 proves it is usable from outside.
@@ -183,9 +187,9 @@ ctest --preset linux-gcc-debug --output-on-failure
 ```
 
 Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
-comparison from 4.9, the KR16 `.kex` decode from 4.10, and the `libc.s` assembly
-parity from 4.11. Every check must be run and its real output recorded; nothing is
-claimed from this plan.
+comparison from 4.9, the KR16 `.kex` decode from 4.10, the `libc.s` assembly
+parity from 4.11, and the installed-package consumer build from 4.12. Every check
+must be run and its real output recorded; nothing is claimed from this plan.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
 it is not re-run here.
@@ -243,6 +247,12 @@ open questions the plan was proposed with.
    constant, which is what the pilot compares; installing krc's
    `targets/kr16/runtime` is the fallback only if that work grows beyond those
    directives.
+7. **The package installs the target sysroot and runtime (4.12).** Decided
+   2026-11-20T10:16:44-08:00. KR32's krc path takes krc's staged sysroot and
+   runtime as explicit CMake inputs because the install contains neither, so the
+   path depends on a KRCompiler build tree. The package installs the headers,
+   `crt0.s`, `libkrcrt.kro`, `fileio.s` and `eh.s` under a documented prefix, and
+   the consumer points at the install.
 
 ## 9. Approval
 
@@ -251,6 +261,6 @@ Approved by kevinwross on 2026-11-20T02:36:31-08:00.
 Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
 it, `.kdbg` in `.kex` with its base field, the KR16 debug-info emission that makes
-a `.kex` decodable, and the KR16 assembler directives. It does not authorise KDBG
-v1.1, removing the `.debug_info` bridge, codegen changes, or any edit in KR32,
-kr16 or krdbg.
+a `.kex` decodable, the KR16 assembler directives, and the installed sysroot and
+runtime. It does not authorise KDBG v1.1, removing the `.debug_info` bridge,
+codegen changes, or any edit in KR32, kr16 or krdbg.
