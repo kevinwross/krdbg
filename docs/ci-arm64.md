@@ -42,6 +42,18 @@ sudo ./svc.sh start
 
 The token is a one-time registration secret; it is never committed.
 
+## Enabling the CI job
+
+The `arm64` job is gated on a repository variable so CI does not leave a job
+queued while no runner exists:
+
+1. Register the runner above and confirm it is idle under **Settings → Actions →
+   Runners**.
+2. Set **Settings → Secrets and variables → Actions → Variables →
+   `KRDBG_ARM64_RUNNER`** to `true`.
+3. The next push runs the `arm64` job with the labels above. Until step 2, the
+   job is skipped and G0.9 records ARM64 as BLOCKED for the missing runner.
+
 ## Gate and hash policy
 
 The job runs `scripts/gate-linux-arm64.sh`, which configures and builds the
