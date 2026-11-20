@@ -1,0 +1,142 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-msvc",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KRDBG_PLATFORM": "win32",
+        "KRDBG_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows MSVC (Release)",
+      "inherits": "windows-msvc",
+      "binaryDir": "${sourceDir}/build/windows-msvc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-wsl",
+      "displayName": "Linux x64 (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-wsl",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KRDBG_PLATFORM": "sdl2",
+        "KRDBG_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "linux-wsl-release",
+      "displayName": "Linux x64 (Release)",
+      "inherits": "linux-wsl",
+      "binaryDir": "${sourceDir}/build/linux-wsl-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-arm64",
+      "displayName": "Linux ARM64 (Debug)",
+      "inherits": "linux-wsl",
+      "binaryDir": "${sourceDir}/build/linux-arm64"
+    },
+    {
+      "name": "linux-arm64-release",
+      "displayName": "Linux ARM64 (Release)",
+      "inherits": "linux-wsl-release",
+      "binaryDir": "${sourceDir}/build/linux-arm64-release"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc-release"
+    },
+    {
+      "name": "linux-wsl",
+      "configurePreset": "linux-wsl"
+    },
+    {
+      "name": "linux-wsl-release",
+      "configurePreset": "linux-wsl-release"
+    },
+    {
+      "name": "linux-arm64",
+      "configurePreset": "linux-arm64"
+    },
+    {
+      "name": "linux-arm64-release",
+      "configurePreset": "linux-arm64-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-wsl",
+      "configurePreset": "linux-wsl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-wsl-release",
+      "configurePreset": "linux-wsl-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-arm64",
+      "configurePreset": "linux-arm64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-arm64-release",
+      "configurePreset": "linux-arm64-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
