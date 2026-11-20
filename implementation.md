@@ -1082,9 +1082,10 @@ Recorded 2026-11-20T13:49:40-08:00.
   breakpoint. `krdbg_demo --reset` exits 0. `krdbg_demo --kernel` loads the
   embedded KR32OS pair; KR16 exposes no KERNEL button.
 - Clean-checkout source resolution is G5.7: `git archive HEAD` extracted under
-  `build/clean-m5`, configured with the KR16 adapter ON, built and passed
-  **115 tests, 0 failures** with the same `KRDBG_KRC_PREFIX`; the host built
-  `tests/fixtures/kr16/m4.c` from inside the extracted tree.
+  `build/clean-m5-final` at `3b37999`, configured with the KR16 adapter ON,
+  built and passed **115 tests, 0 failures** with the same
+  `KRDBG_KRC_PREFIX`; the host built `tests/fixtures/kr16/m4.c` from inside
+  the extracted tree.
 - G5.1, G5.2, G5.3, G5.4, G5.5 and G5.6 are covered by the commands and tests
   above. G5.2 builds KR16 C/C++/assembly and KR32 C; G5.3's
   `host_rebuild_preserves_line_breakpoints` and `krdbg_demo --reset` cover
