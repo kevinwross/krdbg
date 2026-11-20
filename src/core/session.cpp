@@ -289,7 +289,13 @@ void DebugSession::set_reload(
 }
 
 void DebugSession::replace_target(std::unique_ptr<IDebugTarget> target) {
+    replace_target(std::move(target), impl_->info);
+}
+
+void DebugSession::replace_target(std::unique_ptr<IDebugTarget> target,
+                                  std::optional<DebugInfo> info) {
     impl_->target = std::move(target);
+    impl_->info = std::move(info);
     impl_->baseline =
         impl_->target != nullptr ? impl_->target->instructions_executed() : 0;
     impl_->run_seconds = 0.0;

@@ -66,6 +66,9 @@ public:
     bool restart(std::string& error);
     void set_reload(std::function<bool(IDebugTarget&, std::string&)> reload);
     void replace_target(std::unique_ptr<IDebugTarget> target);
+    // Replaces the target and its rebuilt image's debug payload in one step.
+    void replace_target(std::unique_ptr<IDebugTarget> target,
+                        std::optional<DebugInfo> info);
 
     // Contexts (cores and threads).
     std::vector<ContextInfo> contexts() const;

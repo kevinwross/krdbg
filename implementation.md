@@ -350,7 +350,7 @@ dependence on VM types.
   Evidence: `src/core/session.cpp` keeps the target, optional `DebugInfo`, breakpoint table, selected context (via the target) and stats baseline in one `Impl`; every accessor reads that state.
 - [x] **M1.3.2** Load/restart/replace target; source-origin rebuild flag;
       breakpoint preservation rules.
-  Evidence: `restart` calls the reload callback or `target.reset`, resets the stats baseline and re-resolves line breakpoints; `replace_target` keeps address breakpoints, re-resolves line breakpoints and repairs the selected context. The source-origin flag is `IHostServices::last_load_was_source()`; `session_restart_and_replace_preserve_breakpoints` covers the reload and preservation paths.
+  Evidence: `restart` calls the reload callback or `target.reset`, resets the stats baseline and re-resolves line breakpoints; `replace_target` keeps address breakpoints, re-resolves line breakpoints and repairs the selected context. The two-argument overload takes the rebuilt image's `DebugInfo` with the target; `session_restart_and_replace_preserve_breakpoints` moves line 6 to `0x1020` and sees the breakpoint follow. The source-origin flag is `IHostServices::last_load_was_source()`.
 - [x] **M1.3.3** Address and line breakpoints, enable/disable, run-to.
   Evidence: `add_*_breakpoint`, `set_breakpoint_enabled`, `remove_breakpoint`, `run_to_address` and `run_to_line`; `session_breakpoints_disable_and_run_to` covers address, line, disabled and temporary run-to.
 - [x] **M1.3.4** `step(StepMode)`, `run(budget)`, `run_to_*`, `pause`, guard
@@ -404,7 +404,7 @@ dependence on VM types.
 - [x] **G1.6** Vendored bootstrap, if used, carries provenance and passes parity.
   Evidence: `third_party/krc-debug/README.md` pins `797dfacf`; the parity test decodes both and compares with the `krc` JSON.
 - [x] **G1.7** `PLAN.md` unchanged or updated first for any interface change.
-  Evidence: the only interface change is the optional `DebugSession::Clock` test seam; PLAN.md §4.5 was updated before `session.h` and the change is source-compatible.
+  Evidence: the interface changes are the optional `DebugSession::Clock` test seam and the two-argument `replace_target(target, info)` overload; both were added to PLAN.md §4.5 before `session.h`, and both are source-compatible.
 
 ---
 

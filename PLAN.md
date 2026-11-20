@@ -501,6 +501,9 @@ public:
     bool restart(std::string& error);
     void set_reload(std::function<bool(IDebugTarget&, std::string&)> reload);
     void replace_target(std::unique_ptr<IDebugTarget> target);
+    // Replaces the target and its rebuilt image's debug payload in one step.
+    void replace_target(std::unique_ptr<IDebugTarget> target,
+                        std::optional<DebugInfo> info);
 
     // Contexts (cores and threads).
     std::vector<ContextInfo> contexts() const;
@@ -610,7 +613,9 @@ surface, not a scheduler.
 
 `replace_target()` is for a host that recompiles and produces a new target. The
 session keeps address breakpoints, re-resolves line breakpoints against the new
-debug info, and resets the selected context if its id no longer exists.
+debug info, and resets the selected context if its id no longer exists. The
+two-argument overload takes the rebuilt image's `DebugInfo` with the target, so
+a source rebuild can move a line without the session keeping stale addresses.
 
 `stats()` reports instructions since the last reset and execution-only run time.
 The session snapshots `target.instructions_executed()` at load, restart and

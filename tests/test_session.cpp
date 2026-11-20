@@ -374,6 +374,22 @@ KRDBG_TEST(session_restart_and_replace_preserve_breakpoints) {
     CHECK(scene.session->run(100).kind == StopKind::Retired);
     CHECK_EQ(scene.target_->pc(), 0x1008U);
 
+    // The debug-info overload re-resolves a line breakpoint against a rebuilt
+    // image where line 6 moved.
+    krdbg::DebugInfo rebuilt = krdbg::make_fake_debug_info();
+    for (krdbg::LineInfo& line : rebuilt.lines) {
+        if (line.source == 1U && line.line == 6U) {
+            line.address = 0x1020;
+        }
+    }
+    auto rebuilt_target = std::make_unique<FakeTarget>();
+    FakeTarget* rebuilt_raw = rebuilt_target.get();
+    scene.session->replace_target(
+        std::move(rebuilt_target), std::optional<krdbg::DebugInfo>{rebuilt});
+    scene.target_ = rebuilt_raw;
+    CHECK_EQ(scene.session->breakpoints().size(), 2U);
+    CHECK_EQ(scene.session->breakpoints()[1].address, 0x1020U);
+
     CHECK(scene.restart());
     bool reloaded = false;
     scene.session->set_reload(
