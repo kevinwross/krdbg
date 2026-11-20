@@ -102,3 +102,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 85 checks, 0 failures, 83 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M2.2–M2.7 landed — ~2,700 lines of surface plus `settings_json` and `video_fit` — and both hashes match the regenerated x64 goldens exactly in Debug and Release. `krdbg_unit` grew from 62 to 85 checks. The boundary check now covers 16 UI/public files (`src/ui/video_fit.h` added) and 12 core/kdbg files (`src/core/settings_json.*` added). Same caveat as before, now larger: the gate renders and hashes only empty and loaded, so `goldens/running.hash` (`36C15F50552FF36A`) and the new `goldens/video.hash` (`45C97E0E11204576`) have no ARM64 evidence; both are checked only by the x64 golden test.
+
+## 2026-11-20T10:28:51-08:00 — main @ ad4f8dc
+
+- Host: BitWhiz
+- Range: c41e0de..ad4f8dc, 2 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; surface, fake target and settings rebuilt, 72 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M2 panel gaps plus M2.8/M2.9 coverage; the loaded state changed and the empty state did not, and both match the regenerated x64 goldens exactly. `include/krdbg/target.h` gained `IVideoSource::framebuffer_base()` with a default, documented in `PLAN.md` in the same commit, so the interface rule holds. `krdbg_unit` grew from 85 to 99 checks. Golden coverage is now 13 states, and the gate still renders only empty and loaded, so **11 of 13 goldens** (`com`, `context`, `error`, `no-com`, `no-video`, `running`, `settings`, `tooltip`, `variables`, `video`, `video16`) have no ARM64 evidence at all.
