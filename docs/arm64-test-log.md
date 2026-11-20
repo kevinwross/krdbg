@@ -122,3 +122,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: deliberate duplicate of the `ad4f8dc` entry, requested by the owner to record a cold build. Both preset build trees were deleted before the run; the cold build took 116 s against 72–91 s for the warm incremental runs, and produced byte-identical hashes, so nothing depended on stale objects. `5cfd5d1` landed after the build and is docs-only and source-identical to `3e0d44e`, which is the revision actually built here.
+
+## 2026-11-20T11:49:04-08:00 — main @ 9d63589
+
+- Host: BitWhiz
+- Range: 3e0d44e..9d63589, 6 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; core, KDBG and test translation units rebuilt, 76 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M3 added `adapters/kr32`, `tests/test_kr32_adapter.cpp` and `goldens/kr32-loaded.hash`, but `KRDBG_KR32_ADAPTER` is **OFF** by default and the gate does not enable it, so **this entry covers the core changes only** — the adapter, its test and the KR32 golden have no ARM64 evidence, and `krdbg_unit` stays at 99 checks because `test_kr32_adapter.cpp` is only added when the adapter is on. Two facts for anyone enabling it here: the default `KRDBG_KR32_ROOT` is `../KR32`, which does not match this host's lowercase `../kr32` on a case-sensitive filesystem, so `-DKRDBG_KR32_ROOT` must be passed explicitly; and this host has a `kr32` checkout at `/home/kevinro/repos/kr32` whose revision is not pinned by krdbg.
