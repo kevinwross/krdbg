@@ -10,6 +10,11 @@ before branching.
 **Requested by:** kevinwross
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.6
 (the facade, the package, and `.kdbg` in `.kex`), plus 4.9 for the listing.
+**Blocked on 4.6:** no KR16 object carries `.debug_info`, so a KR16 `.kex` has
+nothing for `attach_kdbg` to convert and cannot decode with sources, lines or
+functions (`KRCompiler` `docs/adopt-krc-log.md`, 2026-11-20T04:23:04-08:00). The
+programme owner decides whether KR16 debug-info emission joins stage A or the
+pilot waits.
 **Sibling plan:** [kr32](kr32-adopt-krc-toolchain.md). This one runs first.
 **Read at that commit:** `include/kr16/build.hpp`, `include/kr16/container.hpp`,
 `include/kr16/debug_session.hpp`, `src/debug/debug_session.cpp`,

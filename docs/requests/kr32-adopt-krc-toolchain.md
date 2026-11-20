@@ -10,6 +10,9 @@ confirm before branching.
 **Requested by:** kevinwross
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.5,
 plus 4.9 for the listing.
+**Pinned:** `f936155` on `KRCompiler` `adopt-krc` — the facade, the
+`krc::toolchain`/`krc::debug` packages, the listing rows, and the CLIs rebuilt on
+the facade.
 **Sibling plan:** [kr16](kr16-adopt-krc-toolchain.md). This one runs second, on
 the evidence that kr32 has the harder compiler.
 **Read at that commit:** `src/ui/debugger_ui.cpp`, `include/kr32/cc/cc.h`,
