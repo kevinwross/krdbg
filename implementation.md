@@ -68,7 +68,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.3/G0.4 (WSL)/G0.6 (ARM64)/G0.9 open` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.1–M0.9 done; G0.3, G0.4 (WSL) and G0.6 (ARM64) blocked` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] planned` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -291,14 +291,14 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `dumpbin /dependents build\windows-msvc-release\krdbg_demo.exe` lists no `SDL2.dll`, and a recursive tree scan found none.
 - [x] **G0.8** Platform-boundary check passes (`src/ui`/`include/krdbg` clean).
   Evidence: `platform boundary: 13 UI/public files clean`; CTest `platform_boundary` passes on Windows and WSL.
-- [ ] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
+- [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
       the gate records `BLOCKED` for a missing runner.
-  NOT RUN: the workflow has not executed this revision yet. The ARM64 job is also BLOCKED on the runner registration (M0.8.5). The result is recorded in §9 after the push.
+  Evidence: CI run `44733345483` for `b325a7f`: `windows-x64` success (gate step success), `linux-x64` success (SDL2 install and gate step success). `arm64` is queued with no runner, recorded BLOCKED (M0.8.5).
 - [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
   Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
-- [ ] **G0.11** The tree is clean and the initial commit exists.
-  PENDING: the M0 change is committed and pushed as the final step; `6106cfe` is the initial commit and the evidence commit records the result.
+- [x] **G0.11** The tree is clean and the initial commit exists.
+  Evidence: the tested revision `b325a7f` is committed and pushed; `git status --short --branch` printed `## main...origin/main` with no modified or untracked files before this evidence commit; the initial commit `6106cfe` exists.
 
 ---
 
@@ -686,10 +686,10 @@ Record the real command and result. Do not pre-fill expected output.
 
 | Gate | Platform | Command / script | Result | Commit |
 |---|---|---|---|---|
-| G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS` | pending |
-| G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS` | pending |
-| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | BLOCKED — no ARM64 tester entry for this revision | — |
-| G0 | CI | `.github/workflows/ci.yml` | NOT RUN — the workflow has not executed this revision | pending |
+| G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS`. CI run `44733345483` also passed `windows-x64`. | `77c4e00` |
+| G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
+| G0 | ARM64 | `scripts/gate-linux-arm64.sh` | BLOCKED — no ARM64 tester entry for this revision; the CI `arm64` job is queued with no runner | — |
+| G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — run `44733345483` at `b325a7f`: `windows-x64` success, `linux-x64` success, `arm64` queued with no runner | `b325a7f` |
 | G1 | Windows x64 | TBD | TBD | TBD |
 | G1 | WSL x64 | TBD | TBD | TBD |
 | G1 | ARM64 | TBD | TBD | TBD |
