@@ -154,3 +154,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Extra check, not the gate: configured `-DKRDBG_KR16_ADAPTER=ON -DKRDBG_PLATFORM=null -DCMAKE_BUILD_TYPE=Debug` in `build/kr16-check`, which used the default root `../kr16` (lowercase, so it resolves on this host), then built and ran it. **Build OK, 107 checks, 0 failures**, including the eight `kr16_*` cases, and `kr16_ui_loaded_state_matches_the_committed_golden` passes, so `goldens/kr16-loaded.hash` (`A1F5B45032915A96`) is confirmed on ARM64. The KR16 adapter is OFF in the gate, so none of this is gate coverage.
 - Notes: M4 added `adapters/kr16`, `tests/test_kr16_adapter.cpp`, the `.kex`/legacy fixtures and the sixteenth-shape golden; goldens are now 15 files and the gate still renders only empty and loaded. The KR16 tree used for the extra check is at `b9f7436`, which krdbg does not pin, and the check uses the null presenter. The KR32 adapter was not enabled in this run, so `adapters/kr32` was not re-verified at this SHA.
+
+## 2026-11-20T13:58:08-08:00 — main @ 3b506d5
+
+- Host: BitWhiz
+- Range: dee054e..3b506d5, 5 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the new settings host, tool settings, their tests and the `krdbg_settings` CLI compiled, 26 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M5.2/M5.4/M5.5 added `src/core/settings_host.*`, `tool_settings.*`, `settings_validation.h`, `apps/settings_cli` and `test_settings_host`; `krdbg_unit` grew from 99 to 105 checks and the boundary check now covers 17 core/kdbg files. `krdbg_settings` builds on ARM64 as a plain target. A sixteenth golden, `goldens/tool-settings.hash` (`3396C255BD1081B6`), has been added but the gate still renders only empty and loaded, so it has no ARM64 evidence, like the other twelve non-gate goldens.
