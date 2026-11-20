@@ -32,3 +32,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 25 checks, 0 failures, with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: the range is the CI workflow comment, the environment record and two G0.4 screenshots, so the build was incremental again and the 1 s wall time is not a clean-build time. Hashes are unchanged. `AGENTS.local.md` now records the krdbg runner registration as confirmed, so the `arm64` CI job and this tester target the same Pi; they use separate checkouts, but a queued CI build will compete with a tester build for CPU, so both can be slower than these timings.
+
+## 2026-11-20T08:58:16-08:00 — main @ 503f5de
+
+- Host: BitWhiz
+- Range: da4d19b..503f5de, 2 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the new M1 translation units compiled)
+- Test: CTest — pass (2/2: `krdbg_unit` 36 checks, 0 failures, 34 passed with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
+- Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M1.1 landed (`DebugInfo`, `merge_debug_info`, lookup and value resolution plus `test_lookup`, `test_merge`, `test_variables`), so `krdbg_unit` grew from 25 to 36 checks and this run took 36 s because the new translation units compiled. The UI is untouched, so the frame hashes are unchanged.
