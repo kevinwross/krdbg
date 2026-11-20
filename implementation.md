@@ -799,7 +799,7 @@ temporary build directory.
 - [x] **G5.4** `KERNEL` loads the embedded OS.
 - [x] **G5.5** Tool settings appear in the dialog with no UI change.
 - [x] **G5.6** No embedded compiler in `krdbg`.
-- [ ] **G5.7** Source resolves from a clean checkout.
+- [x] **G5.7** Source resolves from a clean checkout.
 
 ---
 
@@ -878,8 +878,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G4 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=C:/Users/kevin/source/repos/kr16` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON Debug 107 tests, 0 failures, Release 107 tests, 0 failures; 16-bit golden `A1F5B45032915A96` | `0c6b246` |
 | G4 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr16 -DKRDBG_KR16_ADAPTER=ON -DKRDBG_KR16_ROOT=/mnt/c/Users/kevin/source/repos/kr16 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures; adapter ON 107 tests, 0 failures; 16-bit golden matches Windows | `0c6b246` |
 | G4 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR16_ROOT=/home/kevinro/repos/kr16 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T13:01:18-08:00 @ `dee054e`: gate 99 checks, 0 failures; adapter ON **107 checks, 0 failures**, 16-bit golden `A1F5B45032915A96`; sibling KR16 `b9f7436` is host evidence, not pinned | `0d5a272` |
-| G5 | Windows x64 | TBD | TBD | TBD |
-| G5 | WSL x64 | TBD | TBD | TBD |
+| G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `3538e97` |
+| G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `3538e97` |
+| G5 | ARM64 | not run | PENDING (non-blocking) — no M5 entry in `docs/arm64-test-log.md`; the host process runner is platform-gated and covered on Windows/WSL | — |
 | G6 | Windows x64 | TBD | TBD | TBD |
 | G6 | Linux x64 | TBD | TBD | TBD |
 | G6 | ARM64 | TBD | TBD | TBD |
@@ -1080,10 +1081,15 @@ Recorded 2026-11-20T13:49:40-08:00.
   `host_rebuild_preserves_line_breakpoints` rebuilds and retains the line
   breakpoint. `krdbg_demo --reset` exits 0. `krdbg_demo --kernel` loads the
   embedded KR32OS pair; KR16 exposes no KERNEL button.
-- Clean-checkout source resolution is G5.7; the final clean `git archive` run
-  is recorded below after the commit.
+- Clean-checkout source resolution is G5.7: `git archive HEAD` extracted under
+  `build/clean-m5`, configured with the KR16 adapter ON, built and passed
+  **115 tests, 0 failures** with the same `KRDBG_KRC_PREFIX`; the host built
+  `tests/fixtures/kr16/m4.c` from inside the extracted tree.
 - G5.1, G5.2, G5.3, G5.4, G5.5 and G5.6 are covered by the commands and tests
-  above; G5.7 uses a clean archive.
+  above. G5.2 builds KR16 C/C++/assembly and KR32 C; G5.3's
+  `host_rebuild_preserves_line_breakpoints` and `krdbg_demo --reset` cover
+  rebuilds; G5.4's `krdbg_demo --kernel` loads the embedded pair; G5.5's
+  aggregate dialog is captured in `shots/m5-settings.png`.
 
 
 

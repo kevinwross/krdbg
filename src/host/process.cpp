@@ -129,7 +129,9 @@ ProcessResult run_process(const std::filesystem::path& executable,
         dup2(pipes[1], STDERR_FILENO);
         close(pipes[1]);
         if (!working_directory.empty()) {
-            (void)chdir(working_directory.c_str());
+            if (chdir(working_directory.c_str()) != 0) {
+                _exit(127);
+            }
         }
         std::vector<char*> argv;
         argv.push_back(const_cast<char*>(executable.c_str()));

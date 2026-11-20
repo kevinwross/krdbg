@@ -475,7 +475,7 @@ int main(int argc, char** argv) {
 
     std::string loaded_source;
     std::string loaded_image;
-    const auto stop_at_main = [](krdbg::DebugSession& current) {
+    [[maybe_unused]] const auto stop_at_main = [](krdbg::DebugSession& current) {
         const krdbg::DebugInfo& info = current.info();
         for (std::size_t index = 0; index < info.functions.size(); ++index) {
             if (info.functions[index].name != "main") {
