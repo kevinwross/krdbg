@@ -12,7 +12,11 @@ Read it before touching anything. Where this brief and the plan disagree, the pl
 - The tree has a template sync in flight: modified `AGENTS.local.md`, untracked
   `AGENTS.md`, `.agents/`, `.dev-template.json` and `CLAUDE.md`. Finish that as
   its own commit, or revert it; do not carry it into the branch.
-- Create `kr32-krc-toolchain` from `origin/main`. Do not commit to `main`.
+- Work on the existing `adopt-krc` branch, which tracks `origin/adopt-krc` and is
+  based on `origin/main`. Do not commit to `main`.
+- The ARM64 tester appends `docs/arm64-test-log.md` and pushes to this branch.
+  Pull with rebase before pushing, and never force-push: that would invalidate
+  the tester's last-tested state.
 - **Dependency:** the KRCompiler branch must already carry plan items 4.1–4.5
   and 4.9. Ask the programme owner for the SHA; record it in the log and in the
   build setup. Do not vendor KRCompiler to unblock yourself.

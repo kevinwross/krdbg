@@ -14,7 +14,11 @@ Read it before touching anything. Where this brief and the plan disagree, the pl
   not branch until that is settled: either those commits are pushed, or the
   owner tells you to include them. Base the work branch on the pushed default
   branch, not on a divergent local `master`.
-- Create `krc-toolchain-package` and work there. Do not commit to `master`.
+- Work on the existing `adopt-krc` branch, which is based on the pushed `master`
+  and already carries `docs/arm64-tester.md`. Do not commit to `master`.
+- The ARM64 tester appends `docs/arm64-test-log.md` and pushes to this branch.
+  Pull with rebase before pushing, and never force-push: that would invalidate
+  the tester's last-tested state.
 
 ## Scope
 
