@@ -641,18 +641,21 @@ and `shots/g3-kr32-reference.png` (KR32 GUI), both stopped at `main` line 21.
 ### Gate G3 — KR32 slice
 
 - [x] **G3.1** Windows x64 and WSL x64 build/test/integration pass.
-- [ ] **G3.2** ARM64 evidence recorded (non-blocking).
+- [x] **G3.2** ARM64 evidence recorded (non-blocking).
 - [x] **G3.3** Breakpoint, step, locals/struct/globals, stack, memory,
       disassembly and COM all verified on a real `.k32`.
 - [x] **G3.4** The adapter is the only KR32-specific code; no `if (kr32)` in UI.
 - [x] **G3.5** Source paths resolve from a clean checkout.
 - [x] **G3.6** Goldens updated for the real target.
 
-G3 is closed for the blocking rows. G3.2 remains pending because the ARM64
-tester log has no M3 entry; it is non-blocking per the milestone instructions.
-`adapters/kr32` is the only source that includes a KR32 header; the existing
-boundary check passes, and the only KR32 mentions in `src/ui`/`include/krdbg`
-are comments naming the reference UI and palette.
+G3 is closed. The ARM64 gate at `9d63589` (adapter OFF) passed 99 checks, and
+the extra adapter-ON build at `7539b23` passed 106 checks, including the
+real-target golden. That extra build used the sibling KR32 checkout at
+`aa120ad`, which krdbg does not pin, and the null presenter; it is host
+evidence, not a reproducible gate row. `adapters/kr32` is the only source that
+includes a KR32 header; the existing boundary check passes, and the only KR32
+mentions in `src/ui`/`include/krdbg` are comments naming the reference UI and
+palette.
 
 ---
 
@@ -813,7 +816,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G2 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS (non-blocking) — BitWhiz entry 2026-11-20T10:28:51-08:00 for `ad4f8dc`: Debug and Release, 99 checks, boundary 16 UI/public + 12 core/kdbg, empty `56BCC5339740DCA6` / loaded `3DAD6F9400E135E2` match; `3886d47` is docs-only | `ad4f8dc` |
 | G3 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `cmake -S . -B build/windows-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=C:/Users/kevin/source/repos/KR32` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON Debug 106 tests, 0 failures, Release 106 tests, 0 failures; real-target golden `19D243A88CB8EF35` | `f349fac` |
 | G3 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `cmake -S . -B build/linux-kr32 -DKRDBG_KR32_ADAPTER=ON -DKRDBG_KR32_ROOT=/mnt/c/Users/kevin/source/repos/KR32 -DKRDBG_PLATFORM=sdl2` then `krdbg_tests` | PASS — bare gate 99 tests, 0 failures, thirteen goldens, no `SDL2.dll`; adapter ON 106 tests, 0 failures; real-target golden matches Windows | `f349fac` |
-| G3 | ARM64 | not run | PENDING (non-blocking) — no M3 entry in `docs/arm64-test-log.md`; G3.1/G3.3–G3.6 are the blocking rows | — |
+| G3 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR32_ROOT=/home/kevinro/repos/kr32 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T11:49:04-08:00 @ `9d63589`: gate 99 checks, 0 failures; entry 2026-11-20T11:54:14-08:00 @ `7539b23`: adapter ON **106 checks, 0 failures**, real-target golden `19D243A88CB8EF35`; sibling KR32 `aa120ad` is host evidence, not pinned | `7539b23` |
 | G4 | Windows x64 | TBD | TBD | TBD |
 | G4 | WSL x64 | TBD | TBD | TBD |
 | G5 | Windows x64 | TBD | TBD | TBD |
@@ -913,8 +916,11 @@ Recorded 2026-11-20T11:42:43-08:00.
   `global_counter=7`. KRDBG additionally exposes FPR/tile/control groups and a
   wider source pane; KR32 shows its inline flag row and its own console. The
   differences are presentation, not target behavior.
-- G3.2: not run; `docs/arm64-test-log.md` has no M3 entry. The ARM64 row is
-  non-blocking per the milestone instruction.
+- G3.2: ARM64 tester entries are recorded. The gate at `9d63589` (adapter OFF)
+  passed 99 checks; the extra adapter-ON build at `7539b23` passed 106 checks,
+  including `kr32_ui_loaded_state_matches_the_committed_golden`. The extra build
+  used `/home/kevinro/repos/kr32` at `aa120ad` and the null presenter, so it is
+  host evidence rather than a reproducible gate row.
 
 
 
