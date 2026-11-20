@@ -3,8 +3,8 @@
 **Status:** APPROVED 2026-11-20T02:36:31-08:00 by kevinwross. Stage A only; the
 default flip and deletion of the built-in compilers return for a second
 approval.
-**Completed:** stage A implemented, verified and published; the tested revision
-is `0f61260` on `adopt-krc` (tip `797dfac`).
+**Completed:** stage A implemented, verified and published through 4.12 at
+`47fa4e5` (tip `a099ddd`). Item 4.13 extends it to unblock kr16.
 **Target repository:** `C:\Users\kevin\source\repos\KRCompiler`, `master` @ `6d638c4`.
 The branch is 7 commits ahead of `origin/master`; confirm the push state before
 branching.
@@ -64,6 +64,8 @@ consumers, then a third (krdbg) for the debug reader.
 11. The target sysroot and runtime installed with the package — headers, `crt0.s`,
     `libkrcrt.kro`, `fileio.s` and `eh.s` — so a consumer builds without a
     KRCompiler build tree.
+12. The KR16 `__host_call` intrinsic, so krc can compile the shipped runtime
+    wrappers that lower to `SYS #n` under kr16's own compiler.
 
 **Out of scope**
 
@@ -165,6 +167,7 @@ record type.
 | 4.10 | KR16 debug-info emission | a krc-built `.kex` decodes with sources, lines, functions and a variable; `attach_kdbg` runs for a KR16 link |
 | 4.11 | KR16 assembler directives | `kr16/resources/libc.s` assembles under krc to the same linked image bytes as kr16's own assembler, and a krc-built `hello` links it and prints the same output |
 | 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.k32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
+| 4.13 | KR16 `__host_call` intrinsic | `kr16/resources/fileio.c` and the libc wrappers compile under krc, and a krc-built `.kex` links the shipped libc and passes the fileio tests |
 
 Items 4.2 and 4.3 are the review boundary: 4.2 proves the facade is a pure
 refactor, 4.3 proves it is usable from outside.
@@ -188,8 +191,9 @@ ctest --preset linux-gcc-debug --output-on-failure
 
 Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
 comparison from 4.9, the KR16 `.kex` decode from 4.10, the `libc.s` assembly
-parity from 4.11, and the installed-package consumer build from 4.12. Every check
-must be run and its real output recorded; nothing is claimed from this plan.
+parity from 4.11, the installed-package consumer build from 4.12, and the krc-built
+KR16 runtime from 4.13. Every check must be run and its real output recorded;
+nothing is claimed from this plan.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
 it is not re-run here.
@@ -253,6 +257,13 @@ open questions the plan was proposed with.
    path depends on a KRCompiler build tree. The package installs the headers,
    `crt0.s`, `libkrcrt.kro`, `fileio.s` and `eh.s` under a documented prefix, and
    the consumer points at the install.
+8. **KR16 `__host_call` joins stage A (4.13).** Decided
+   2026-11-20T13:04:54-08:00. kr16's shipped runtime wrappers call
+   `__host_call(n, block)`, which kr16's own compiler lowers to `SYS #n`
+   (`src/cc/compiler.cpp:8094-8100`); krc has no such intrinsic, so
+   `resources/fileio.c` cannot be built for the krc path. krc learns the
+   intrinsic rather than the runtime growing a dispatcher, which keeps the
+   shipped runtime unchanged — the same rule as 4.10 and 4.11.
 
 ## 9. Approval
 
@@ -261,6 +272,7 @@ Approved by kevinwross on 2026-11-20T02:36:31-08:00.
 Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
 it, `.kdbg` in `.kex` with its base field, the KR16 debug-info emission that makes
-a `.kex` decodable, the KR16 assembler directives, and the installed sysroot and
-runtime. It does not authorise KDBG v1.1, removing the `.debug_info` bridge,
-codegen changes, or any edit in KR32, kr16 or krdbg.
+a `.kex` decodable, the KR16 assembler directives, the installed sysroot and
+runtime, and the KR16 `__host_call` intrinsic. It does not authorise KDBG v1.1,
+removing the `.debug_info` bridge, codegen changes, or any edit in KR32, kr16 or
+krdbg.

@@ -165,6 +165,15 @@ open questions the plan was proposed with.
    conformance errors the built-in compiler tolerates. The file gets the missing
    declaration and a correctly typed constant, and both toolchains must compile
    it. krc's front end is not loosened to accept them.
+4. **The stdio test gets its missing prototype.** Decided
+   2026-11-20T13:04:54-08:00. `tests/integration/stdio_buffered.c` declares its
+   variadic function implicitly, and krc's IR verifier rejects that; the test
+   gains the prototype. No compiler change.
+5. **The 16-bit size wall is measured before it is planned around.** Decided
+   2026-11-20T13:04:54-08:00. krc's runtime alone is 36,912 B of `.text`,
+   against a built-in whole image of 27,626 B and a 64 KiB address space. 2.4
+   records the krc-built image size for the largest failing program and whether
+   it runs; a runtime diet is a separate task if it does not.
 
 Not yet decided, and needed before stage B: whether the `.kdbg` reader also keeps
 the `.debug_*` branch for `.kex` files built before the swap. Dropping it makes
