@@ -55,6 +55,8 @@ consumers, then a third (krdbg) for the debug reader.
    and error rules.
 8. A neutral listing model: annotated rows the host formats into its own `.lst`
    (KR32 and kr16 both expose a listing today, in their own formats).
+9. KR16 debug-info emission: the KR16 backend writes the same textual records the
+   KR32 backend writes, so `attach_kdbg` can build `.kdbg` for a `.kex`.
 
 **Out of scope**
 
@@ -153,6 +155,7 @@ record type.
 | 4.7 | Split and install `krc::debug` | a scratch consumer decodes a fixture through the package without linking the toolchain |
 | 4.8 | `docs/toolchain-embedding.md` | a reader can build an image in ten lines from the document alone |
 | 4.9 | Neutral listing model | a fixture's rows reproduce the built-in listing's statements and addresses; the host formats the file |
+| 4.10 | KR16 debug-info emission | a krc-built `.kex` decodes with sources, lines, functions and a variable; `attach_kdbg` runs for a KR16 link |
 
 Items 4.2 and 4.3 are the review boundary: 4.2 proves the facade is a pure
 refactor, 4.3 proves it is usable from outside.
@@ -174,9 +177,9 @@ cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug --paral
 ctest --preset linux-gcc-debug --output-on-failure
 ```
 
-Plus the package-consumer check, the byte-identity diff from 4.2/4.3, and the
-listing comparison from 4.9. Every check must be run and its real output
-recorded; nothing is claimed from this plan.
+Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
+comparison from 4.9, and the KR16 `.kex` decode from 4.10. Every check must be run
+and its real output recorded; nothing is claimed from this plan.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
 it is not re-run here.
@@ -221,6 +224,12 @@ open questions the plan was proposed with.
    (the header table row) and ADR 0009 are amended to name the field; no version
    bump. This is the only header change. Mechanism confirmed
    2026-11-20T02:35:30-08:00.
+5. **KR16 debug-info emission joins stage A (4.10).** Decided
+   2026-11-20T08:28:03-08:00. Item 4.6 cannot meet its own done-when because no
+   KR16 object carries `.debug_info`, so a `.kex` has nothing for `attach_kdbg`
+   to convert. Rather than ship kr16 undebuggable or add the legacy `.debug_*`
+   format as a second writer, the KR16 backend emits the records the KR32 backend
+   already emits, and `attach_kdbg` runs for a KR16 link.
 
 ## 9. Approval
 
@@ -228,6 +237,6 @@ Approved by kevinwross on 2026-11-20T02:36:31-08:00.
 
 Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
-it, and `.kdbg` in `.kex` with its base field. It does not authorise KDBG v1.1,
-removing the `.debug_info` bridge, codegen changes, or any edit in KR32, kr16 or
-krdbg.
+it, `.kdbg` in `.kex` with its base field, and the KR16 debug-info emission that
+makes a `.kex` decodable. It does not authorise KDBG v1.1, removing the
+`.debug_info` bridge, codegen changes, or any edit in KR32, kr16 or krdbg.
