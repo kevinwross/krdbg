@@ -100,7 +100,7 @@ encoder does.
 
 | ID | Change | Done when |
 |---|---|---|
-| K1 | Bridge records for register locations (reuse `P`), scope and variable flags, array element/count, type refs; settle the exact spellings in `docs/symbols.md` first | `krc --dump-symbols` prints a location for a variable the backend knows is register-held, and a v1-built `.k32` still parses in KR32's `debug` path |
+| K1 | Bridge records for register locations (reuse `P`), scope and variable flags, array element/count, type refs; settle the exact spellings in `docs/symbols.md` first | a hand-built fixture with a location record decodes through `krc::debug` and prints in both dumper forms, and a v1-built `.k32` still parses in KR32's `debug` path; the producer side lands with the ADR 0052 promotion change |
 | K2 | KDBG encoding: `Location`, `VarInfo`, `Scope` tags and `.kdbg_loc`/`.kdbg_scope` sections; minor `1.1` | decode returns the fields; a v1 reader (a fixture built from the previous decoder) skips them without error |
 | K3 | `Base` tag: the backend emits the base type name it has, or the IR gains the field if it does not | a derived class with no own members expands through its base in `krc --dump-symbols` |
 | K4 | `ArrayType` and `TypeRef` tags: element type and count, no type-string parsing | an array decodes with its element type and count; a pointer's target is a type reference |
@@ -165,6 +165,11 @@ questions the plan was proposed with.
    minor.
 5. **Branch `kdbg-v1-1` from `0951c6e`,** not more commits on `adopt-krc`, whose
    SHAs the consumers pin.
+6. **K1's producer is deferred.** Decided 2026-11-20T12:29:53-08:00. Promotion
+   stays off, so no compiler path emits a location record yet. K1 delivers the
+   format, the decoder and a hand-built fixture, and its done-when is amended to
+   say so; the producer arrives with the ADR 0052 promotion change, which this
+   plan already excludes.
 
 ## 9. Approval
 

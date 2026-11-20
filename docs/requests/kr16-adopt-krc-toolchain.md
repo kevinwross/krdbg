@@ -158,6 +158,13 @@ open questions the plan was proposed with.
    while the built-in path remains reachable through the flag for one release;
    the built-in path and `src/cc`, `src/asm`, `src/link` are deleted after that
    release, on the second approval.
+3. **`resources/fileio.c` is fixed in the shipped source.** Decided
+   2026-11-20T12:29:53-08:00. Under the pinned krc it fails at line 654
+   (`redefinition of function 'fgetc'`, after an implicit declaration at line
+   576) and line 832 (`integer constant is too large for its type`). Both are C
+   conformance errors the built-in compiler tolerates. The file gets the missing
+   declaration and a correctly typed constant, and both toolchains must compile
+   it. krc's front end is not loosened to accept them.
 
 Not yet decided, and needed before stage B: whether the `.kdbg` reader also keeps
 the `.debug_*` branch for `.kex` files built before the swap. Dropping it makes
