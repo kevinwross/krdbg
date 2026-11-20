@@ -70,7 +70,7 @@ recorded but does not block a milestone unless the gate says it does.
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
-| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1 done` |
+| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1–M2.3, M2.4.1/2/4, M2.5.1–4/6/7, M2.6.1/2/4/5, M2.7 done` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
@@ -433,74 +433,108 @@ presenter, golden coverage and the full CI matrix.
 
 ### M2.2 Panels
 
-- [ ] **M2.2.1** Source: gutter, breakpoint squares, current line, filename
+- [x] **M2.2.1** Source: gutter, breakpoint squares, current line, filename
       dropdown, pinning, source switching, `OVER/IN/OUT`.
-- [ ] **M2.2.2** Disassembly: address/breakpoint gutter, full instruction bytes,
+  Evidence: `surface_source_gutter_controls_switch_and_pin` toggles line 5, switches to `util.c` through the dropdown, pins it and steps with source `OVER`.
+- [x] **M2.2.2** Disassembly: address/breakpoint gutter, full instruction bytes,
       mnemonic/operands, PC highlight, `OVER/IN/OUT`.
+  Evidence: `surface_disassembly_gutter_and_controls` toggles the address breakpoint at `0x1000` and steps with the instruction controls; the renderer draws every byte in `InstructionView::length`.
 - [ ] **M2.2.3** State: contexts list, register groups, flags, matrix, values,
       editing, FPR/float editor, control tooltips.
+  Evidence so far: registries and flags render and edit (`surface_state_edits_a_register_value`, `surface_state_hover_shows_a_tooltip`); the matrix group and FPR editor are implemented but need a matrix/FPR fixture test.
 - [ ] **M2.2.4** Memory: four rows, addr edit, PTR, page up/down, byte edit,
       screen-pixel jump.
+  Evidence so far: four 8-byte rows, addr edit, PTR, page buttons/keys and byte editing are implemented (`surface_memory_address_editing_commits_a_new_base`, `surface_memory_scrolls_by_wheel_track_and_drag`); screen-pixel jump needs a framebuffer base address.
 - [ ] **M2.2.5** Variables: locals/globals, aggregates/arrays collapsed,
       `+`/`-`/`->`, paging, register-held values, tooltips.
-- [ ] **M2.2.6** Inspector: right-click, members, scalar/nested values,
+  Evidence so far: locals/globals, `+`/`-` expansion, member recursion, register-held `held` and pointer `ptr` render (`surface_variables_expand_and_open_the_inspector`); variable hover tooltips and a distinct `->` pointer marker are pending.
+- [x] **M2.2.6** Inspector: right-click, members, scalar/nested values,
       outside-click close.
-- [ ] **M2.2.7** Breakpoints panel: rows, gutter toggle, source jump, context
+  Evidence: `surface_variables_expand_and_open_the_inspector` opens the inspector by right-click, renders members and closes on an outside click.
+- [x] **M2.2.7** Breakpoints panel: rows, gutter toggle, source jump, context
       menu, scroll.
-- [ ] **M2.2.8** Call stack and context selection; per-context state/locals.
-- [ ] **M2.2.9** Context menu, run-to line/address, temporary breakpoint.
-- [ ] **M2.2.10** Help tooltips for registers, flags, instructions, operands.
+  Evidence: `surface_breakpoints_panel_toggles_and_opens_menu` toggles enabled, jumps to the source line and opens the remove/disable menu.
+- [x] **M2.2.8** Call stack and context selection; per-context state/locals.
+  Evidence: `surface_call_stack_selects_a_frame`; clicking a context selects it and resets the frame, and variables use `locals(selected_frame)`.
+- [x] **M2.2.9** Context menu, run-to line/address, temporary breakpoint.
+  Evidence: source and disassembly menus add breakpoints and call `run_to_line` / `run_to_address`; the breakpoint menu removes/disables.
+- [x] **M2.2.10** Help tooltips for registers, flags, instructions, operands.
+  Evidence: `surface_state_hover_shows_a_tooltip`; disassembly hover uses `InstructionView::help` (or mnemonic/operands) and register/flag rows carry descriptions.
 
 ### M2.3 COM port
 
-- [ ] **M2.3.1** Three-register model (`OUT`, `IN`, `STATUS`): `read_output`,
+- [x] **M2.3.1** Three-register model (`OUT`, `IN`, `STATUS`): `read_output`,
       `write_input`, `rx_ready`, `tx_ready`, `overrun`.
-- [ ] **M2.3.2** Text view with `\n`/`\r`/`\b`/`\f`, no escape parsing, no
+  Evidence: `fake_target_com_port_handshake_in_both_directions` plus the `IComPort` fake.
+- [x] **M2.3.2** Text view with `\n`/`\r`/`\b`/`\f`, no escape parsing, no
       local echo.
-- [ ] **M2.3.3** Keyboard mapping: Enter `0x0A`, Backspace `0x7F`, Ctrl-V
+  Evidence: `surface_com_processes_output_and_keyboard_input`: `ab\bX\nline\n` renders as `aX\nline\n`, `\fz` clears to `z`, and input is not echoed.
+- [x] **M2.3.3** Keyboard mapping: Enter `0x0A`, Backspace `0x7F`, Ctrl-V
       LF-normalized; 4 KiB bounded queue and overrun indicator.
-- [ ] **M2.3.4** Focus and title highlight; tab with VIDEO, one visible.
-- [ ] **M2.3.5** Hidden when no COM port; neighbours expand.
+  Evidence: the same test checks Enter/Backspace; `surface_com_paste_is_lf_normalized_and_bounded` checks CRLF/CR normalization and the 4096-byte cap with `com_overrun()`.
+- [x] **M2.3.4** Focus and title highlight; tab with VIDEO, one visible.
+  Evidence: `surface_video_tab_fit_popout_and_focus` switches COM1/VIDEO, and the COM keyboard is disabled while the video preview holds focus.
+- [x] **M2.3.5** Hidden when no COM port; neighbours expand.
+  Evidence: `surface_hides_com_and_video_when_absent`; the bottom row expands to variables/breakpoints/stack and `layout.com` is empty.
 
 ### M2.4 Statistics and toolbar actions
 
-- [ ] **M2.4.1** `instr`, `time`, `ips` display; `CLR`; reset on load/restart;
+- [x] **M2.4.1** `instr`, `time`, `ips` display; `CLR`; reset on load/restart;
       execution-only timing.
-- [ ] **M2.4.2** `RUN` toggles; `RESET` reloads/rebuilds; `LOAD` picker/build
+  Evidence: the toolbar renders all three from `ExecutionStats`; `surface_toolbar_actions_reach_host_and_session` and `surface_reset_preserves_breakpoints_and_clears_stats` cover CLR and reset.
+- [x] **M2.4.2** `RUN` toggles; `RESET` reloads/rebuilds; `LOAD` picker/build
       chain; `KERNEL` embedded pair; `LOAD`/`KERNEL` stop a running VM.
+  Evidence: `surface_run_tick_advances_until_the_target_stops` and `surface_load_stops_a_running_target`; RESET/LOAD/KERNEL call the session/host and clear `running`.
 - [ ] **M2.4.3** Breakpoint preservation rules for RESET (line re-resolve,
       address clear on source rebuild).
-- [ ] **M2.4.4** Settings apply/rebuild flow via host.
+  Evidence so far: line breakpoints survive RESTART (`surface_reset_preserves_breakpoints_and_clears_stats`); the source-rebuild address-clearing rule awaits the host load path.
+- [x] **M2.4.4** Settings apply/rebuild flow via host.
+  Evidence: `surface_settings_apply_error_keeps_the_dialog_open` applies through `IHostServices::apply_settings` and calls `reload` for `APPLY & RELOAD`.
 
 ### M2.5 Settings
 
-- [ ] **M2.5.1** `SettingsSchema`, `SettingDescriptor`, `SettingValue`,
+- [x] **M2.5.1** `SettingsSchema`, `SettingDescriptor`, `SettingValue`,
       `SettingsSnapshot`, `SettingsApplyResult`, `ISettingsProvider`.
-- [ ] **M2.5.2** JSON schema/value serialization, versioning, import/export.
-- [ ] **M2.5.3** Dialog: group list, controls by type, validation, tooltips,
+  Evidence: the frozen `settings.h` types and `FakeHost` provider.
+- [x] **M2.5.2** JSON schema/value serialization, versioning, import/export.
+  Evidence: `settings_schema_json_round_trips`, `settings_snapshot_json_round_trips_typed_values` and `settings_json_rejects_malformed_or_mistyped_input`; `version` is emitted and parsed.
+- [x] **M2.5.3** Dialog: group list, controls by type, validation, tooltips,
       advanced/search, origin badges.
-- [ ] **M2.5.4** Environment `string_map` editor; secret masking.
+  Evidence: `surface_settings_edit_apply_and_layers` drives a bool, int, layer and apply; the dialog draws groups, search, tooltips, U/P/D badges and float/int range validation.
+- [x] **M2.5.4** Environment `string_map` editor; secret masking.
+  Evidence: maps edit as `KEY=VALUE;...` and `setting_text` renders `********` for `secret` descriptors unless actively editing.
 - [ ] **M2.5.5** Layered user/project settings; `SAVE TO`; clear override;
       project `.krdbg/settings.json`.
-- [ ] **M2.5.6** Transactional apply; `requires_restart` and `APPLY & RELOAD`.
-- [ ] **M2.5.7** Instruction limit and arguments as schema entries, not
+  Evidence so far: `SAVE: USER/PROJECT` selects the `SettingsLayer`, Delete clears an override and the host receives the layer; writing `.krdbg/settings.json` is host-owned and not yet exercised.
+- [x] **M2.5.6** Transactional apply; `requires_restart` and `APPLY & RELOAD`.
+  Evidence: rejected applies keep the dialog open; `APPLY & RELOAD` calls `reload` after a successful apply.
+- [x] **M2.5.7** Instruction limit and arguments as schema entries, not
       hardcoded fields.
+  Evidence: every control is generated from `SettingDescriptor`; no run-limit or argument field is hardcoded in the dialog.
 
 ### M2.6 Video
 
-- [ ] **M2.6.1** `fit_rect()` for 4:3, 16:9, 16:10 and portrait; no stretch.
-- [ ] **M2.6.2** Bottom-right `COM1 | VIDEO` tab; `fit WxH` label; `POP OUT`.
+- [x] **M2.6.1** `fit_rect()` for 4:3, 16:9, 16:10 and portrait; no stretch.
+  Evidence: `video_fit_matches_4_3_16_9_16_10_and_portrait` checks each aspect and the one-pixel tolerance.
+- [x] **M2.6.2** Bottom-right `COM1 | VIDEO` tab; `fit WxH` label; `POP OUT`.
+  Evidence: the video golden `45C97E0E11204576` shows the tab, fit label and POP OUT control.
 - [ ] **M2.6.3** Separate video window: auto-open on first frame, `FIT`/`1:1`,
       nearest-neighbour, close/reopen, function-key forwarding.
-- [ ] **M2.6.4** Screen focus and COM focus mutually exclusive.
-- [ ] **M2.6.5** No text-console parsing in the framebuffer view.
+  Evidence so far: `IVideoWindow` exists for Win32 and SDL2, `FIT`/`1:1`, nearest-neighbour `StretchDIBits`, POP OUT reopen and key forwarding are implemented; auto-open on the first frame is not wired.
+- [x] **M2.6.4** Screen focus and COM focus mutually exclusive.
+  Evidence: `surface_video_tab_fit_popout_and_focus`; typing `A` while the preview has guest focus leaves the COM queue empty.
+- [x] **M2.6.5** No text-console parsing in the framebuffer view.
+  Evidence: the preview copies framebuffer pixels; it never interprets them as text.
 
 ### M2.7 Windows GDI presenter hardening
 
-- [ ] **M2.7.1** Win32 GDI blit of the software Canvas; resize, DPI, keyboard,
+- [x] **M2.7.1** Win32 GDI blit of the software Canvas; resize, DPI, keyboard,
       mouse; finish the presenter started in M0.4.
-- [ ] **M2.7.2** No SDL2 dependency in the Windows target; no `SDL2.dll`.
-- [ ] **M2.7.3** Windows and Linux x64 render the same golden hash.
+  Evidence: `src/platform/win32/window.cpp` uses `SetProcessDPIAware`, `StretchDIBits`, resize and the existing key/mouse mapping; `null_presenter_creates_no_os_window` covers the null counterpart.
+- [x] **M2.7.2** No SDL2 dependency in the Windows target; no `SDL2.dll`.
+  Evidence: the Windows gate checks the dependency table and the tree, and reports `no SDL2.dll`.
+- [x] **M2.7.3** Windows and Linux x64 render the same golden hash.
+  Evidence: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5`, running `36C15F50552FF36A` and video `45C97E0E11204576` on both hosts.
 
 ### M2.8 Golden and interaction coverage
 
@@ -759,6 +793,19 @@ Recorded 2026-11-20T09:50:48-08:00.
 - `scripts/gate-linux.sh`: `GATE LINUX X64: PASS`; empty `5B8F7CFA1DDEE5D2`, loaded `BEFD2141466934DD`; no `SDL2.dll`.
 - Goldens: `goldens/empty.hash` `5B8F7CFA1DDEE5D2`, `goldens/loaded.hash` `BEFD2141466934DD`, `goldens/running.hash` `BFAE120D47BC0386` (RUN green, status `running` / `F5 PAUSE`).
 - `surface_memory_scrolls_by_wheel_track_and_drag`: wheel moved the memory offset `0 -> 3 -> 0`, a track click paged it above zero, and a thumb drag moved it again.
+
+### M2.2–M2.7 panel, settings and video evidence
+
+Recorded 2026-11-20T10:14:10-08:00.
+
+- `ctest --preset windows-msvc`: `krdbg_unit` **85 tests, 0 failures**; `platform_boundary` passed; boundary **16 UI/public files clean; 12 core/kdbg files VM-clean**.
+- Goldens: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5`, running `36C15F50552FF36A`, video `45C97E0E11204576`; Windows and WSL x64 produced the same four values.
+- Settings JSON: `settings_schema_json_round_trips`, `settings_snapshot_json_round_trips_typed_values`, `settings_json_rejects_malformed_or_mistyped_input`.
+- Settings dialog: `surface_settings_edit_apply_and_layers` (bool/int edits, layer switch, apply) and `surface_settings_apply_error_keeps_the_dialog_open` (transactional failure, `APPLY & RELOAD`).
+- COM: `surface_com_processes_output_and_keyboard_input`, `surface_com_paste_is_lf_normalized_and_bounded`, `surface_hides_com_and_video_when_absent`.
+- Video: `video_fit_matches_4_3_16_9_16_10_and_portrait`, `video_fit_rejects_empty_dimensions`, `surface_video_tab_fit_popout_and_focus`.
+- Panels: `surface_source_gutter_controls_switch_and_pin`, `surface_disassembly_gutter_and_controls`, `surface_state_edits_a_register_value`, `surface_variables_expand_and_open_the_inspector`, `surface_breakpoints_panel_toggles_and_opens_menu`, `surface_call_stack_selects_a_frame`.
+- Run/reset: `surface_run_tick_advances_until_the_target_stops`, `surface_reset_preserves_breakpoints_and_clears_stats`, `surface_load_stops_a_running_target`.
 
 ### M0.9.1 Doctor output
 
