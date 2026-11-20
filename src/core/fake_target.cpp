@@ -163,6 +163,7 @@ FakeTarget::FakeTarget() : memory_(static_cast<std::size_t>(kMemorySize), 0) {
         RegisterDef{"fp", "FP", 32, ValueFormat::Hex, RegisterRole::Fp, true},
         RegisterDef{"lr", "LR", 32, ValueFormat::Hex, RegisterRole::Other, true},
         RegisterDef{"ticks", "TICKS", 64, ValueFormat::Unsigned, RegisterRole::Other, false},
+        RegisterDef{"acc", "ACC", 64, ValueFormat::Unsigned, RegisterRole::Other, true},
     };
     layout_.groups.push_back(std::move(core));
 
@@ -306,6 +307,7 @@ bool FakeTarget::reset(std::string& error) {
         context.sp = frame_base_;
         context.fp = frame_base_;
         context.lr = entry_;
+        context.acc = 0;
         context.registers.fill(0);
     }
     flags_ = 0;
@@ -335,6 +337,7 @@ bool FakeTarget::read_value(std::string_view group, int index,
         case 2: value = ScalarValue{context.fp, 32}; return true;
         case 3: value = ScalarValue{context.lr, 32}; return true;
         case 4: value = ScalarValue{instructions_, 64}; return true;
+        case 5: value = ScalarValue{context.acc, 64}; return true;
         default: return false;
         }
     }
@@ -364,6 +367,7 @@ bool FakeTarget::write_value(std::string_view group, int index, ScalarValue valu
         case 1: context.sp = value.bits; return true;
         case 2: context.fp = value.bits; return true;
         case 3: context.lr = value.bits; return true;
+        case 5: context.acc = value.bits; return true;
         default: return false;
         }
     }

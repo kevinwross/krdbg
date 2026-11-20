@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "debug_info_util.h"
+
 namespace krdbg {
 
 struct DebugSession::Impl {
@@ -76,6 +78,18 @@ IComPort* DebugSession::com_port() {
 
 const IVideoSource* DebugSession::video() const {
     return impl_->target != nullptr ? impl_->target->video() : nullptr;
+}
+
+const LineInfo* DebugSession::line_at(std::uint64_t pc) const {
+    return detail::find_line(info(), pc);
+}
+
+const FunctionInfo* DebugSession::function_at(std::uint64_t pc) const {
+    return detail::find_function(info(), pc);
+}
+
+const SourceFile* DebugSession::source_for(std::string_view path) const {
+    return detail::find_source(info(), path);
 }
 
 } // namespace krdbg

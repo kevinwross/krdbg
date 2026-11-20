@@ -114,6 +114,7 @@ private:
         std::uint64_t sp = 0;
         std::uint64_t fp = 0;
         std::uint64_t lr = 0;
+        std::uint64_t acc = 0;
         std::array<std::uint64_t, 8> registers{};
     };
 

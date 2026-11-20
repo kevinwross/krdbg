@@ -51,6 +51,8 @@ endif()
 # VM header or a platform header.
 add_library(krdbg_core STATIC
     src/core/session.cpp
+    src/core/debug_info.cpp
+    src/core/variables.cpp
     src/core/fake_target.cpp
     src/core/fake_debug_info.cpp
 )
@@ -124,6 +126,9 @@ if(KRDBG_BUILD_TESTS)
         tests/test_canvas.cpp
         tests/test_fake_target.cpp
         tests/test_debug_info.cpp
+        tests/test_lookup.cpp
+        tests/test_merge.cpp
+        tests/test_variables.cpp
         tests/test_surface.cpp
         tests/test_golden.cpp
     )

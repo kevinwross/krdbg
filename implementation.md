@@ -69,7 +69,7 @@ recorded but does not block a milestone unless the gate says it does.
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[x] done` |
-| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1` |
+| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1 done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
@@ -310,16 +310,21 @@ dependence on VM types.
 
 ### M1.1 Debug model
 
-- [ ] **M1.1.1** `DebugInfo`: sources, lines, functions, symbols, variables,
+- [x] **M1.1.1** `DebugInfo`: sources, lines, functions, symbols, variables,
       types, members, locations, build metadata; `TypeId` references; `u64`
       addresses.
-- [ ] **M1.1.2** `merge_debug_info` for kernel/BIOS payloads; source-id
+  Evidence: `include/krdbg/debug_info.h` carries the full model; `test_merge`, `test_lookup` and `test_variables` exercise `TypeId` references, `u64` addresses and primary build metadata.
+- [x] **M1.1.2** `merge_debug_info` for kernel/BIOS payloads; source-id
       renumbering.
-- [ ] **M1.1.3** Lookup: line at PC clamped to function, function at PC, source
+  Evidence: `src/core/debug_info.cpp` renumbers both payloads into one contiguous source namespace, sorts functions and lines and remaps their indexes, offsets type ids and every type reference, and keeps the primary metadata; `test_merge` has three cases.
+- [x] **M1.1.3** Lookup: line at PC clamped to function, function at PC, source
       by path, type by name/id.
-- [ ] **M1.1.4** Value/location model: frame offset, register, absolute;
+  Evidence: `find_line`, `find_function`, `find_source` and `find_type` are in `src/core/debug_info.cpp`; the session methods delegate; `test_lookup` covers the clamp, path/name/suffix and type-by-name/id.
+- [x] **M1.1.4** Value/location model: frame offset, register, absolute;
       register-held aggregate expansion.
-- [ ] **M1.1.5** Unit tests for lookup and merge.
+  Evidence: `src/core/variables.cpp` reads frame, register and absolute storage, formats scalars, and expands members; a 64-bit register-held `Point` expands to `x=1`, `y=2` in `test_variables`.
+- [x] **M1.1.5** Unit tests for lookup and merge.
+  Evidence: eleven new cases (three lookup, three merge, five variables) — `krdbg_unit` reports 36 tests, 0 failures on Windows Debug/Release and WSL x64.
 
 ### M1.2 KDBG reader
 
