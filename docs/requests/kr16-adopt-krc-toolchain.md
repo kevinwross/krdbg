@@ -169,14 +169,17 @@ open questions the plan was proposed with.
    variadic function implicitly, and krc's IR verifier rejects that; the test
    gains the prototype. No compiler change.
 5. **The 16-bit size wall is measured before it is planned around.** Decided
-   2026-11-20T13:04:54-08:00. krc's runtime alone is 36,912 B of `.text`,
-   against a built-in whole image of 27,626 B and a 64 KiB address space. 2.4
-   records the krc-built image size for the largest failing program and whether
-   it runs; a runtime diet is a separate task if it does not.
+   2026-11-20T13:04:54-08:00, corrected by measurement at `7d005d5`. The shipped
+   `resources/libc.s` assembles to 1,698 B; the wall is krc's compiled output —
+   `fileio.c` 35,158 B and `C-for-U.c` 48,972 B, 86,172 B against 65,536. So the
+   runtime is not the lever and a runtime diet recovers little; codegen density
+   is, and it is KRCompiler 4.17, tracked and not started.
 
-Not yet decided, and needed before stage B: whether the `.kdbg` reader also keeps
-the `.debug_*` branch for `.kex` files built before the swap. Dropping it makes
-those images undebuggable; keeping it costs one branch the reader already has.
+Not yet decided: whether C-for-U counts as over budget for stage A while
+KRCompiler 4.17 is outstanding — the five `cforu` checks stay red under krc until
+that is answered. Also needed before stage B: whether the `.kdbg` reader keeps the
+`.debug_*` branch for `.kex` files built before the swap. Dropping it makes those
+images undebuggable; keeping it costs one branch the reader already has.
 
 ## 9. Approval
 

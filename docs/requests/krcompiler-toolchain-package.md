@@ -68,6 +68,9 @@ consumers, then a third (krdbg) for the debug reader.
     wrappers that lower to `SYS #n` under kr16's own compiler.
 13. The `krc` and `krld` executables installed with the package, so a host runs
     the build chain from an install rather than a build tree.
+14. The 16-bit size work: kr16's line-table attribution, function sections with
+    `--gc-sections`, a fileio diet, and the codegen-density gap tracked as its own
+    item.
 
 **Out of scope**
 
@@ -171,6 +174,9 @@ record type.
 | 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.k32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
 | 4.13 | KR16 `__host_call` intrinsic | `kr16/resources/fileio.c` and the libc wrappers compile under krc, and a krc-built `.kex` links the shipped libc and passes the fileio tests |
 | 4.14 | Install `krc` and `krld` | a scratch prefix contains both executables, and a host builds a `.c` file through the installed package with no KRCompiler build tree on the path |
+| 4.15 | KR16 line-table attribution | `kr16.unit`'s line assertion passes without being relaxed; a statement on line 3 is reported on line 3 |
+| 4.16 | Function sections and GC | `krld --gc-sections` drops unreferenced functions from a kr16 image; trimming kr16's `fileio.c` is a separate kr16 decision |
+| 4.17 | 16-bit codegen density (tracked, not started) | the gap between krc and the built-in compiler on the kr16 corpus is measured per program and tracked |
 
 Items 4.2 and 4.3 are the review boundary: 4.2 proves the facade is a pure
 refactor, 4.3 proves it is usable from outside.
@@ -195,8 +201,9 @@ ctest --preset linux-gcc-debug --output-on-failure
 Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
 comparison from 4.9, the KR16 `.kex` decode from 4.10, the `libc.s` assembly
 parity from 4.11, the installed-package consumer build from 4.12, the krc-built
-KR16 runtime from 4.13, and the installed tools from 4.14. Every check must be run
-and its real output recorded; nothing is claimed from this plan.
+KR16 runtime from 4.13, the installed tools from 4.14, and the kr16 line-table
+row and C-for-U size from 4.15/4.16. Every check must be run and its real output
+recorded; nothing is claimed from this plan.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
 it is not re-run here.
@@ -272,6 +279,16 @@ open questions the plan was proposed with.
    only, so a host that runs the build chain must point at a KRCompiler build
    tree. The package installs the executables under `bin/`, which is what
    krdbg's M5 host needs to build source reproducibly.
+10. **The 16-bit wall is codegen density, not the runtime.** Decided
+    2026-11-20T14:10:31-08:00. Measured at `7d005d5`: the shipped `libc.s`
+    assembles to 1,698 B, `fileio.c` compiles to 35,158 B and `C-for-U.c` to
+    48,972 B, for 86,172 B against a 65,536 B space — over by 20,636 B, with no
+    image produced. Function sections with GC and the fileio diet recover roughly
+    10 KB, so they are worth doing (4.16) but cannot close it; the remaining gap
+    is krc's 16-bit codegen density, tracked as 4.17 and not started. Whether
+    C-for-U stays over budget for stage A is the owner's call; the line-table
+    assertion stays at line 3 meanwhile, which 4.15 fixes in the compiler rather
+    than in the test.
 
 ## 9. Approval
 
@@ -281,6 +298,7 @@ Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
 it, `.kdbg` in `.kex` with its base field, the KR16 debug-info emission that makes
 a `.kex` decodable, the KR16 assembler directives, the installed sysroot and
-runtime, the KR16 `__host_call` intrinsic, and the installed `krc` and `krld`
-executables. It does not authorise KDBG v1.1, removing the `.debug_info` bridge,
-codegen changes, or any edit in KR32, kr16 or krdbg.
+runtime, the KR16 `__host_call` intrinsic, the installed `krc` and `krld`
+executables, the KR16 line-table fix, and function sections with GC. It does not
+authorise KDBG v1.1, removing the `.debug_info` bridge, codegen-density work
+(4.17), or any edit in KR32, kr16 or krdbg.
