@@ -535,7 +535,17 @@ public:
     std::vector<VariableView> locals(int frame = 0) const;
     std::vector<VariableView> globals() const;
     std::vector<MemberView> members(const VariableView&) const;
+    std::vector<MemberView> members(const MemberView&) const;
     bool read_memory(std::uint64_t address, std::span<std::uint8_t>) const;
+    bool write_memory(std::uint64_t address, std::span<const std::uint8_t>);
+    bool read_value(std::string_view group, int index, ScalarValue&) const;
+    bool write_value(std::string_view group, int index, ScalarValue);
+    bool read_flags(std::uint64_t& bits) const;
+    bool write_flags(std::uint64_t bits);
+    bool read_matrix(std::string_view group, int row, int column, float&) const;
+    bool write_matrix(std::string_view group, int row, int column, float);
+    bool disassemble(std::uint64_t address, InstructionView&) const;
+    std::uint64_t pc() const;   // selected context
     IComPort* com_port();
     const IVideoSource* video() const;
 
@@ -1238,9 +1248,14 @@ bottom-right, tabbed with the COM port, and to a separate video window.
   it and re-runs the layout; the Win32 and SDL2 presenters enforce the same
   client minimum.
 - Interaction tests read the layout rectangles, the focused panel, the running
-  flag, popup/editing state and per-panel scroll offsets from the surface. These
-  are read-only observability hooks, not a second host integration API; a VM
-  host still only constructs the surface and calls render/handle_event.
+  flag, popup/editing/inspector/tooltip/settings state, the selected frame, the
+  COM text and queue counters, and per-panel scroll offsets from the surface.
+  These are read-only observability hooks, not a second host integration API; a
+  VM host still only constructs the surface and calls render/handle_event.
+- The host calls `DebuggerSurface::tick()` once per frame. It runs one bounded
+  execution slice while `RUN` is active and stops on a breakpoint, halt, fault
+  or budget return that is not `Budget`; headless renders and goldens do not
+  tick, so they capture the paused state deterministically.
 - Source pane: filename dropdown with source list, `OVER IN OUT`, gutter with
   line numbers and breakpoint squares. It stays visible while the video runs.
 - Disassembly: address + breakpoint gutter, `HEX` column with the full

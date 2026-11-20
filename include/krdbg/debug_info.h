@@ -144,6 +144,7 @@ struct MemberView {
     TypeId type = kInvalidType;
     std::string value;
     bool has_children = false;
+    std::vector<std::uint8_t> storage;  // this member's bytes, for nested expansion
 };
 
 } // namespace krdbg

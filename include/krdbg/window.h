@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "krdbg/canvas.h"
+#include "krdbg/target.h"
 
 namespace krdbg::platform {
 
@@ -76,8 +77,22 @@ public:
     virtual void invalidate() = 0;
 };
 
+// A separate top-level window that presents the guest framebuffer at native
+// size or aspect-preserving fit. The surface owns it and forwards function keys.
+class IVideoWindow {
+public:
+    virtual ~IVideoWindow() = default;
+    virtual bool create(std::string_view title, int width, int height) = 0;
+    virtual void destroy() = 0;
+    [[nodiscard]] virtual bool valid() const = 0;
+    virtual bool poll(Event& event) = 0;
+    virtual void present(const FramebufferView& frame, bool fit) = 0;
+    virtual void set_title(std::string_view title) = 0;
+};
+
 // The platform factory. Exactly one platform implementation is linked.
 [[nodiscard]] std::unique_ptr<IWindow> create_window();
+[[nodiscard]] std::unique_ptr<IVideoWindow> create_video_window();
 
 // M0 stubs: the host wires the picker and the clipboard when LOAD and the COM
 // panel land (M5 and M2).

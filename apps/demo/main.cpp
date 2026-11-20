@@ -52,6 +52,7 @@ struct Options {
     bool headless = false;
     bool loaded = false;
     bool running = false;
+    bool video = false;
     int frames = -1;
     std::string screenshot;
 };
@@ -59,7 +60,7 @@ struct Options {
 void print_usage() {
     std::printf(
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
-        "[--state empty|loaded|running] [--frames <n>]\n");
+        "[--state empty|loaded|running|video] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -88,6 +89,9 @@ bool parse_options(int argc, char** argv, Options& options) {
             } else if (state == "running") {
                 options.loaded = true;
                 options.running = true;
+            } else if (state == "video") {
+                options.loaded = true;
+                options.video = true;
             } else {
                 std::fprintf(stderr, "krdbg: unknown state '%.*s'\n",
                              static_cast<int>(state.size()), state.data());
@@ -128,6 +132,14 @@ int main(int argc, char** argv) {
         krdbg::platform::Event event;
         event.kind = krdbg::platform::Event::Kind::KeyDown;
         event.key = krdbg::platform::key::F5;
+        surface.handle_event(event);
+    }
+    if (options.video) {
+        const krdbg::Rect video = surface.layout().toolbar_video;
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseDown;
+        event.x = video.x + video.width / 2;
+        event.y = video.y + video.height / 2;
         surface.handle_event(event);
     }
 
@@ -173,6 +185,7 @@ int main(int argc, char** argv) {
             canvas_height = surface.height();
             canvas = std::make_unique<krdbg::Canvas>(canvas_width, canvas_height);
         }
+        surface.tick();
         surface.render(*canvas);
         window->present(*canvas);
         ++rendered;

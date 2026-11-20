@@ -52,6 +52,7 @@ endif()
 add_library(krdbg_core STATIC
     src/core/session.cpp
     src/core/debug_info.cpp
+    src/core/settings_json.cpp
     src/core/variables.cpp
     src/core/fake_target.cpp
     src/core/fake_debug_info.cpp
@@ -144,8 +145,10 @@ if(KRDBG_BUILD_TESTS)
         tests/test_variables.cpp
         tests/test_kdbg.cpp
         tests/test_session.cpp
+        tests/test_settings_json.cpp
         tests/test_scroll.cpp
         tests/test_surface.cpp
+        tests/test_video_fit.cpp
         tests/test_golden.cpp
     )
     target_link_libraries(krdbg_tests PRIVATE
@@ -162,6 +165,8 @@ if(KRDBG_BUILD_TESTS)
     else()
         add_test(NAME krdbg_unit COMMAND krdbg_tests)
     endif()
+    set_tests_properties(krdbg_unit PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 # The boundary check runs on every build and as its own CTest entry, so G0.8 can

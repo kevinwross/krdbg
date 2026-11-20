@@ -64,7 +64,7 @@ public:
     static constexpr std::uint64_t kMemoryBase = 0x1000;
     static constexpr std::uint64_t kMemorySize = 0x10000;
 
-    FakeTarget();
+    FakeTarget(bool has_com = true, bool has_video = true);
 
     // Test and demo configuration.
     void add_context(std::string name);
@@ -105,8 +105,10 @@ public:
     bool disassemble(std::uint64_t address, InstructionView& out) const override;
     std::vector<RawFrame> unwind() const override;
 
-    IComPort* com_port() override { return &com_; }
-    const IVideoSource* video() const override { return &video_; }
+    IComPort* com_port() override { return has_com_ ? &com_ : nullptr; }
+    const IVideoSource* video() const override {
+        return has_video_ ? &video_ : nullptr;
+    }
 
 private:
     struct Context {
@@ -126,6 +128,8 @@ private:
     void initialize_memory();
 
     TargetLayout layout_;
+    bool has_com_ = true;
+    bool has_video_ = true;
     std::vector<Context> contexts_;
     std::uint32_t current_id_ = 1;
     std::uint64_t flags_ = 0;

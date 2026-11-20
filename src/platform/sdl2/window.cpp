@@ -1,9 +1,11 @@
 #include "krdbg/window.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
@@ -238,10 +240,129 @@ void SdlWindow::set_title(std::string_view title) {
     }
 }
 
+class SdlVideoWindow final : public IVideoWindow {
+public:
+    bool create(std::string_view title, int width, int height) override {
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+            return false;
+        }
+        window_ = SDL_CreateWindow(std::string(title).c_str(),
+                                   SDL_WINDOWPOS_CENTERED,
+                                   SDL_WINDOWPOS_CENTERED, width, height,
+                                   SDL_WINDOW_RESIZABLE);
+        if (window_ == nullptr) {
+            return false;
+        }
+        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+        if (renderer_ == nullptr) {
+            renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+        }
+        window_id_ = SDL_GetWindowID(window_);
+        return renderer_ != nullptr;
+    }
+
+    void destroy() override {
+        if (texture_ != nullptr) {
+            SDL_DestroyTexture(texture_);
+            texture_ = nullptr;
+        }
+        if (renderer_ != nullptr) {
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+        }
+        if (window_ != nullptr) {
+            SDL_DestroyWindow(window_);
+            window_ = nullptr;
+        }
+        window_id_ = 0;
+    }
+
+    [[nodiscard]] bool valid() const override { return window_ != nullptr; }
+
+    bool poll(Event& event) override {
+        SDL_Event raw{};
+        while (SDL_PollEvent(&raw) != 0) {
+            if (raw.type == SDL_QUIT) {
+                event.kind = Event::Kind::Quit;
+                return true;
+            }
+            if (raw.type == SDL_WINDOWEVENT &&
+                raw.window.windowID == window_id_ &&
+                raw.window.event == SDL_WINDOWEVENT_CLOSE) {
+                event.kind = Event::Kind::Quit;
+                return true;
+            }
+            if (raw.type == SDL_KEYDOWN && window_ != nullptr &&
+                SDL_GetKeyboardFocus() == window_) {
+                event.kind = Event::Kind::KeyDown;
+                event.key = map_key(raw.key.keysym.sym);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void present(const FramebufferView& frame, bool fit) override {
+        if (renderer_ == nullptr || frame.width <= 0 || frame.height <= 0) {
+            return;
+        }
+        if (texture_ == nullptr || texture_width_ != frame.width ||
+            texture_height_ != frame.height) {
+            if (texture_ != nullptr) {
+                SDL_DestroyTexture(texture_);
+            }
+            texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888,
+                                         SDL_TEXTUREACCESS_STREAMING, frame.width,
+                                         frame.height);
+            texture_width_ = frame.width;
+            texture_height_ = frame.height;
+        }
+        if (texture_ == nullptr) {
+            return;
+        }
+        SDL_UpdateTexture(texture_, nullptr, frame.pixels.data(), frame.stride);
+        int output_width = 0;
+        int output_height = 0;
+        SDL_GetRendererOutputSize(renderer_, &output_width, &output_height);
+        SDL_Rect destination{0, 0, frame.width, frame.height};
+        if (fit) {
+            const double scale = std::min(
+                static_cast<double>(output_width) / frame.width,
+                static_cast<double>(output_height) / frame.height);
+            destination.w = std::max(1, static_cast<int>(frame.width * scale));
+            destination.h = std::max(1, static_cast<int>(frame.height * scale));
+            destination.x = (output_width - destination.w) / 2;
+            destination.y = (output_height - destination.h) / 2;
+        }
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderClear(renderer_);
+        SDL_RenderCopy(renderer_, texture_, nullptr, &destination);
+        SDL_RenderPresent(renderer_);
+    }
+
+    void set_title(std::string_view title) override {
+        if (window_ != nullptr) {
+            SDL_SetWindowTitle(window_, std::string(title).c_str());
+        }
+    }
+
+private:
+    SDL_Window* window_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
+    SDL_Texture* texture_ = nullptr;
+    std::uint32_t window_id_ = 0;
+    int texture_width_ = 0;
+    int texture_height_ = 0;
+};
+
 } // namespace
 
 std::unique_ptr<IWindow> create_window() {
     return std::make_unique<SdlWindow>();
+}
+
+std::unique_ptr<IVideoWindow> create_video_window() {
+    return std::make_unique<SdlVideoWindow>();
 }
 
 bool open_file_dialog(std::string& path) {

@@ -172,6 +172,7 @@ std::vector<MemberView> expand_members(const DebugInfo& info, TypeId type_id,
             continue;
         }
         const auto member_bytes = storage.subspan(member.offset, size);
+        view.storage.assign(member_bytes.begin(), member_bytes.end());
         if (member_type != nullptr && member_type->kind == TypeKind::Array) {
             view.value = "[" + std::to_string(member_type->element_count) + "]";
             view.has_children = true;

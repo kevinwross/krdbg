@@ -104,7 +104,17 @@ public:
     std::vector<VariableView> locals(int frame = 0) const;
     std::vector<VariableView> globals() const;
     std::vector<MemberView> members(const VariableView& variable) const;
+    std::vector<MemberView> members(const MemberView& member) const;
     bool read_memory(std::uint64_t address, std::span<std::uint8_t> out) const;
+    bool write_memory(std::uint64_t address, std::span<const std::uint8_t> in);
+    bool read_value(std::string_view group, int index, ScalarValue& value) const;
+    bool write_value(std::string_view group, int index, ScalarValue value);
+    bool read_flags(std::uint64_t& bits) const;
+    bool write_flags(std::uint64_t bits);
+    bool read_matrix(std::string_view group, int row, int column, float& value) const;
+    bool write_matrix(std::string_view group, int row, int column, float value);
+    bool disassemble(std::uint64_t address, InstructionView& out) const;
+    [[nodiscard]] std::uint64_t pc() const;
     IComPort* com_port();
     const IVideoSource* video() const;
 

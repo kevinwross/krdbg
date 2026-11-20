@@ -37,10 +37,36 @@ private:
     int height_ = 0;
 };
 
+class NullVideoWindow final : public IVideoWindow {
+public:
+    bool create(std::string_view title, int width, int height) override {
+        title_ = std::string(title);
+        width_ = width;
+        height_ = height;
+        created_ = true;
+        return true;
+    }
+    void destroy() override { created_ = false; }
+    [[nodiscard]] bool valid() const override { return created_; }
+    bool poll(Event&) override { return false; }
+    void present(const FramebufferView&, bool) override {}
+    void set_title(std::string_view title) override { title_ = std::string(title); }
+
+private:
+    bool created_ = false;
+    std::string title_;
+    int width_ = 0;
+    int height_ = 0;
+};
+
 } // namespace
 
 std::unique_ptr<IWindow> create_window() {
     return std::make_unique<NullWindow>();
+}
+
+std::unique_ptr<IVideoWindow> create_video_window() {
+    return std::make_unique<NullVideoWindow>();
 }
 
 bool open_file_dialog(std::string& path) {

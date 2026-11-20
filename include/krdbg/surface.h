@@ -57,6 +57,35 @@ struct SurfaceLayout {
     Rect toolbar_video;
     Rect toolbar_gear;
     bool kernel_visible = false;
+
+    // Panel controls and gutters used by the interaction tests.
+    Rect source_dropdown;
+    Rect source_pin;
+    Rect source_over;
+    Rect source_in;
+    Rect source_out;
+    Rect source_gutter;
+    Rect disassembly_over;
+    Rect disassembly_in;
+    Rect disassembly_out;
+    Rect disassembly_gutter;
+    Rect memory_ptr;
+    Rect memory_page_up;
+    Rect memory_page_down;
+
+    Rect video_tab_com;
+    Rect video_tab_video;
+    Rect video_pop_out;
+    Rect video_fit;
+    Rect video_preview;
+
+    // Settings dialog controls (valid while the dialog is open).
+    Rect settings_dialog;
+    Rect settings_apply;
+    Rect settings_apply_reload;
+    Rect settings_cancel;
+    Rect settings_layer;
+    Rect settings_advanced;
 };
 
 // The host owns everything VM- or platform-specific. krdbg calls only this
@@ -110,6 +139,10 @@ public:
     // Paints the complete surface. Does not create a window or a timer.
     void render(Canvas& canvas);
 
+    // Advances a running VM by one bounded slice. The host calls this once per
+    // frame; headless renders and goldens do not.
+    void tick();
+
     // Dispatches one platform event. Returns false when the application should
     // quit. The surface owns panel focus, popups and scrolling; execution
     // actions call the session.
@@ -120,6 +153,14 @@ public:
     [[nodiscard]] bool running() const;
     [[nodiscard]] bool popup_open() const;
     [[nodiscard]] bool editing() const;
+    [[nodiscard]] bool inspector_open() const;
+    [[nodiscard]] bool tooltip_visible() const;
+    [[nodiscard]] int selected_frame() const;
+    [[nodiscard]] bool settings_open() const;
+    [[nodiscard]] bool video_popped() const;
+    [[nodiscard]] std::string com_text() const;
+    [[nodiscard]] int com_queued() const;
+    [[nodiscard]] bool com_overrun() const;
     [[nodiscard]] int scroll_offset(SurfacePanel panel) const;
 
 private:

@@ -40,21 +40,28 @@ public:
     }
     bool reload(std::string& error) override {
         ++reload_calls;
-        error = "RESET is not available in the M0 shell";
-        last_error = error;
-        return false;
+        if (!reload_ok) {
+            error = "RESET is not available in the M0 shell";
+            last_error = error;
+            return false;
+        }
+        return true;
     }
-    std::string clipboard_text() override { return {}; }
+    std::string clipboard_text() override { return clipboard; }
     void show_error(std::string_view message) override {
         last_error = std::string(message);
     }
-    SettingsSchema settings_schema() const override { return {}; }
-    SettingsSnapshot settings_values() const override { return {}; }
-    SettingsApplyResult apply_settings(const SettingsSnapshot& values,
+    SettingsSchema settings_schema() const override { return schema; }
+    SettingsSnapshot settings_values() const override { return values; }
+    SettingsApplyResult apply_settings(const SettingsSnapshot& next,
                                        SettingsLayer layer) override {
-        (void)values;
-        (void)layer;
-        return {};
+        ++apply_calls;
+        last_layer = layer;
+        last_applied = next;
+        if (apply_result.ok) {
+            values = next;
+        }
+        return apply_result;
     }
 
     bool kernel_supported = false;
@@ -62,6 +69,14 @@ public:
     int kernel_calls = 0;
     int reload_calls = 0;
     std::string last_error;
+    std::string clipboard;
+    SettingsSchema schema;
+    SettingsSnapshot values;
+    SettingsSnapshot last_applied;
+    SettingsApplyResult apply_result;
+    int apply_calls = 0;
+    SettingsLayer last_layer = SettingsLayer::User;
+    bool reload_ok = true;
 };
 
 // Owns the session, host and surface in the order the surface needs. `loaded`
@@ -69,9 +84,11 @@ public:
 class TestScene {
 public:
     explicit TestScene(bool loaded, bool running = false,
-                       bool kernel_supported = false)
+                       bool kernel_supported = false, bool has_com = true,
+                       bool has_video = true)
         : host(kernel_supported) {
-        auto target = std::make_unique<FakeTarget>();
+        auto target = std::make_unique<FakeTarget>(has_com, has_video);
+        fake_target = target.get();
         session = std::make_unique<DebugSession>(
             std::move(target), std::optional<DebugInfo>{make_fake_debug_info()},
             std::function<bool(IDebugTarget&, std::string&)>{});
@@ -86,10 +103,12 @@ public:
         }
     }
 
-    bool send_key(int key) {
+    bool send_key(int key, int character = 0, bool control = false) {
         platform::Event event;
         event.kind = platform::Event::Kind::KeyDown;
         event.key = key;
+        event.character = character;
+        event.control = control;
         return surface->handle_event(event);
     }
 
@@ -134,6 +153,7 @@ public:
     }
 
     FakeHost host;
+    FakeTarget* fake_target = nullptr;
     std::unique_ptr<DebugSession> session;
     std::unique_ptr<DebuggerSurface> surface;
 };

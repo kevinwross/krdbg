@@ -645,6 +645,16 @@ std::vector<VariableView> DebugSession::globals() const {
     return result;
 }
 
+std::vector<MemberView> DebugSession::members(const MemberView& member) const {
+    if (impl_->target == nullptr || member.storage.empty()) {
+        return {};
+    }
+    const bool little_endian =
+        impl_->target->layout(impl_->target->current_context()).little_endian;
+    return detail::expand_members(info(), member.type, member.storage,
+                                  little_endian);
+}
+
 std::vector<MemberView> DebugSession::members(const VariableView& variable) const {
     const VariableInfo* found = nullptr;
     for (const VariableInfo& candidate : info().variables) {
@@ -727,6 +737,52 @@ std::vector<MemberView> DebugSession::members(const VariableView& variable) cons
 bool DebugSession::read_memory(std::uint64_t address,
                                std::span<std::uint8_t> out) const {
     return impl_->target != nullptr && impl_->target->read_memory(address, out);
+}
+
+bool DebugSession::write_memory(std::uint64_t address,
+                                std::span<const std::uint8_t> in) {
+    return impl_->target != nullptr && impl_->target->write_memory(address, in);
+}
+
+bool DebugSession::read_value(std::string_view group, int index,
+                              ScalarValue& value) const {
+    return impl_->target != nullptr &&
+           impl_->target->read_value(group, index, value);
+}
+
+bool DebugSession::write_value(std::string_view group, int index,
+                               ScalarValue value) {
+    return impl_->target != nullptr &&
+           impl_->target->write_value(group, index, value);
+}
+
+bool DebugSession::read_flags(std::uint64_t& bits) const {
+    return impl_->target != nullptr && impl_->target->read_flags(bits);
+}
+
+bool DebugSession::write_flags(std::uint64_t bits) {
+    return impl_->target != nullptr && impl_->target->write_flags(bits);
+}
+
+bool DebugSession::read_matrix(std::string_view group, int row, int column,
+                               float& value) const {
+    return impl_->target != nullptr &&
+           impl_->target->read_matrix(group, row, column, value);
+}
+
+bool DebugSession::write_matrix(std::string_view group, int row, int column,
+                                float value) {
+    return impl_->target != nullptr &&
+           impl_->target->write_matrix(group, row, column, value);
+}
+
+bool DebugSession::disassemble(std::uint64_t address,
+                               InstructionView& out) const {
+    return impl_->target != nullptr && impl_->target->disassemble(address, out);
+}
+
+std::uint64_t DebugSession::pc() const {
+    return impl_->target != nullptr ? impl_->target->pc() : 0;
 }
 
 IComPort* DebugSession::com_port() {

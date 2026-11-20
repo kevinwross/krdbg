@@ -15,6 +15,7 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include <deque>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -330,10 +331,164 @@ LRESULT Win32Window::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     }
 }
 
+class Win32VideoWindow final : public IVideoWindow {
+public:
+    bool create(std::string_view title, int width, int height) override {
+        HINSTANCE instance = GetModuleHandleW(nullptr);
+        WNDCLASSEXW window_class{};
+        window_class.cbSize = sizeof(window_class);
+        window_class.style = CS_HREDRAW | CS_VREDRAW;
+        window_class.lpfnWndProc = &Win32VideoWindow::window_proc;
+        window_class.hInstance = instance;
+        window_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        window_class.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        window_class.lpszClassName = L"KrdbgVideoWindow";
+        RegisterClassExW(&window_class);
+        const std::wstring wide(title.begin(), title.end());
+        hwnd_ = CreateWindowExW(0, L"KrdbgVideoWindow", wide.c_str(),
+                                WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+                                width, height, nullptr, nullptr, instance, this);
+        if (hwnd_ == nullptr) {
+            return false;
+        }
+        ShowWindow(hwnd_, SW_SHOW);
+        UpdateWindow(hwnd_);
+        return true;
+    }
+
+    void destroy() override {
+        if (hwnd_ != nullptr) {
+            DestroyWindow(hwnd_);
+            hwnd_ = nullptr;
+        }
+    }
+
+    [[nodiscard]] bool valid() const override { return hwnd_ != nullptr; }
+
+    bool poll(Event& event) override {
+        if (!events_.empty()) {
+            event = events_.front();
+            events_.pop_front();
+            return true;
+        }
+        return false;
+    }
+
+    void present(const FramebufferView& frame, bool fit) override {
+        width_ = frame.width;
+        height_ = frame.height;
+        stride_ = frame.stride;
+        pixels_.assign(frame.pixels.begin(), frame.pixels.end());
+        fit_ = fit;
+        if (hwnd_ != nullptr) {
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            UpdateWindow(hwnd_);
+        }
+    }
+
+    void set_title(std::string_view title) override {
+        if (hwnd_ != nullptr) {
+            const std::wstring wide(title.begin(), title.end());
+            SetWindowTextW(hwnd_, wide.c_str());
+        }
+    }
+
+private:
+    static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam,
+                                        LPARAM lparam) {
+        Win32VideoWindow* self = nullptr;
+        if (message == WM_NCCREATE) {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+            self = static_cast<Win32VideoWindow*>(create->lpCreateParams);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                              reinterpret_cast<LONG_PTR>(self));
+            self->hwnd_ = hwnd;
+        } else {
+            self = reinterpret_cast<Win32VideoWindow*>(
+                GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        }
+        if (self == nullptr) {
+            return DefWindowProcW(hwnd, message, wparam, lparam);
+        }
+        switch (message) {
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+        case WM_DESTROY: {
+            self->hwnd_ = nullptr;
+            Event event;
+            event.kind = Event::Kind::Quit;
+            self->events_.push_back(event);
+            return 0;
+        }
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN: {
+            Event event;
+            event.kind = Event::Kind::KeyDown;
+            event.key = map_key(wparam);
+            self->events_.push_back(event);
+            return 0;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(hwnd, &paint);
+            RECT client{};
+            GetClientRect(hwnd, &client);
+            const int client_width = client.right - client.left;
+            const int client_height = client.bottom - client.top;
+            FillRect(dc, &client, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+            if (self->width_ > 0 && self->height_ > 0 &&
+                !self->pixels_.empty()) {
+                int destination_width = self->width_;
+                int destination_height = self->height_;
+                if (self->fit_) {
+                    const double scale = std::min(
+                        static_cast<double>(client_width) / self->width_,
+                        static_cast<double>(client_height) / self->height_);
+                    destination_width =
+                        std::max(1, static_cast<int>(self->width_ * scale));
+                    destination_height =
+                        std::max(1, static_cast<int>(self->height_ * scale));
+                }
+                const int x = (client_width - destination_width) / 2;
+                const int y = (client_height - destination_height) / 2;
+                BITMAPINFO info{};
+                info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                info.bmiHeader.biWidth = self->width_;
+                info.bmiHeader.biHeight = -self->height_;
+                info.bmiHeader.biPlanes = 1;
+                info.bmiHeader.biBitCount = 32;
+                info.bmiHeader.biCompression = BI_RGB;
+                SetStretchBltMode(dc, COLORONCOLOR);
+                StretchDIBits(dc, x, y, destination_width, destination_height, 0, 0,
+                              self->width_, self->height_, self->pixels_.data(),
+                              &info, DIB_RGB_COLORS, SRCCOPY);
+            }
+            EndPaint(hwnd, &paint);
+            return 0;
+        }
+        default:
+            return DefWindowProcW(hwnd, message, wparam, lparam);
+        }
+    }
+
+    HWND hwnd_ = nullptr;
+    int width_ = 0;
+    int height_ = 0;
+    int stride_ = 0;
+    bool fit_ = true;
+    std::vector<std::uint8_t> pixels_;
+    std::deque<Event> events_;
+};
+
 } // namespace
 
 std::unique_ptr<IWindow> create_window() {
     return std::make_unique<Win32Window>();
+}
+
+std::unique_ptr<IVideoWindow> create_video_window() {
+    return std::make_unique<Win32VideoWindow>();
 }
 
 bool open_file_dialog(std::string& path) {

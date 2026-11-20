@@ -2,6 +2,7 @@
 
 #include "test_scene.h"
 
+#include <cstdio>
 #include <memory>
 
 using krdbg::DebuggerSurface;
@@ -188,6 +189,321 @@ KRDBG_TEST(surface_popup_opens_from_the_gear_and_closes) {
     CHECK(!scene.surface->popup_open());
 }
 
+KRDBG_TEST(surface_source_gutter_controls_switch_and_pin) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect source = scene.surface->layout().source;
+    CHECK(scene.click(source.x + 10, source.y + 28 + 4 * 16 + 8));
+    std::vector<krdbg::BreakpointView> breakpoints = scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    CHECK(breakpoints[0].has_line);
+    CHECK_EQ(breakpoints[0].line, 5);
+    CHECK(scene.click(source.x + 10, source.y + 28 + 4 * 16 + 8));
+    CHECK_EQ(scene.session->breakpoints().size(), 0U);
+
+    const std::uint64_t before_switch = scene.render_hash();
+    const krdbg::Rect dropdown = scene.surface->layout().source_dropdown;
+    CHECK(scene.click(center_x(dropdown), center_y(dropdown)));
+    CHECK(scene.surface->popup_open());
+    CHECK(scene.click(dropdown.x + 10, dropdown.y + dropdown.height + 4 + 16 + 8));
+    CHECK(!scene.surface->popup_open());
+    CHECK(scene.render_hash() != before_switch);
+
+    CHECK(scene.click(center_x(scene.surface->layout().source_pin),
+                      center_y(scene.surface->layout().source_pin)));
+    CHECK(scene.click(center_x(scene.surface->layout().source_over),
+                      center_y(scene.surface->layout().source_over)));
+    CHECK(scene.session->stats().instructions > 0U);
+}
+
+KRDBG_TEST(surface_disassembly_gutter_and_controls) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect disassembly = scene.surface->layout().disassembly;
+    CHECK(scene.click(disassembly.x + 8, disassembly.y + 28 + 8));
+    const std::vector<krdbg::BreakpointView> breakpoints =
+        scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    CHECK(!breakpoints[0].has_line);
+    CHECK_EQ(breakpoints[0].address, 0x1000U);
+    CHECK(scene.click(disassembly.x + 8, disassembly.y + 28 + 8));
+    CHECK_EQ(scene.session->breakpoints().size(), 0U);
+
+    CHECK(scene.click(center_x(scene.surface->layout().disassembly_over),
+                      center_y(scene.surface->layout().disassembly_over)));
+    CHECK(scene.session->stats().instructions > 0U);
+}
+
+KRDBG_TEST(surface_state_edits_a_register_value) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect state = scene.surface->layout().state;
+    CHECK(scene.click(state.x + 20, state.y + 28 + 3 * 16 + 8));
+    CHECK(scene.send_key('F'));
+    CHECK(scene.send_key('F'));
+    CHECK(scene.send_key(krdbg::platform::key::Enter));
+    krdbg::ScalarValue value;
+    CHECK(scene.session->read_value("gpr", 0, value));
+    CHECK_EQ(value.bits, 0xFFU);
+}
+
+KRDBG_TEST(surface_variables_expand_and_open_the_inspector) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect variables = scene.surface->layout().variables;
+    CHECK(scene.click(variables.x + 100, variables.y + 28 + 3 * 16 + 8, 1));
+    CHECK(scene.surface->inspector_open());
+    CHECK(scene.click(10, 10));
+    CHECK(!scene.surface->inspector_open());
+
+    const std::uint64_t before_expand = scene.render_hash();
+    CHECK(scene.click(variables.x + 20, variables.y + 28 + 4 * 16 + 8));
+    CHECK(scene.render_hash() != before_expand);
+}
+
+KRDBG_TEST(surface_breakpoints_panel_toggles_and_opens_menu) {
+    krdbg::test::TestScene scene(true);
+    scene.session->add_line_breakpoint("examples/fake/main.c", 6);
+    const krdbg::Rect panel = scene.surface->layout().breakpoints;
+    CHECK(scene.click(panel.x + 10, panel.y + 28 + 8));
+    CHECK(!scene.session->breakpoints()[0].enabled);
+    CHECK(scene.click(panel.x + 10, panel.y + 28 + 8));
+    CHECK(scene.session->breakpoints()[0].enabled);
+    CHECK(scene.click(panel.x + 100, panel.y + 28 + 8, 1));
+    CHECK(scene.surface->popup_open());
+    CHECK(scene.send_key(krdbg::platform::key::Escape));
+    CHECK(!scene.surface->popup_open());
+}
+
+KRDBG_TEST(surface_call_stack_selects_a_frame) {
+    krdbg::test::TestScene scene(true);
+    for (int step = 0; step < 8 && scene.session->call_stack().size() < 2; ++step) {
+        scene.session->step(krdbg::StepMode::Instruction);
+    }
+    CHECK(scene.session->call_stack().size() >= 2U);
+    const krdbg::Rect stack = scene.surface->layout().call_stack;
+    CHECK(scene.click(stack.x + 20, stack.y + 28 + 16 + 8));
+    CHECK_EQ(scene.surface->selected_frame(), 1);
+    CHECK(scene.click(stack.x + 20, stack.y + 28 + 8));
+    CHECK_EQ(scene.surface->selected_frame(), 0);
+}
+
+KRDBG_TEST(surface_state_hover_shows_a_tooltip) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect state = scene.surface->layout().state;
+    CHECK(scene.mouse_move(state.x + 20, state.y + 28 + 3 * 16 + 8));
+    CHECK(scene.surface->tooltip_visible());
+    CHECK(scene.mouse_move(0, 0));
+    CHECK(!scene.surface->tooltip_visible());
+}
+
+KRDBG_TEST(surface_com_processes_output_and_keyboard_input) {
+    krdbg::test::TestScene scene(true);
+    scene.fake_target->com().reset();
+    scene.fake_target->com().push_output("ab\bX\nline\n");
+    (void)scene.render_hash();
+    CHECK_EQ(scene.surface->com_text(), std::string("aX\nline\n"));
+
+    scene.fake_target->com().push_output("\fz");
+    (void)scene.render_hash();
+    CHECK_EQ(scene.surface->com_text(), std::string("z"));
+
+    const krdbg::Rect com = scene.surface->layout().com;
+    CHECK(scene.click(center_x(com), center_y(com)));
+    CHECK_EQ(scene.surface->focused_panel(), SurfacePanel::Com);
+    CHECK(scene.send_key('A'));
+    (void)scene.render_hash();
+    CHECK(scene.fake_target->com().input_byte().has_value());
+    CHECK_EQ(*scene.fake_target->com().input_byte(), static_cast<std::uint8_t>('A'));
+    CHECK(scene.fake_target->com().take_input());
+    CHECK(scene.send_key(krdbg::platform::key::Enter));
+    (void)scene.render_hash();
+    CHECK_EQ(*scene.fake_target->com().input_byte(), static_cast<std::uint8_t>(0x0A));
+    CHECK(scene.fake_target->com().take_input());
+    CHECK(scene.send_key(krdbg::platform::key::Backspace));
+    (void)scene.render_hash();
+    CHECK_EQ(*scene.fake_target->com().input_byte(), static_cast<std::uint8_t>(0x7F));
+}
+
+KRDBG_TEST(surface_com_paste_is_lf_normalized_and_bounded) {
+    krdbg::test::TestScene scene(true);
+    scene.fake_target->com().reset();
+    scene.host.clipboard = "a\r\nb\r";
+    const krdbg::Rect com = scene.surface->layout().com;
+    CHECK(scene.click(center_x(com), center_y(com)));
+    CHECK(scene.send_key('V', 0, true));
+    CHECK_EQ(scene.surface->com_queued(), 4);
+
+    for (int index = 0; index < 5000; ++index) {
+        scene.send_key('x');
+    }
+    CHECK_EQ(scene.surface->com_queued(), 4096);
+    CHECK(scene.surface->com_overrun());
+}
+
+KRDBG_TEST(surface_hides_com_and_video_when_absent) {
+    krdbg::test::TestScene scene(true, false, false, false, false);
+    const SurfaceLayout& layout = scene.surface->layout();
+    CHECK(layout.com.empty());
+    CHECK(layout.call_stack.width > 0);
+    CHECK_EQ(layout.variables.width + layout.breakpoints.width +
+                 layout.call_stack.width,
+             1440);
+}
+
+KRDBG_TEST(surface_run_tick_advances_until_the_target_stops) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect run = scene.surface->layout().toolbar_run;
+    CHECK(scene.click(center_x(run), center_y(run)));
+    CHECK(scene.surface->running());
+    for (int tick = 0; tick < 20 && scene.surface->running(); ++tick) {
+        scene.surface->tick();
+    }
+    CHECK(!scene.surface->running());
+    CHECK(scene.session->stats().instructions > 0U);
+}
+
+KRDBG_TEST(surface_reset_preserves_breakpoints_and_clears_stats) {
+    krdbg::test::TestScene scene(true);
+    scene.session->add_line_breakpoint("examples/fake/main.c", 5);
+    scene.session->step(krdbg::StepMode::Instruction);
+    CHECK(scene.session->stats().instructions > 0U);
+    const krdbg::Rect reset = scene.surface->layout().toolbar_reset;
+    CHECK(scene.click(center_x(reset), center_y(reset)));
+    CHECK_EQ(scene.session->stats().instructions, 0U);
+    CHECK_EQ(scene.session->breakpoints().size(), 1U);
+    CHECK(scene.session->breakpoints()[0].has_line);
+}
+
+KRDBG_TEST(surface_load_stops_a_running_target) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect run = scene.surface->layout().toolbar_run;
+    CHECK(scene.click(center_x(run), center_y(run)));
+    CHECK(scene.surface->running());
+    const krdbg::Rect load = scene.surface->layout().toolbar_load;
+    CHECK(scene.click(center_x(load), center_y(load)));
+    CHECK(!scene.surface->running());
+    CHECK_EQ(scene.host.load_calls, 1);
+}
+
+KRDBG_TEST(surface_settings_edit_apply_and_layers) {
+    krdbg::test::TestScene scene(true);
+    scene.host.schema.groups = {
+        krdbg::SettingsGroup{"run", "Run", "Run settings", 10}};
+    krdbg::SettingDescriptor fast;
+    fast.id = "run.fast";
+    fast.group = "run";
+    fast.label = "Fast";
+    fast.type = krdbg::SettingType::Bool;
+    scene.host.schema.settings.push_back(fast);
+    krdbg::SettingDescriptor limit;
+    limit.id = "run.limit";
+    limit.group = "run";
+    limit.label = "Limit";
+    limit.type = krdbg::SettingType::Int;
+    limit.has_range = true;
+    limit.min = 1;
+    limit.max = 100;
+    scene.host.schema.settings.push_back(limit);
+    scene.host.values.values["run.fast"] = true;
+    scene.host.values.values["run.limit"] = std::int64_t{5};
+    scene.host.values.origins["run.fast"] = krdbg::SettingOrigin::Default;
+
+    const krdbg::Rect gear = scene.surface->layout().toolbar_gear;
+    CHECK(scene.click(center_x(gear), center_y(gear)));
+    CHECK(scene.surface->settings_open());
+    const krdbg::Rect dialog = scene.surface->layout().settings_dialog;
+    CHECK(scene.click(dialog.x + 300, dialog.y + 72 + 8));
+
+    const krdbg::Rect layer = scene.surface->layout().settings_layer;
+    CHECK(scene.click(center_x(layer), center_y(layer)));
+    const krdbg::Rect apply = scene.surface->layout().settings_apply;
+    CHECK(scene.click(center_x(apply), center_y(apply)));
+    CHECK_EQ(scene.host.apply_calls, 1);
+    CHECK(scene.host.last_layer == krdbg::SettingsLayer::Project);
+    CHECK(!std::get<bool>(scene.host.values.values["run.fast"]));
+    CHECK(!scene.surface->settings_open());
+
+    CHECK(scene.click(center_x(gear), center_y(gear)));
+    CHECK(scene.surface->settings_open());
+    CHECK(scene.click(dialog.x + 300, dialog.y + 72 + 24 + 8));
+    CHECK(scene.send_key(krdbg::platform::key::Backspace));
+    CHECK(scene.send_key('9'));
+    CHECK(scene.send_key(krdbg::platform::key::Enter));
+    CHECK(scene.click(center_x(apply), center_y(apply)));
+    CHECK_EQ(std::get<std::int64_t>(scene.host.values.values["run.limit"]), 9);
+}
+
+KRDBG_TEST(surface_settings_apply_error_keeps_the_dialog_open) {
+    krdbg::test::TestScene scene(true);
+    scene.host.schema.groups = {
+        krdbg::SettingsGroup{"run", "Run", "Run settings", 10}};
+    krdbg::SettingDescriptor fast;
+    fast.id = "run.fast";
+    fast.group = "run";
+    fast.label = "Fast";
+    fast.type = krdbg::SettingType::Bool;
+    scene.host.schema.settings.push_back(fast);
+    scene.host.values.values["run.fast"] = true;
+    scene.host.apply_result.ok = false;
+    scene.host.apply_result.errors["run.fast"] = "rejected";
+
+    const krdbg::Rect gear = scene.surface->layout().toolbar_gear;
+    CHECK(scene.click(center_x(gear), center_y(gear)));
+    const krdbg::Rect apply = scene.surface->layout().settings_apply;
+    CHECK(scene.click(center_x(apply), center_y(apply)));
+    CHECK(scene.surface->settings_open());
+    CHECK_EQ(scene.host.apply_calls, 1);
+
+    scene.host.apply_result.ok = true;
+    scene.host.apply_result.reload_required = true;
+    const krdbg::Rect reload = scene.surface->layout().settings_apply_reload;
+    CHECK(scene.click(center_x(reload), center_y(reload)));
+    CHECK(!scene.surface->settings_open());
+    CHECK_EQ(scene.host.reload_calls, 1);
+}
+
+KRDBG_TEST(surface_video_tab_fit_popout_and_focus) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect video = scene.surface->layout().toolbar_video;
+    CHECK(scene.click(center_x(video), center_y(video)));
+    const std::uint64_t video_hash = scene.render_hash();
+    CHECK(scene.surface->layout().video_preview.width > 0);
+
+    const krdbg::Rect fit = scene.surface->layout().video_fit;
+    CHECK(scene.click(center_x(fit), center_y(fit)));
+    CHECK(scene.render_hash() != video_hash);
+
+    const krdbg::Rect preview = scene.surface->layout().video_preview;
+    CHECK(scene.click(center_x(preview), center_y(preview)));
+    CHECK(scene.send_key('A'));
+    CHECK_EQ(scene.surface->com_queued(), 0);
+    CHECK(scene.click(center_x(scene.surface->layout().video_tab_com),
+                      center_y(scene.surface->layout().video_tab_com)));
+    CHECK(scene.send_key('A'));
+    CHECK_EQ(scene.surface->com_queued(), 1);
+
+    const krdbg::Rect pop_out = scene.surface->layout().video_pop_out;
+    CHECK(scene.click(center_x(pop_out), center_y(pop_out)));
+    CHECK(scene.surface->video_popped());
+    CHECK(scene.click(center_x(pop_out), center_y(pop_out)));
+    CHECK(!scene.surface->video_popped());
+}
+
+KRDBG_TEST(null_video_window_creates_no_os_window) {
+    std::unique_ptr<krdbg::platform::IVideoWindow> video =
+        krdbg::platform::create_video_window();
+    CHECK(!video->valid());
+    CHECK(video->create("krdbg video test", 640, 480));
+    CHECK(video->valid());
+    krdbg::FramebufferView frame;
+    frame.width = 2;
+    frame.height = 2;
+    frame.stride = 8;
+    const std::vector<std::uint8_t> pixels(16, 0);
+    frame.pixels = pixels;
+    video->present(frame, true);
+    video->set_title("krdbg video test 2");
+    video->destroy();
+    CHECK(!video->valid());
+}
+
 KRDBG_TEST(surface_memory_address_editing_commits_a_new_base) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect memory = scene.surface->layout().memory;
@@ -208,7 +524,7 @@ KRDBG_TEST(surface_memory_address_editing_commits_a_new_base) {
 KRDBG_TEST(surface_context_menu_opens_and_closes) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect source = scene.surface->layout().source;
-    CHECK(scene.click(center_x(source), center_y(source), 1));
+    CHECK(scene.click(center_x(source), source.y + 28 + 3 * 16 + 8, 1));
     CHECK_EQ(scene.surface->focused_panel(), SurfacePanel::Source);
     CHECK(scene.surface->popup_open());
     CHECK(scene.send_key(krdbg::platform::key::Escape));

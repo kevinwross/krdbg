@@ -2,12 +2,18 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
+#include <fstream>
+#include <functional>
 #include <memory>
+#include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,6 +21,7 @@
 
 #include "scroll.h"
 #include "theme.h"
+#include "video_fit.h"
 
 namespace krdbg {
 namespace {
@@ -90,6 +97,16 @@ void draw_button(Canvas& canvas, Rect rect, std::string_view label, Color text_c
     canvas.text(rect.x + 9, rect.y + 3, label, text_color, FontRole::Ui);
 }
 
+void draw_small_button(Canvas& canvas, Rect rect, std::string_view label,
+                       Color text_color, Color border_color) {
+    if (rect.empty()) {
+        return;
+    }
+    canvas.fill(rect, ui::theme::kPanelAlt);
+    canvas.frame(rect, border_color);
+    canvas.text(rect.x + 4, rect.y + 3, label, text_color, FontRole::MonoSmall);
+}
+
 int panel_index(SurfacePanel panel) {
     return static_cast<int>(panel);
 }
@@ -109,10 +126,38 @@ struct DebuggerSurface::Impl {
         bool autoscroll = true;
     };
 
-    struct StateLine {
+    struct StateRow {
+        enum class Kind { Blank, Context, Group, Register, Flag, Matrix };
+
+        Kind kind = Kind::Blank;
+        int row_index = 0;
+        Rect rect;
         std::string text;
+        std::string group;
+        int index = 0;
+        std::uint32_t context_id = 0;
+        unsigned bits = 32;
+        ValueFormat format = ValueFormat::Hex;
         bool accent = false;
     };
+
+    struct VarRow {
+        int depth = 0;
+        int row = 0;
+        Rect rect;
+        std::string key;
+        std::string text;
+        std::string value;
+        bool expandable = false;
+        bool expanded = false;
+        bool header = false;
+        bool global = false;
+        VariableView variable;
+        MemberView member;
+        bool has_member = false;
+    };
+
+    [[nodiscard]] std::vector<VarRow> variable_rows() const;
 
     enum class ToolbarAction {
         None,
@@ -138,9 +183,28 @@ struct DebuggerSurface::Impl {
                     std::string_view right_label,
                     const std::vector<std::string>& lines, SurfacePanel panel);
     void draw_state_panel(Canvas& canvas);
+    void draw_source_panel(Canvas& canvas);
+    void draw_disassembly_panel(Canvas& canvas);
+    void draw_source_menu(Canvas& canvas);
+    void draw_memory_panel(Canvas& canvas);
+    void draw_variables_panel(Canvas& canvas);
+    void draw_breakpoints_panel(Canvas& canvas);
+    void draw_stack_panel(Canvas& canvas);
+    void draw_inspector(Canvas& canvas);
+    void draw_com_panel(Canvas& canvas);
+    void draw_video_preview(Canvas& canvas, Rect content);
+    void draw_settings(Canvas& canvas);
+    [[nodiscard]] std::vector<const SettingDescriptor*> visible_settings() const;
+    [[nodiscard]] std::string setting_text(const SettingDescriptor& setting) const;
+    void open_settings();
+    void close_settings();
+    void apply_settings(bool reload);
+    void settings_click(const platform::Event& event);
+    bool settings_key(const platform::Event& event);
     void draw_scrollbar(Canvas& canvas, SurfacePanel panel);
     void draw_popup(Canvas& canvas);
     void draw_context_menu(Canvas& canvas);
+    void draw_tooltip(Canvas& canvas);
 
     [[nodiscard]] Rect panel_rect(SurfacePanel panel) const;
     [[nodiscard]] SurfacePanel panel_at(int x, int y) const;
@@ -161,11 +225,31 @@ struct DebuggerSurface::Impl {
     void scroll_drag(SurfacePanel panel, int y) const;
 
     [[nodiscard]] std::vector<std::string> source_lines() const;
-    [[nodiscard]] std::vector<std::string> disassembly_lines() const;
     [[nodiscard]] std::vector<std::string> memory_lines() const;
     [[nodiscard]] std::vector<std::string> lines_for(SurfacePanel panel) const;
-    [[nodiscard]] std::vector<StateLine> state_lines() const;
+    [[nodiscard]] std::vector<StateRow> state_rows() const;
     [[nodiscard]] std::string com_title() const;
+    [[nodiscard]] std::vector<std::string> com_display_lines() const;
+    [[nodiscard]] std::string com_status() const;
+    void poll_com();
+    void enqueue_com_input(std::uint8_t byte);
+
+    struct SourceState {
+        int index = 0;
+        bool pinned = false;
+        bool menu = false;
+        Rect menu_rect;
+        std::vector<std::string> text;
+        std::uint32_t loaded_id = 0xFFFFFFFFU;
+    };
+
+    void load_source(int index);
+    void sync_source();
+    [[nodiscard]] const SourceFile* current_source() const;
+    [[nodiscard]] std::string register_text(const RegisterDef& def,
+                                            const ScalarValue& value) const;
+    void toggle_line_breakpoint(std::string_view file, int line);
+    void toggle_address_breakpoint(std::uint64_t address);
 
     DebugSession* session = nullptr;
     IHostServices* host = nullptr;
@@ -177,12 +261,63 @@ struct DebuggerSurface::Impl {
     bool running = false;
     bool popup = false;
     bool video_tab = false;
+    bool video_popped = false;
+    bool video_guest_focus = false;
+    bool video_fit = true;
+    std::unique_ptr<platform::IVideoWindow> video_window;
     bool menu_open = false;
     Rect popup_rect;
     Rect menu_rect;
+    int menu_mode = 0;  // 0 = source line, 1 = disassembly address
+    std::string menu_file;
+    int menu_line = 0;
+    std::uint64_t menu_address = 0;
+    BreakpointId menu_breakpoint = kInvalidBreakpoint;
     bool editing = false;
     std::string edit_buffer;
     std::uint64_t memory_base = 0x2000;
+    bool memory_ptr = false;
+    std::uint64_t memory_edit_byte = static_cast<std::uint64_t>(-1);
+    std::string memory_byte_buffer;
+    SourceState source_state;
+    std::uint64_t disasm_base = 0x1000;
+    int selected_frame = 0;
+    struct StateEdit {
+        bool active = false;
+        std::string group;
+        int index = 0;
+        unsigned bits = 32;
+        ValueFormat format = ValueFormat::Hex;
+        std::string buffer;
+    };
+    StateEdit state_edit;
+    std::set<std::string> expanded;
+    std::string selected_variable;
+    bool inspector_open = false;
+    Rect inspector_rect;
+    bool inspector_member = false;
+    VariableView inspector_variable;
+    MemberView inspector_member_view;
+    int selected_breakpoint = -1;
+    std::vector<std::string> com_lines;
+    std::string com_current;
+    std::deque<std::uint8_t> com_input;
+    bool com_queue_overrun = false;
+    std::string tooltip_text;
+    Rect tooltip_rect;
+    bool tooltip_visible = false;
+    bool settings_open = false;
+    SettingsSchema settings_schema;
+    SettingsSnapshot settings_snapshot;
+    SettingsLayer settings_layer = SettingsLayer::User;
+    int settings_group = 0;
+    int settings_selected = 0;
+    bool settings_advanced = false;
+    std::string settings_search;
+    bool settings_search_focus = false;
+    bool settings_editing = false;
+    std::string settings_buffer;
+    std::string settings_error;
     mutable std::array<ScrollState, kPanelCount> scrolls{};
 };
 
@@ -209,8 +344,14 @@ void DebuggerSurface::Impl::recompute_layout() {
 
     const int variables_width = w * 34 / 100;
     const int breakpoints_width = w * 22 / 100;
-    const int stack_width = w * 22 / 100;
-    const int com_width = w - variables_width - breakpoints_width - stack_width;
+    int stack_width = w * 22 / 100;
+    int com_width = w - variables_width - breakpoints_width - stack_width;
+    const bool com_visible =
+        session->com_port() != nullptr || session->video() != nullptr;
+    if (!com_visible) {
+        stack_width = w - variables_width - breakpoints_width;
+        com_width = 0;
+    }
 
     layout.toolbar = Rect{0, 0, w, ui::theme::kToolbarHeight};
     layout.status =
@@ -251,6 +392,79 @@ void DebuggerSurface::Impl::recompute_layout() {
     const int video_width = Canvas::text_width("VIDEO", FontRole::Ui) + 18;
     layout.toolbar_video =
         Rect{layout.toolbar_clr.x - 6 - video_width, 5, video_width, 20};
+
+    const auto panel_controls = [](Rect panel, std::initializer_list<std::string> labels,
+                                   std::vector<Rect>& out) {
+        int right = panel.x + panel.width - 8;
+        for (const std::string& label : labels) {
+            const int width = Canvas::text_width(label, FontRole::MonoSmall) + 8;
+            right -= width;
+            out.push_back(Rect{right, panel.y + 3, width, 18});
+            right -= 4;
+        }
+    };
+    std::vector<Rect> source_controls;
+    panel_controls(layout.source, {"OUT", "IN", "OVER", "PIN"}, source_controls);
+    layout.source_out = source_controls[0];
+    layout.source_in = source_controls[1];
+    layout.source_over = source_controls[2];
+    layout.source_pin = source_controls[3];
+    layout.source_dropdown =
+        Rect{layout.source.x + 74, layout.source.y + 3,
+             std::max(30, source_controls[3].x - 6 - (layout.source.x + 74)), 18};
+    layout.source_gutter = Rect{layout.source.x, layout.source.y + 24, 58,
+                                layout.source.height - 24};
+
+    std::vector<Rect> disassembly_controls;
+    panel_controls(layout.disassembly, {"OUT", "IN", "OVER"}, disassembly_controls);
+    layout.disassembly_out = disassembly_controls[0];
+    layout.disassembly_in = disassembly_controls[1];
+    layout.disassembly_over = disassembly_controls[2];
+    layout.disassembly_gutter = Rect{layout.disassembly.x, layout.disassembly.y + 24,
+                                     18, layout.disassembly.height - 24};
+
+    layout.memory_ptr =
+        Rect{layout.memory.x + layout.memory.width - 50, layout.memory.y + 3, 42, 18};
+    layout.memory_page_down =
+        Rect{layout.memory_ptr.x - 22, layout.memory.y + 3, 18, 18};
+    layout.memory_page_up =
+        Rect{layout.memory_page_down.x - 22, layout.memory.y + 3, 18, 18};
+
+    if (com_visible) {
+        layout.video_tab_com =
+            Rect{layout.com.x + 70, layout.com.y + 3, 46, 18};
+        layout.video_tab_video =
+            Rect{layout.video_tab_com.x + 48, layout.com.y + 3, 52, 18};
+        layout.video_pop_out =
+            Rect{layout.com.x + layout.com.width - 70, layout.com.y + 3, 62, 18};
+        layout.video_fit =
+            Rect{layout.video_pop_out.x - 46, layout.com.y + 3, 40, 18};
+        layout.video_preview =
+            Rect{layout.com.x + 1, layout.com.y + 24, layout.com.width - 2,
+                 layout.com.height - 25};
+    } else {
+        layout.video_tab_com = {};
+        layout.video_tab_video = {};
+        layout.video_pop_out = {};
+        layout.video_preview = {};
+    }
+
+    const int dialog_width = std::min(900, w - 40);
+    const int dialog_height = std::min(620, h - 40);
+    layout.settings_dialog = Rect{(w - dialog_width) / 2,
+                                  (h - dialog_height) / 2, dialog_width,
+                                  dialog_height};
+    const int footer_y = layout.settings_dialog.y + dialog_height - 34;
+    layout.settings_layer = Rect{layout.settings_dialog.x + 12, footer_y, 82, 22};
+    layout.settings_advanced =
+        Rect{layout.settings_dialog.x + 102, footer_y, 92, 22};
+    int button_right = layout.settings_dialog.x + dialog_width - 12;
+    layout.settings_cancel = Rect{button_right - 68, footer_y, 68, 22};
+    button_right -= 74;
+    layout.settings_apply_reload =
+        Rect{button_right - 118, footer_y, 118, 22};
+    button_right -= 124;
+    layout.settings_apply = Rect{button_right - 58, footer_y, 58, 22};
 
     popup_rect = Rect{(w - 360) / 2, (h - 120) / 2, 360, 120};
     clamp_scrolls();
@@ -298,7 +512,19 @@ const DebuggerSurface::Impl::ScrollState& DebuggerSurface::Impl::scroll_state(
 
 int DebuggerSurface::Impl::panel_rows(SurfacePanel panel) const {
     if (panel == SurfacePanel::State) {
-        return static_cast<int>(state_lines().size());
+        return static_cast<int>(state_rows().size());
+    }
+    if (panel == SurfacePanel::Variables) {
+        return static_cast<int>(variable_rows().size());
+    }
+    if (panel == SurfacePanel::Breakpoints) {
+        return std::max(1, static_cast<int>(session->breakpoints().size()));
+    }
+    if (panel == SurfacePanel::CallStack) {
+        return std::max(1, static_cast<int>(session->call_stack().size()));
+    }
+    if (panel == SurfacePanel::Disassembly) {
+        return 32;
     }
     return static_cast<int>(lines_for(panel).size());
 }
@@ -313,8 +539,9 @@ void DebuggerSurface::Impl::update_scroll(SurfacePanel panel) const {
     }
     ScrollState& state = const_cast<Impl*>(this)->scroll_state(panel);
     state.content = panel_rows(panel);
+    const int row_height = panel == SurfacePanel::Memory ? 20 : kRowHeight;
     state.visible = std::max(1, (rect.height - ui::theme::kPanelHeaderHeight - 8) /
-                                    kRowHeight);
+                                    row_height);
     const int max_offset = std::max(0, state.content - state.visible);
     state.offset = std::clamp(state.offset, 0, max_offset);
     state.track = Rect{rect.x + rect.width - 10,
@@ -371,27 +598,128 @@ void DebuggerSurface::Impl::scroll_drag(SurfacePanel panel, int y) const {
     state.autoscroll = state.offset == max_offset;
 }
 
-std::vector<std::string> DebuggerSurface::Impl::source_lines() const {
+void DebuggerSurface::Impl::load_source(int index) {
+    source_state.index = index;
+    source_state.text.clear();
+    const std::vector<SourceFile>& sources = session->info().sources;
     if (!program.loaded) {
-        return {"(no program loaded)"};
+        source_state.text.push_back("(no program loaded)");
+        source_state.loaded_id = 0xFFFFFFFFU;
+        return;
     }
-    std::vector<std::string> lines;
-    lines.push_back("program: " + program.name);
-    if (!program.path.empty() && program.path != program.name) {
-        lines.push_back("path: " + program.path);
+    if (index < 0 || index >= static_cast<int>(sources.size())) {
+        source_state.text.push_back("(no source)");
+        source_state.loaded_id = 0xFFFFFFFFU;
+        return;
     }
-    lines.push_back("entry: " + hex_value(program.entry,
-                                          session->layout().address_bits));
-    lines.push_back("(source view lands in M2.2)");
-    return lines;
+    const SourceFile& source = sources[static_cast<std::size_t>(index)];
+    source_state.loaded_id = source.id;
+    std::ifstream input(source.path);
+    if (!input) {
+        source_state.text.push_back("(source not found: " + source.path + ")");
+        return;
+    }
+    std::string line;
+    while (std::getline(input, line)) {
+        source_state.text.push_back(line);
+    }
+    if (source_state.text.empty()) {
+        source_state.text.push_back("(empty source)");
+    }
 }
 
-std::vector<std::string> DebuggerSurface::Impl::disassembly_lines() const {
-    if (!program.loaded) {
-        return {"(no disassembly)"};
+void DebuggerSurface::Impl::sync_source() {
+    if (!program.loaded || source_state.pinned) {
+        return;
     }
-    return {"entry: " + hex_value(program.entry, session->layout().address_bits),
-            "(disassembly view lands in M2.2)"};
+    const LineInfo* line = session->line_at(session->pc());
+    if (line == nullptr) {
+        return;
+    }
+    const std::vector<SourceFile>& sources = session->info().sources;
+    for (std::size_t index = 0; index < sources.size(); ++index) {
+        if (sources[index].id == line->source) {
+            if (source_state.loaded_id != line->source) {
+                load_source(static_cast<int>(index));
+            }
+            source_state.index = static_cast<int>(index);
+            return;
+        }
+    }
+}
+
+const SourceFile* DebuggerSurface::Impl::current_source() const {
+    const std::vector<SourceFile>& sources = session->info().sources;
+    if (source_state.index < 0 ||
+        source_state.index >= static_cast<int>(sources.size())) {
+        return nullptr;
+    }
+    return &sources[static_cast<std::size_t>(source_state.index)];
+}
+
+std::string DebuggerSurface::Impl::register_text(const RegisterDef& def,
+                                                 const ScalarValue& value) const {
+    const unsigned bits = std::max(1U, def.bits);
+    char buffer[64] = {};
+    switch (def.format) {
+    case ValueFormat::Hex: {
+        const unsigned digits = std::clamp((bits + 3U) / 4U, 1U, 16U);
+        std::snprintf(buffer, sizeof(buffer), "%0*llX", static_cast<int>(digits),
+                      static_cast<unsigned long long>(value.bits));
+        return buffer;
+    }
+    case ValueFormat::Unsigned:
+        std::snprintf(buffer, sizeof(buffer), "%llu",
+                      static_cast<unsigned long long>(value.bits));
+        return buffer;
+    case ValueFormat::Signed:
+        std::snprintf(buffer, sizeof(buffer), "%lld",
+                      static_cast<long long>(value.bits));
+        return buffer;
+    case ValueFormat::Float32: {
+        const float number = std::bit_cast<float>(static_cast<std::uint32_t>(value.bits));
+        std::snprintf(buffer, sizeof(buffer), "%g", static_cast<double>(number));
+        return buffer;
+    }
+    case ValueFormat::Float64: {
+        const double number = std::bit_cast<double>(value.bits);
+        std::snprintf(buffer, sizeof(buffer), "%g", number);
+        return buffer;
+    }
+    case ValueFormat::Char: {
+        const char ch = static_cast<char>(value.bits & 0xFFU);
+        std::snprintf(buffer, sizeof(buffer), "'%c'", ch >= 32 ? ch : '?');
+        return buffer;
+    }
+    case ValueFormat::Bool:
+        return value.bits != 0 ? "true" : "false";
+    }
+    return buffer;
+}
+
+void DebuggerSurface::Impl::toggle_line_breakpoint(std::string_view file, int line) {
+    for (const BreakpointView& breakpoint : session->breakpoints()) {
+        if (breakpoint.has_line && breakpoint.file == file &&
+            breakpoint.line == line) {
+            session->remove_breakpoint(breakpoint.id);
+            return;
+        }
+    }
+    session->add_line_breakpoint(file, line);
+}
+
+void DebuggerSurface::Impl::toggle_address_breakpoint(std::uint64_t address) {
+    for (const BreakpointView& breakpoint : session->breakpoints()) {
+        if (!breakpoint.has_line && breakpoint.address == address) {
+            session->remove_breakpoint(breakpoint.id);
+            return;
+        }
+    }
+    session->add_address_breakpoint(address);
+}
+
+std::vector<std::string> DebuggerSurface::Impl::source_lines() const {
+    return source_state.text;
 }
 
 std::vector<std::string> DebuggerSurface::Impl::memory_lines() const {
@@ -408,8 +736,8 @@ std::vector<std::string> DebuggerSurface::Impl::memory_lines() const {
     lines.reserve(16);
     for (int row = 0; row < 16; ++row) {
         const std::uint64_t address =
-            base + static_cast<std::uint64_t>(row) * 16U;
-        std::array<std::uint8_t, 16> bytes{};
+            base + static_cast<std::uint64_t>(row) * 8U;
+        std::array<std::uint8_t, 8> bytes{};
         const bool readable = session->read_memory(address, bytes);
         std::string line = hex_value(address, target.address_bits) + "  ";
         for (std::size_t index = 0; index < bytes.size(); ++index) {
@@ -439,7 +767,7 @@ std::vector<std::string> DebuggerSurface::Impl::lines_for(
     SurfacePanel panel) const {
     switch (panel) {
     case SurfacePanel::Source: return source_lines();
-    case SurfacePanel::Disassembly: return disassembly_lines();
+    case SurfacePanel::Disassembly: return {};
     case SurfacePanel::Memory: return memory_lines();
     case SurfacePanel::Variables:
         return program.loaded ? std::vector<std::string>{"(no debug information)"}
@@ -451,7 +779,7 @@ std::vector<std::string> DebuggerSurface::Impl::lines_for(
                               : std::vector<std::string>{"(no call stack)"};
     case SurfacePanel::Com:
         return video_tab ? std::vector<std::string>{"(no video frame)"}
-                         : std::vector<std::string>{"(no console output)"};
+                         : com_display_lines();
     case SurfacePanel::State:
     case SurfacePanel::None:
         return {};
@@ -459,26 +787,212 @@ std::vector<std::string> DebuggerSurface::Impl::lines_for(
     return {};
 }
 
-std::vector<DebuggerSurface::Impl::StateLine>
-DebuggerSurface::Impl::state_lines() const {
-    std::vector<StateLine> lines;
-    if (!program.loaded) {
-        lines.push_back(StateLine{"(no target)", false});
-        return lines;
+std::vector<DebuggerSurface::Impl::VarRow>
+DebuggerSurface::Impl::variable_rows() const {
+    std::vector<VarRow> rows;
+    int row = 0;
+    int y = layout.variables.y + ui::theme::kPanelHeaderHeight + 4;
+    const int content_width = layout.variables.width - 16;
+    const auto add = [&](VarRow value) {
+        value.row = row;
+        value.rect = Rect{layout.variables.x + 8, y, content_width, kRowHeight};
+        rows.push_back(std::move(value));
+        y += kRowHeight;
+        ++row;
+    };
+
+    const std::vector<VariableView> locals = session->locals(selected_frame);
+    const std::vector<VariableView> globals = session->globals();
+    add(VarRow{0, row, {}, "", "LOCALS (" + std::to_string(locals.size()) + ")",
+               {}, false, false, true, false, {}, {}, false});
+    if (locals.empty()) {
+        add(VarRow{1, row, {}, "", "(no locals)", {}, false, false, false, false,
+                   {}, {}, false});
     }
+
+    std::function<void(const VariableView&, int, bool, const std::string&)> append;
+    append = [&](const VariableView& variable, int depth, bool global,
+                 const std::string& parent) {
+        if (depth > 6) {
+            return;
+        }
+        const std::string key = parent + variable.name;
+        VarRow value;
+        value.depth = depth;
+        value.key = key;
+        value.text = variable.name + " = " + variable.value;
+        value.value = variable.value;
+        value.expandable = variable.has_children;
+        value.expanded = expanded.count(key) != 0;
+        value.global = global;
+        value.variable = variable;
+        add(std::move(value));
+        if (!value.expandable || !value.expanded) {
+            return;
+        }
+        for (const MemberView& member : session->members(variable)) {
+            VarRow child;
+            child.depth = depth + 1;
+            child.key = key + "." + member.name;
+            child.text = member.name + " = " + member.value;
+            child.value = member.value;
+            child.expandable = member.has_children;
+            child.expanded = expanded.count(child.key) != 0;
+            child.member = member;
+            child.has_member = true;
+            child.global = global;
+            add(std::move(child));
+            if (child.expandable && child.expanded) {
+                for (const MemberView& nested : session->members(member)) {
+                    VarRow leaf;
+                    leaf.depth = depth + 2;
+                    leaf.key = child.key + "." + nested.name;
+                    leaf.text = nested.name + " = " + nested.value;
+                    leaf.value = nested.value;
+                    leaf.member = nested;
+                    leaf.has_member = true;
+                    leaf.global = global;
+                    add(std::move(leaf));
+                }
+            }
+        }
+    };
+    for (const VariableView& variable : locals) {
+        append(variable, 1, false, "L:");
+    }
+
+    add(VarRow{0, row, {}, "", "GLOBALS (" + std::to_string(globals.size()) + ")",
+               {}, false, false, true, true, {}, {}, false});
+    if (globals.empty()) {
+        add(VarRow{1, row, {}, "", "(no globals)", {}, false, false, false, true,
+                   {}, {}, false});
+    }
+    for (const VariableView& variable : globals) {
+        append(variable, 1, true, "G:");
+    }
+    return rows;
+}
+
+std::vector<DebuggerSurface::Impl::StateRow>
+DebuggerSurface::Impl::state_rows() const {
+    std::vector<StateRow> rows;
+    int row = 0;
+    int y = layout.state.y + ui::theme::kPanelHeaderHeight + 4;
+    const int content_width = layout.state.width - 16;
+    const auto push = [&](StateRow::Kind kind, std::string text, Rect rect,
+                          bool accent) {
+        StateRow state_row;
+        state_row.kind = kind;
+        state_row.row_index = row;
+        state_row.rect = rect;
+        state_row.text = std::move(text);
+        state_row.accent = accent;
+        rows.push_back(std::move(state_row));
+    };
+
+    if (!program.loaded) {
+        push(StateRow::Kind::Blank, "(no target)",
+             Rect{layout.state.x + 8, y, content_width, kRowHeight}, false);
+        return rows;
+    }
+
     const std::vector<ContextInfo> contexts = session->contexts();
     const std::uint32_t selected = session->selected_context();
     for (const ContextInfo& context : contexts) {
-        lines.push_back(StateLine{
-            context.name + "   PC " +
-                hex_value(context.pc, session->layout().address_bits),
-            context.id == selected || context.current});
+        push(StateRow::Kind::Context,
+             context.name + "   PC " +
+                 hex_value(context.pc, session->layout().address_bits),
+             Rect{layout.state.x + 8, y, content_width, kRowHeight},
+             context.id == selected || context.current);
+        StateRow& added = rows.back();
+        added.context_id = context.id;
+        y += kRowHeight;
+        ++row;
     }
-    lines.push_back(StateLine{"", false});
+    push(StateRow::Kind::Blank, "", Rect{layout.state.x + 8, y, content_width, kRowHeight},
+         false);
+    y += kRowHeight;
+    ++row;
+
     for (const RegisterGroup& group : session->layout().groups) {
-        lines.push_back(StateLine{group.title, false});
+        push(StateRow::Kind::Group, group.title,
+             Rect{layout.state.x + 8, y, content_width, kRowHeight}, false);
+        y += kRowHeight;
+        ++row;
+
+        if (group.kind == GroupKind::Registers ||
+            group.kind == GroupKind::Values) {
+            const int columns = std::max(1, group.columns);
+            const int cell = std::max(40, content_width / columns);
+            for (std::size_t index = 0; index < group.registers.size(); ++index) {
+                if (index > 0 && index % static_cast<std::size_t>(columns) == 0) {
+                    y += kRowHeight;
+                    ++row;
+                }
+                const RegisterDef& def = group.registers[index];
+                ScalarValue value;
+                const bool ok = session->read_value(group.id, static_cast<int>(index),
+                                                    value);
+                std::string text = def.label + "  ";
+                text += ok ? register_text(def, value) : "?";
+                const int column =
+                    static_cast<int>(index) % std::max(1, columns);
+                push(StateRow::Kind::Register, std::move(text),
+                     Rect{layout.state.x + 8 + column * cell, y, cell, kRowHeight},
+                     def.role == RegisterRole::Pc);
+                StateRow& added = rows.back();
+                added.group = group.id;
+                added.index = static_cast<int>(index);
+                added.bits = def.bits;
+                added.format = def.format;
+                if (index + 1 == group.registers.size()) {
+                    y += kRowHeight;
+                    ++row;
+                }
+            }
+            if (group.registers.empty()) {
+                y += kRowHeight;
+                ++row;
+            }
+        } else if (group.kind == GroupKind::Flags) {
+            std::uint64_t bits = 0;
+            session->read_flags(bits);
+            for (std::size_t index = 0; index < session->layout().flags.size();
+                 ++index) {
+                const FlagDef& flag = session->layout().flags[index];
+                const bool set = (bits >> flag.bit) & 1U;
+                push(StateRow::Kind::Flag, flag.label + "  " + (set ? "1" : "0"),
+                     Rect{layout.state.x + 8, y, content_width, kRowHeight}, set);
+                StateRow& added = rows.back();
+                added.group = group.id;
+                added.index = static_cast<int>(index);
+                y += kRowHeight;
+                ++row;
+            }
+        } else if (group.kind == GroupKind::Matrix) {
+            for (int matrix_row = 0; matrix_row < group.matrix_rows; ++matrix_row) {
+                std::string text = "R" + std::to_string(matrix_row) + "  ";
+                char buffer[32] = {};
+                for (int column = 0; column < group.matrix_columns; ++column) {
+                    float value = 0.0F;
+                    if (session->read_matrix(group.id, matrix_row, column, value)) {
+                        std::snprintf(buffer, sizeof(buffer), "%g ", value);
+                        text += buffer;
+                    } else {
+                        text += "? ";
+                    }
+                }
+                push(StateRow::Kind::Matrix, std::move(text),
+                     Rect{layout.state.x + 8, y, content_width, kRowHeight}, false);
+                StateRow& added = rows.back();
+                added.group = group.id;
+                added.index = matrix_row;
+                y += kRowHeight;
+                ++row;
+            }
+        }
     }
-    return lines;
+    return rows;
 }
 
 std::string DebuggerSurface::Impl::com_title() const {
@@ -487,6 +1001,104 @@ std::string DebuggerSurface::Impl::com_title() const {
     }
     IComPort* port = session->com_port();
     return port != nullptr ? port->name() : "CONSOLE";
+}
+
+std::vector<std::string> DebuggerSurface::Impl::com_display_lines() const {
+    std::vector<std::string> lines = com_lines;
+    if (!com_current.empty() || lines.empty()) {
+        lines.push_back(com_current);
+    }
+    if (lines.empty()) {
+        lines.push_back("(no console output)");
+    }
+    return lines;
+}
+
+std::string DebuggerSurface::Impl::com_status() const {
+    IComPort* port = session->com_port();
+    if (port == nullptr) {
+        return {};
+    }
+    const ComPortStatus status = port->status();
+    std::string text;
+    if (status.rx_ready) {
+        text += "RX ";
+    }
+    if (status.tx_ready) {
+        text += "TX ";
+    }
+    if (status.overrun || com_queue_overrun) {
+        text += "OVERRUN ";
+    }
+    if (!com_input.empty()) {
+        text += std::to_string(com_input.size()) + " queued";
+    }
+    return text;
+}
+
+void DebuggerSurface::Impl::enqueue_com_input(std::uint8_t byte) {
+    if (com_input.size() >= 4096) {
+        com_queue_overrun = true;
+        return;
+    }
+    com_input.push_back(byte);
+}
+
+void DebuggerSurface::Impl::poll_com() {
+    IComPort* port = session->com_port();
+    if (port == nullptr) {
+        return;
+    }
+    for (int count = 0; count < 4096; ++count) {
+        std::uint8_t byte = 0;
+        if (!port->read_output(byte)) {
+            break;
+        }
+        switch (byte) {
+        case '\n':
+            com_lines.push_back(com_current);
+            com_current.clear();
+            break;
+        case '\r':
+            com_current.clear();
+            break;
+        case '\b':
+            if (!com_current.empty()) {
+                com_current.pop_back();
+            }
+            break;
+        case '\f':
+            com_lines.clear();
+            com_current.clear();
+            break;
+        case '\t': {
+            const std::size_t spaces = 4 - (com_current.size() % 4);
+            com_current.append(spaces, ' ');
+            break;
+        }
+        default:
+            if (byte >= 32 && byte < 127) {
+                com_current.push_back(static_cast<char>(byte));
+            }
+            break;
+        }
+    }
+    while (!com_input.empty()) {
+        if (!port->write_input(com_input.front())) {
+            break;
+        }
+        com_input.pop_front();
+    }
+    if (com_lines.size() > 5000) {
+        com_lines.erase(com_lines.begin(),
+                        com_lines.begin() + static_cast<std::ptrdiff_t>(
+                                               com_lines.size() - 5000));
+    }
+    update_scroll(SurfacePanel::Com);
+    ScrollState& scroll = scroll_state(SurfacePanel::Com);
+    if (scroll.autoscroll) {
+        scroll.offset = std::max(0, scroll.content - scroll.visible);
+    }
 }
 
 void DebuggerSurface::Impl::draw_toolbar(Canvas& canvas) {
@@ -611,6 +1223,445 @@ void DebuggerSurface::Impl::draw_panel(Canvas& canvas, Rect rect,
     }
 }
 
+void DebuggerSurface::Impl::draw_source_panel(Canvas& canvas) {
+    const Rect rect = layout.source;
+    if (rect.empty()) {
+        return;
+    }
+    update_scroll(SurfacePanel::Source);
+    const ScrollState& state = scroll_state(SurfacePanel::Source);
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Source ? ui::theme::kAccent
+                                               : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "SOURCE", ui::theme::kAccent,
+                FontRole::UiBold);
+
+    const std::string name =
+        current_source() != nullptr ? current_source()->name : "(no source)";
+    canvas.fill(layout.source_dropdown, ui::theme::kPanel);
+    canvas.frame(layout.source_dropdown, ui::theme::kBorder);
+    canvas.text(layout.source_dropdown.x + 4, layout.source_dropdown.y + 3,
+                clip(name + " v", layout.source_dropdown.width - 8,
+                     FontRole::MonoSmall),
+                ui::theme::kText, FontRole::MonoSmall);
+    draw_small_button(canvas, layout.source_pin, "PIN",
+                      source_state.pinned ? ui::theme::kAccent : ui::theme::kDim,
+                      source_state.pinned ? ui::theme::kAccent : ui::theme::kBorder);
+    draw_small_button(canvas, layout.source_over, "OVER", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.source_in, "IN", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.source_out, "OUT", ui::theme::kText,
+                      ui::theme::kBorder);
+
+    const SourceFile* source = current_source();
+    const LineInfo* current_line = session->line_at(session->pc());
+    const bool scrollbar = state.content > state.visible;
+    const int text_width = rect.width - 60 - (scrollbar ? 8 : 0);
+    int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
+    for (std::size_t index = static_cast<std::size_t>(state.offset);
+         index < source_state.text.size() &&
+         y + kRowHeight <= rect.y + rect.height; ++index) {
+        const int line_number = static_cast<int>(index) + 1;
+        const bool current = current_line != nullptr && source != nullptr &&
+                             current_line->source == source->id &&
+                             static_cast<int>(current_line->line) == line_number;
+        if (current) {
+            canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
+                        ui::theme::kPanelAlt);
+            canvas.fill(Rect{rect.x + 1, y, 2, kRowHeight}, ui::theme::kAccent);
+        }
+        bool has_breakpoint = false;
+        if (source != nullptr) {
+            for (const BreakpointView& breakpoint : session->breakpoints()) {
+                if (breakpoint.has_line && breakpoint.file == source->path &&
+                    breakpoint.line == line_number) {
+                    has_breakpoint = true;
+                    break;
+                }
+            }
+        }
+        const Rect square{rect.x + 4, y + 4, 8, 8};
+        if (has_breakpoint) {
+            canvas.fill(square, ui::theme::kBad);
+        } else {
+            canvas.frame(square, ui::theme::kBorder);
+        }
+        const std::string number = std::to_string(line_number);
+        canvas.text(rect.x + 50 - Canvas::text_width(number, FontRole::MonoSmall), y,
+                    number, current ? ui::theme::kText : ui::theme::kDim,
+                    FontRole::MonoSmall);
+        canvas.text(rect.x + 60, y,
+                    clip(source_state.text[index], text_width, FontRole::MonoSmall),
+                    current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
+        y += kRowHeight;
+    }
+    if (scrollbar) {
+        draw_scrollbar(canvas, SurfacePanel::Source);
+    }
+}
+
+void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
+    const Rect rect = layout.disassembly;
+    if (rect.empty()) {
+        return;
+    }
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Disassembly ? ui::theme::kAccent
+                                                    : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "DISASSEMBLY", ui::theme::kText,
+                FontRole::UiBold);
+    draw_small_button(canvas, layout.disassembly_over, "OVER", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.disassembly_in, "IN", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.disassembly_out, "OUT", ui::theme::kText,
+                      ui::theme::kBorder);
+
+    if (!program.loaded) {
+        canvas.text(rect.x + 8, rect.y + 32, "(no disassembly)", ui::theme::kDim,
+                    FontRole::MonoSmall);
+        return;
+    }
+    const TargetLayout& target = session->layout();
+    const unsigned alignment = std::max(1U, target.instruction_alignment);
+    const std::uint64_t pc = session->pc();
+    if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
+        disasm_base = pc > 8ULL * alignment ? pc - 8ULL * alignment : 0;
+    }
+
+    int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
+    const int rows = 32;
+    for (int row = 0; row < rows && y + kRowHeight <= rect.y + rect.height;
+         ++row) {
+        const std::uint64_t address =
+            disasm_base + static_cast<std::uint64_t>(row) * alignment;
+        InstructionView instruction;
+        const bool valid = session->disassemble(address, instruction);
+        const bool current = address == pc;
+        if (current) {
+            canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
+                        ui::theme::kPanelAlt);
+            canvas.fill(Rect{rect.x + 1, y, 2, kRowHeight}, ui::theme::kAccent);
+        }
+        bool has_breakpoint = false;
+        for (const BreakpointView& breakpoint : session->breakpoints()) {
+            if (!breakpoint.has_line && breakpoint.address == address) {
+                has_breakpoint = true;
+                break;
+            }
+        }
+        const Rect square{rect.x + 4, y + 4, 8, 8};
+        if (has_breakpoint) {
+            canvas.fill(square, ui::theme::kBad);
+        } else {
+            canvas.frame(square, ui::theme::kBorder);
+        }
+        canvas.text(rect.x + 20, y, hex_value(address, target.address_bits),
+                    current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
+        std::string bytes;
+        if (valid) {
+            for (unsigned index = 0; index < instruction.length; ++index) {
+                char buffer[4] = {};
+                std::snprintf(buffer, sizeof(buffer), "%02X ",
+                              static_cast<unsigned>(instruction.bytes[index]));
+                bytes += buffer;
+            }
+        } else {
+            bytes = "?? ?? ?? ?? ";
+        }
+        canvas.text(rect.x + 104, y,
+                    clip(bytes, 82, FontRole::MonoSmall), ui::theme::kDim,
+                    FontRole::MonoSmall);
+        const std::string text = valid
+                                     ? instruction.mnemonic + " " + instruction.operands
+                                     : "(no code)";
+        canvas.text(rect.x + 190, y,
+                    clip(text, rect.width - 196, FontRole::MonoSmall),
+                    current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
+        y += kRowHeight;
+    }
+}
+
+void DebuggerSurface::Impl::draw_source_menu(Canvas& canvas) {
+    if (!source_state.menu) {
+        return;
+    }
+    canvas.fill(source_state.menu_rect, ui::theme::kPanel);
+    canvas.frame(source_state.menu_rect, ui::theme::kAccent);
+    int y = source_state.menu_rect.y + 4;
+    const std::vector<SourceFile>& sources = session->info().sources;
+    for (std::size_t index = 0; index < sources.size(); ++index) {
+        if (y + 16 > source_state.menu_rect.y + source_state.menu_rect.height) {
+            break;
+        }
+        const bool current = static_cast<int>(index) == source_state.index;
+        canvas.text(source_state.menu_rect.x + 8, y,
+                    clip(sources[index].path, source_state.menu_rect.width - 16,
+                         FontRole::MonoSmall),
+                    current ? ui::theme::kAccent : ui::theme::kText,
+                    FontRole::MonoSmall);
+        y += 16;
+    }
+}
+
+void DebuggerSurface::Impl::draw_memory_panel(Canvas& canvas) {
+    const Rect rect = layout.memory;
+    if (rect.empty()) {
+        return;
+    }
+    update_scroll(SurfacePanel::Memory);
+    const ScrollState& state = scroll_state(SurfacePanel::Memory);
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Memory ? ui::theme::kAccent
+                                               : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "MEMORY", ui::theme::kAccent,
+                FontRole::UiBold);
+    draw_small_button(canvas, layout.memory_page_up, "^", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.memory_page_down, "v", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.memory_ptr, "PTR",
+                      memory_ptr ? ui::theme::kAccent : ui::theme::kText,
+                      memory_ptr ? ui::theme::kAccent : ui::theme::kBorder);
+    const std::string label =
+        editing && focus == SurfacePanel::Memory ? edit_buffer + "_" : "ADDR";
+    if (!label.empty()) {
+        canvas.text(layout.memory_page_up.x - 54, rect.y + 5, label,
+                    ui::theme::kDim, FontRole::MonoSmall);
+    }
+
+    const std::vector<std::string> lines = memory_lines();
+    int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
+    for (std::size_t index = static_cast<std::size_t>(state.offset);
+         index < lines.size() && y + 20 <= rect.y + rect.height; ++index) {
+        if (memory_edit_byte != static_cast<std::uint64_t>(-1)) {
+            const std::uint64_t row_base =
+                memory_base + static_cast<std::uint64_t>(index) * 8U;
+            for (int column = 0; column < 8; ++column) {
+                if (row_base + static_cast<std::uint64_t>(column) ==
+                    memory_edit_byte) {
+                    canvas.fill(Rect{rect.x + 64 + column * 18, y, 18, 19},
+                                ui::theme::kPanelAlt);
+                    canvas.frame(Rect{rect.x + 64 + column * 18, y, 18, 19},
+                                 ui::theme::kAccent);
+                }
+            }
+        }
+        canvas.text(rect.x + 8, y + 2,
+                    clip(lines[index], rect.width - 16, FontRole::MonoSmall),
+                    ui::theme::kDim, FontRole::MonoSmall);
+        y += 20;
+    }
+    if (state.content > state.visible) {
+        draw_scrollbar(canvas, SurfacePanel::Memory);
+    }
+}
+
+void DebuggerSurface::Impl::draw_variables_panel(Canvas& canvas) {
+    const Rect rect = layout.variables;
+    if (rect.empty()) {
+        return;
+    }
+    update_scroll(SurfacePanel::Variables);
+    const ScrollState& state = scroll_state(SurfacePanel::Variables);
+    const std::vector<VarRow> rows = variable_rows();
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Variables ? ui::theme::kAccent
+                                                  : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "VARIABLES", ui::theme::kAccent,
+                FontRole::UiBold);
+    const bool scrollbar = state.content > state.visible;
+    const int text_width = rect.width - 16 - (scrollbar ? 8 : 0);
+    for (const VarRow& row : rows) {
+        const int y = row.rect.y - state.offset * kRowHeight;
+        if (y < rect.y + ui::theme::kPanelHeaderHeight + 4 ||
+            y + kRowHeight > rect.y + rect.height) {
+            continue;
+        }
+        if (!row.header && row.key == selected_variable) {
+            canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
+                        ui::theme::kPanelAlt);
+        }
+        const int marker_x = rect.x + 8 + row.depth * 12;
+        if (!row.header && row.expandable) {
+            canvas.text(marker_x, y, row.expanded ? "-" : "+",
+                        ui::theme::kAccent, FontRole::MonoSmall);
+        }
+        canvas.text(marker_x + 10, y,
+                    clip(row.text, text_width - (marker_x - rect.x) - 10,
+                         FontRole::MonoSmall),
+                    row.header ? ui::theme::kText : ui::theme::kDim,
+                    FontRole::MonoSmall);
+    }
+    if (scrollbar) {
+        draw_scrollbar(canvas, SurfacePanel::Variables);
+    }
+}
+
+void DebuggerSurface::Impl::draw_breakpoints_panel(Canvas& canvas) {
+    const Rect rect = layout.breakpoints;
+    if (rect.empty()) {
+        return;
+    }
+    update_scroll(SurfacePanel::Breakpoints);
+    const ScrollState& state = scroll_state(SurfacePanel::Breakpoints);
+    const std::vector<BreakpointView> breakpoints = session->breakpoints();
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Breakpoints ? ui::theme::kAccent
+                                                    : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5,
+                "BREAKPOINTS (" + std::to_string(breakpoints.size()) + ")",
+                ui::theme::kText, FontRole::UiBold);
+    if (breakpoints.empty()) {
+        canvas.text(rect.x + 8, rect.y + 32, "(no breakpoints)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+    } else {
+        for (std::size_t index = 0; index < breakpoints.size(); ++index) {
+            const int y = rect.y + ui::theme::kPanelHeaderHeight + 4 +
+                          (static_cast<int>(index) - state.offset) * kRowHeight;
+            if (y < rect.y + ui::theme::kPanelHeaderHeight + 2 ||
+                y + kRowHeight > rect.y + rect.height) {
+                continue;
+            }
+            if (static_cast<int>(index) == selected_breakpoint) {
+                canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
+                            ui::theme::kPanelAlt);
+            }
+            const BreakpointView& breakpoint = breakpoints[index];
+            canvas.text(rect.x + 8, y, breakpoint.enabled ? "[x]" : "[ ]",
+                        breakpoint.enabled ? ui::theme::kAccent : ui::theme::kDim,
+                        FontRole::MonoSmall);
+            const std::string text =
+                breakpoint.has_line
+                    ? breakpoint.file + ":" + std::to_string(breakpoint.line)
+                    : hex_value(breakpoint.address,
+                                session->layout().address_bits);
+            canvas.text(rect.x + 34, y,
+                        clip(text, rect.width - 42, FontRole::MonoSmall),
+                        ui::theme::kDim, FontRole::MonoSmall);
+        }
+    }
+    if (state.content > state.visible) {
+        draw_scrollbar(canvas, SurfacePanel::Breakpoints);
+    }
+}
+
+void DebuggerSurface::Impl::draw_stack_panel(Canvas& canvas) {
+    const Rect rect = layout.call_stack;
+    if (rect.empty()) {
+        return;
+    }
+    update_scroll(SurfacePanel::CallStack);
+    const ScrollState& state = scroll_state(SurfacePanel::CallStack);
+    const std::vector<FrameView> frames = session->call_stack();
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::CallStack ? ui::theme::kAccent
+                                                  : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "CALL STACK", ui::theme::kText,
+                FontRole::UiBold);
+    if (frames.empty()) {
+        canvas.text(rect.x + 8, rect.y + 32, "(no stack frames)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+    } else {
+        for (std::size_t index = 0; index < frames.size(); ++index) {
+            const int y = rect.y + ui::theme::kPanelHeaderHeight + 4 +
+                          (static_cast<int>(index) - state.offset) * kRowHeight;
+            if (y < rect.y + ui::theme::kPanelHeaderHeight + 2 ||
+                y + kRowHeight > rect.y + rect.height) {
+                continue;
+            }
+            if (static_cast<int>(index) == selected_frame) {
+                canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
+                            ui::theme::kPanelAlt);
+            }
+            canvas.text(rect.x + 8, y,
+                        clip("#" + std::to_string(index) + " " +
+                                 frames[index].function + "  " +
+                                 hex_value(frames[index].pc,
+                                           session->layout().address_bits),
+                             rect.width - 16, FontRole::MonoSmall),
+                        static_cast<int>(index) == selected_frame
+                            ? ui::theme::kText
+                            : ui::theme::kDim,
+                        FontRole::MonoSmall);
+        }
+    }
+}
+
+void DebuggerSurface::Impl::draw_inspector(Canvas& canvas) {
+    if (!inspector_open) {
+        return;
+    }
+    canvas.fill(inspector_rect, ui::theme::kPanel);
+    canvas.frame(inspector_rect, ui::theme::kAccent);
+    canvas.fill(Rect{inspector_rect.x + 1, inspector_rect.y + 1,
+                     inspector_rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(inspector_rect.x + 8, inspector_rect.y + 5, "INSPECTOR",
+                ui::theme::kAccent, FontRole::UiBold);
+    std::string name;
+    std::string type;
+    std::string value;
+    if (inspector_member) {
+        name = inspector_member_view.name;
+        type = inspector_member_view.type_name;
+        value = inspector_member_view.value;
+    } else {
+        name = inspector_variable.name;
+        type = inspector_variable.type_name;
+        value = inspector_variable.value;
+    }
+    canvas.text(inspector_rect.x + 10, inspector_rect.y + 32,
+                clip(name + " : " + type, inspector_rect.width - 20,
+                     FontRole::MonoSmall),
+                ui::theme::kText, FontRole::MonoSmall);
+    canvas.text(inspector_rect.x + 10, inspector_rect.y + 52,
+                clip("value = " + value, inspector_rect.width - 20,
+                     FontRole::MonoSmall),
+                ui::theme::kDim, FontRole::MonoSmall);
+    const std::vector<MemberView> members =
+        inspector_member ? session->members(inspector_member_view)
+                         : session->members(inspector_variable);
+    int y = inspector_rect.y + 76;
+    for (const MemberView& member : members) {
+        if (y + kRowHeight > inspector_rect.y + inspector_rect.height) {
+            break;
+        }
+        canvas.text(inspector_rect.x + 10, y,
+                    clip(member.name + " = " + member.value,
+                         inspector_rect.width - 20, FontRole::MonoSmall),
+                    ui::theme::kDim, FontRole::MonoSmall);
+        y += kRowHeight;
+    }
+}
+
+
 void DebuggerSurface::Impl::draw_state_panel(Canvas& canvas) {
     const Rect rect = layout.state;
     if (rect.empty()) {
@@ -618,7 +1669,7 @@ void DebuggerSurface::Impl::draw_state_panel(Canvas& canvas) {
     }
     update_scroll(SurfacePanel::State);
     const ScrollState& state = scroll_state(SurfacePanel::State);
-    const std::vector<StateLine> lines = state_lines();
+    const std::vector<StateRow> rows = state_rows();
     canvas.fill(rect, ui::theme::kPanel);
     canvas.frame(rect,
                  focus == SurfacePanel::State ? ui::theme::kAccent
@@ -630,16 +1681,31 @@ void DebuggerSurface::Impl::draw_state_panel(Canvas& canvas) {
                 FontRole::UiBold);
     const bool scrollbar = state.content > state.visible;
     const int text_width = rect.width - 16 - (scrollbar ? 8 : 0);
-    int y = rect.y + ui::theme::kPanelHeaderHeight + 8;
-    for (std::size_t index = static_cast<std::size_t>(state.offset);
-         index < lines.size() && y + kRowHeight <= rect.y + rect.height; ++index) {
-        if (!lines[index].text.empty()) {
-            canvas.text(rect.x + 8, y,
-                        clip(lines[index].text, text_width, FontRole::MonoSmall),
-                        lines[index].accent ? ui::theme::kAccent : ui::theme::kDim,
-                        FontRole::MonoSmall);
+    const int content_top = rect.y + ui::theme::kPanelHeaderHeight + 4;
+    const int content_bottom = rect.y + rect.height;
+    for (const StateRow& row : rows) {
+        const int y = row.rect.y - state.offset * kRowHeight;
+        if (y < content_top || y + kRowHeight > content_bottom) {
+            continue;
         }
-        y += kRowHeight;
+        if (row.text.empty()) {
+            continue;
+        }
+        std::string text = row.text;
+        if (row.kind == StateRow::Kind::Register && state_edit.active &&
+            state_edit.group == row.group && state_edit.index == row.index) {
+            const std::size_t split = text.find("  ");
+            if (split != std::string::npos) {
+                text = text.substr(0, split) + "  " + state_edit.buffer + "_";
+            }
+        }
+        Color color = row.kind == StateRow::Kind::Group ? ui::theme::kText
+                                                        : ui::theme::kDim;
+        if (row.accent) {
+            color = ui::theme::kAccent;
+        }
+        canvas.text(row.rect.x, y, clip(text, text_width, FontRole::MonoSmall),
+                    color, FontRole::MonoSmall);
     }
     if (scrollbar) {
         draw_scrollbar(canvas, SurfacePanel::State);
@@ -671,36 +1737,56 @@ void DebuggerSurface::Impl::draw_context_menu(Canvas& canvas) {
     }
     canvas.fill(menu_rect, ui::theme::kPanel);
     canvas.frame(menu_rect, ui::theme::kAccent);
-    canvas.text(menu_rect.x + 10, menu_rect.y + 8, "RUN TO LINE",
-                ui::theme::kText, FontRole::MonoSmall);
-    canvas.text(menu_rect.x + 10, menu_rect.y + 28, "ADD BREAKPOINT",
+    const char* first = menu_mode == 0   ? "ADD BREAKPOINT"
+                        : menu_mode == 1 ? "ADD BREAKPOINT"
+                                         : "REMOVE BREAKPOINT";
+    const char* second = menu_mode == 0   ? "RUN TO LINE"
+                         : menu_mode == 1 ? "RUN TO ADDRESS"
+                                          : "DISABLE BREAKPOINT";
+    canvas.text(menu_rect.x + 10, menu_rect.y + 8, first, ui::theme::kText,
+                FontRole::MonoSmall);
+    canvas.text(menu_rect.x + 10, menu_rect.y + 28, second, ui::theme::kText,
+                FontRole::MonoSmall);
+}
+
+void DebuggerSurface::Impl::draw_tooltip(Canvas& canvas) {
+    if (!tooltip_visible || tooltip_text.empty()) {
+        return;
+    }
+    canvas.fill(tooltip_rect, ui::theme::kPanel);
+    canvas.frame(tooltip_rect, ui::theme::kAccent);
+    canvas.text(tooltip_rect.x + 6, tooltip_rect.y + 4,
+                clip(tooltip_text, tooltip_rect.width - 12, FontRole::MonoSmall),
                 ui::theme::kText, FontRole::MonoSmall);
 }
 
 void DebuggerSurface::Impl::render(Canvas& canvas) {
     canvas.clear(ui::theme::kBackground);
     draw_toolbar(canvas);
-    draw_panel(canvas, layout.source, "SOURCE",
-               program.loaded ? program.name : std::string{}, source_lines(),
-               SurfacePanel::Source);
-    draw_panel(canvas, layout.disassembly, "DISASSEMBLY", "HEX",
-               disassembly_lines(), SurfacePanel::Disassembly);
+    sync_source();
+    draw_source_panel(canvas);
+    draw_disassembly_panel(canvas);
     draw_state_panel(canvas);
-    const std::string memory_label =
-        editing && focus == SurfacePanel::Memory ? edit_buffer + "_" : "ADDR";
-    draw_panel(canvas, layout.memory, "MEMORY", memory_label, memory_lines(),
-               SurfacePanel::Memory);
-    draw_panel(canvas, layout.variables, "VARIABLES", std::string{},
-               lines_for(SurfacePanel::Variables), SurfacePanel::Variables);
-    draw_panel(canvas, layout.breakpoints, "BREAKPOINTS (0)", std::string{},
-               lines_for(SurfacePanel::Breakpoints), SurfacePanel::Breakpoints);
-    draw_panel(canvas, layout.call_stack, "CALL STACK", std::string{},
-               lines_for(SurfacePanel::CallStack), SurfacePanel::CallStack);
-    draw_panel(canvas, layout.com, com_title(), std::string{},
-               lines_for(SurfacePanel::Com), SurfacePanel::Com);
+    draw_memory_panel(canvas);
+    draw_variables_panel(canvas);
+    draw_breakpoints_panel(canvas);
+    draw_stack_panel(canvas);
+    poll_com();
+    draw_com_panel(canvas);
+    if (video_window && video_window->valid()) {
+        const IVideoSource* source = session->video();
+        FramebufferView frame;
+        if (source != nullptr && source->frame(frame)) {
+            video_window->present(frame, video_fit);
+        }
+    }
     draw_status_bar(canvas);
     draw_popup(canvas);
     draw_context_menu(canvas);
+    draw_source_menu(canvas);
+    draw_inspector(canvas);
+    draw_tooltip(canvas);
+    draw_settings(canvas);
 }
 
 DebuggerSurface::Impl::ToolbarAction DebuggerSurface::Impl::toolbar_at(int x,
@@ -756,15 +1842,64 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         return;
     case ToolbarAction::Video:
         video_tab = !video_tab;
+        if (!video_tab) {
+            video_guest_focus = false;
+        }
         return;
     case ToolbarAction::Gear:
-        popup = !popup;
+        open_settings();
         return;
     }
 }
 
 void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
+    if (settings_open) {
+        settings_click(event);
+        return;
+    }
+    if (source_state.menu) {
+        const bool inside = source_state.menu_rect.contains(event.x, event.y);
+        if (inside) {
+            const int index = (event.y - source_state.menu_rect.y - 4) / 16;
+            if (index >= 0 &&
+                index < static_cast<int>(session->info().sources.size())) {
+                load_source(index);
+                source_state.pinned = true;
+            }
+        }
+        source_state.menu = false;
+        return;
+    }
+    if (inspector_open) {
+        if (!inspector_rect.contains(event.x, event.y)) {
+            inspector_open = false;
+        } else {
+            return;
+        }
+    }
     if (menu_open) {
+        const bool inside = menu_rect.contains(event.x, event.y);
+        if (inside) {
+            if (menu_mode == 0) {
+                if (event.y < menu_rect.y + 28) {
+                    toggle_line_breakpoint(menu_file, menu_line);
+                } else if (!menu_file.empty() && menu_line > 0) {
+                    session->run_to_line(menu_file, menu_line);
+                }
+            } else if (menu_mode == 1) {
+                if (event.y < menu_rect.y + 28) {
+                    toggle_address_breakpoint(menu_address);
+                } else {
+                    session->run_to_address(menu_address);
+                }
+            } else if (menu_mode == 2) {
+                if (event.y < menu_rect.y + 28) {
+                    session->remove_breakpoint(menu_breakpoint);
+                } else {
+                    session->set_breakpoint_enabled(menu_breakpoint, false);
+                }
+            }
+        }
         menu_open = false;
         return;
     }
@@ -780,13 +1915,69 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
         return;
     }
     const SurfacePanel panel = panel_at(event.x, event.y);
-    if (panel != SurfacePanel::None) {
-        focus = panel;
-        if (event.button == 1 &&
-            (panel == SurfacePanel::Source ||
-             panel == SurfacePanel::Disassembly)) {
-            menu_open = true;
-            menu_rect = Rect{event.x, event.y, 180, 64};
+    if (panel == SurfacePanel::None) {
+        focus = SurfacePanel::None;
+        return;
+    }
+    focus = panel;
+
+    if (panel == SurfacePanel::Source) {
+        if (layout.source_dropdown.contains(event.x, event.y)) {
+            const int count = static_cast<int>(session->info().sources.size());
+            const int menu_height = std::clamp(count * 16 + 8, 20, 200);
+            int y = layout.source_dropdown.y + layout.source_dropdown.height;
+            if (y + menu_height > layout.status.y) {
+                y = layout.source_dropdown.y - menu_height;
+            }
+            source_state.menu_rect = Rect{
+                layout.source_dropdown.x, y,
+                std::max(240, layout.source_dropdown.width), menu_height};
+            source_state.menu = true;
+            return;
+        }
+        if (layout.source_pin.contains(event.x, event.y)) {
+            source_state.pinned = !source_state.pinned;
+            return;
+        }
+        if (layout.source_over.contains(event.x, event.y)) {
+            session->step(StepMode::LineOver);
+            selected_frame = 0;
+            return;
+        }
+        if (layout.source_in.contains(event.x, event.y)) {
+            session->step(StepMode::LineIn);
+            selected_frame = 0;
+            return;
+        }
+        if (layout.source_out.contains(event.x, event.y)) {
+            session->step(StepMode::LineOut);
+            selected_frame = 0;
+            return;
+        }
+        if (event.x < layout.source.x + 58) {
+            const int row = (event.y - (layout.source.y + 28)) / kRowHeight;
+            update_scroll(SurfacePanel::Source);
+            const int line = scroll_state(SurfacePanel::Source).offset + row + 1;
+            const SourceFile* source = current_source();
+            if (source != nullptr && line > 0 &&
+                line <= static_cast<int>(source_state.text.size())) {
+                toggle_line_breakpoint(source->path, line);
+            }
+            return;
+        }
+        if (event.button == 1) {
+            const SourceFile* source = current_source();
+            const int row = (event.y - (layout.source.y + 28)) / kRowHeight;
+            update_scroll(SurfacePanel::Source);
+            const int line = scroll_state(SurfacePanel::Source).offset + row + 1;
+            if (source != nullptr && line > 0 &&
+                line <= static_cast<int>(source_state.text.size())) {
+                menu_mode = 0;
+                menu_file = source->path;
+                menu_line = line;
+                menu_open = true;
+                menu_rect = Rect{event.x, event.y, 180, 56};
+            }
             return;
         }
         if (event.button == 0) {
@@ -794,7 +1985,263 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
         }
         return;
     }
-    focus = SurfacePanel::None;
+
+    if (panel == SurfacePanel::Disassembly) {
+        if (layout.disassembly_over.contains(event.x, event.y)) {
+            session->step(StepMode::InstructionOver);
+            selected_frame = 0;
+            return;
+        }
+        if (layout.disassembly_in.contains(event.x, event.y)) {
+            session->step(StepMode::Instruction);
+            selected_frame = 0;
+            return;
+        }
+        if (layout.disassembly_out.contains(event.x, event.y)) {
+            session->step(StepMode::InstructionOut);
+            selected_frame = 0;
+            return;
+        }
+        const unsigned alignment =
+            std::max(1U, session->layout().instruction_alignment);
+        const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
+        if (row >= 0 && row < 32) {
+            const std::uint64_t address =
+                disasm_base + static_cast<std::uint64_t>(row) * alignment;
+            if (event.x < layout.disassembly.x + 18) {
+                toggle_address_breakpoint(address);
+                return;
+            }
+            if (event.button == 1) {
+                menu_mode = 1;
+                menu_address = address;
+                menu_open = true;
+                menu_rect = Rect{event.x, event.y, 180, 56};
+            }
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::Memory) {
+        if (layout.memory_ptr.contains(event.x, event.y)) {
+            memory_ptr = !memory_ptr;
+            return;
+        }
+        if (layout.memory_page_up.contains(event.x, event.y)) {
+            memory_base = memory_base >= 32 ? memory_base - 32 : 0;
+            scroll_state(SurfacePanel::Memory).offset = 0;
+            return;
+        }
+        if (layout.memory_page_down.contains(event.x, event.y)) {
+            memory_base += 32;
+            scroll_state(SurfacePanel::Memory).offset = 0;
+            return;
+        }
+        update_scroll(SurfacePanel::Memory);
+        if (event.x >= layout.memory.x + layout.memory.width - 12) {
+            scroll_click(SurfacePanel::Memory, event.x, event.y);
+            return;
+        }
+        const int offset = scroll_state(SurfacePanel::Memory).offset;
+        const int row = (event.y - (layout.memory.y + 28)) / 20;
+        const int column = (event.x - (layout.memory.x + 64)) / 18;
+        if (row >= 0 && row < 16 && column >= 0 && column < 8) {
+            const std::uint64_t address =
+                memory_base + static_cast<std::uint64_t>(row + offset) * 8U +
+                static_cast<std::uint64_t>(column);
+            if (memory_ptr) {
+                std::array<std::uint8_t, 4> bytes{};
+                if (session->read_memory(address, bytes)) {
+                    memory_base = static_cast<std::uint64_t>(bytes[0]) |
+                                  (static_cast<std::uint64_t>(bytes[1]) << 8) |
+                                  (static_cast<std::uint64_t>(bytes[2]) << 16) |
+                                  (static_cast<std::uint64_t>(bytes[3]) << 24);
+                    scroll_state(SurfacePanel::Memory).offset = 0;
+                }
+            } else {
+                memory_edit_byte = address;
+                memory_byte_buffer.clear();
+                editing = false;
+            }
+            return;
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::Variables) {
+        update_scroll(SurfacePanel::Variables);
+        const int offset = scroll_state(SurfacePanel::Variables).offset;
+        for (const VarRow& row : variable_rows()) {
+            Rect rect = row.rect;
+            rect.y -= offset * kRowHeight;
+            if (!rect.contains(event.x, event.y) || row.header) {
+                continue;
+            }
+            const int marker_x = rect.x + row.depth * 12;
+            if (event.x < marker_x + 16 && row.expandable) {
+                if (row.expanded) {
+                    expanded.erase(row.key);
+                } else {
+                    expanded.insert(row.key);
+                }
+                return;
+            }
+            selected_variable = row.key;
+            if (event.button == 1) {
+                inspector_member = row.has_member;
+                inspector_variable = row.variable;
+                inspector_member_view = row.member;
+                inspector_open = true;
+                inspector_rect = Rect{
+                    std::clamp(event.x, 0, std::max(0, width - 320)),
+                    std::clamp(event.y, 0, std::max(0, height - 200)), 320, 200};
+            }
+            return;
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::Breakpoints) {
+        update_scroll(SurfacePanel::Breakpoints);
+        const int offset = scroll_state(SurfacePanel::Breakpoints).offset;
+        const std::vector<BreakpointView> breakpoints = session->breakpoints();
+        const int index = (event.y - (layout.breakpoints.y + 28)) / kRowHeight +
+                          offset;
+        if (index >= 0 && index < static_cast<int>(breakpoints.size())) {
+            const BreakpointView& breakpoint = breakpoints[
+                static_cast<std::size_t>(index)];
+            if (event.x < layout.breakpoints.x + 34) {
+                session->set_breakpoint_enabled(breakpoint.id, !breakpoint.enabled);
+                return;
+            }
+            selected_breakpoint = index;
+            if (event.button == 1) {
+                menu_mode = 2;
+                menu_breakpoint = breakpoint.id;
+                menu_open = true;
+                menu_rect = Rect{event.x, event.y, 200, 56};
+                return;
+            }
+            if (breakpoint.has_line) {
+                const std::vector<SourceFile>& sources = session->info().sources;
+                for (std::size_t source_index = 0; source_index < sources.size();
+                     ++source_index) {
+                    if (sources[source_index].path == breakpoint.file) {
+                        load_source(static_cast<int>(source_index));
+                        source_state.pinned = true;
+                        update_scroll(SurfacePanel::Source);
+                        ScrollState& source_scroll =
+                            scroll_state(SurfacePanel::Source);
+                        source_scroll.offset = ui::clamp_scroll(
+                            breakpoint.line - 1 - source_scroll.visible / 2,
+                            source_scroll.content, source_scroll.visible);
+                        break;
+                    }
+                }
+            } else {
+                const unsigned alignment =
+                    std::max(1U, session->layout().instruction_alignment);
+                disasm_base = breakpoint.address > 8ULL * alignment
+                                  ? breakpoint.address - 8ULL * alignment
+                                  : 0;
+            }
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::CallStack) {
+        const std::vector<FrameView> frames = session->call_stack();
+        const int offset = scroll_state(SurfacePanel::CallStack).offset;
+        const int index = (event.y - (layout.call_stack.y + 28)) / kRowHeight +
+                          offset;
+        if (index >= 0 && index < static_cast<int>(frames.size())) {
+            selected_frame = index;
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::Com) {
+        if (layout.video_tab_com.contains(event.x, event.y)) {
+            video_tab = false;
+            video_guest_focus = false;
+            return;
+        }
+        if (layout.video_tab_video.contains(event.x, event.y)) {
+            video_tab = true;
+            return;
+        }
+        if (layout.video_pop_out.contains(event.x, event.y)) {
+            if (video_popped) {
+                if (video_window) {
+                    video_window->destroy();
+                }
+                video_popped = false;
+            } else {
+                if (!video_window) {
+                    video_window = platform::create_video_window();
+                }
+                if (video_window && video_window->create("krdbg video", 640, 480)) {
+                    video_popped = true;
+                }
+            }
+            return;
+        }
+        if (layout.video_fit.contains(event.x, event.y)) {
+            video_fit = !video_fit;
+            return;
+        }
+        if (video_tab && layout.video_preview.contains(event.x, event.y)) {
+            video_guest_focus = true;
+            return;
+        }
+        if (!video_tab) {
+            video_guest_focus = false;
+            scroll_click(panel, event.x, event.y);
+        }
+        return;
+    }
+
+    if (panel == SurfacePanel::State) {
+        update_scroll(SurfacePanel::State);
+        const int offset = scroll_state(SurfacePanel::State).offset;
+        for (const StateRow& row : state_rows()) {
+            Rect rect = row.rect;
+            rect.y -= offset * kRowHeight;
+            if (!rect.contains(event.x, event.y)) {
+                continue;
+            }
+            if (row.kind == StateRow::Kind::Context) {
+                session->select_context(row.context_id);
+                selected_frame = 0;
+                return;
+            }
+            if (row.kind == StateRow::Kind::Register) {
+                state_edit.active = true;
+                state_edit.group = row.group;
+                state_edit.index = row.index;
+                state_edit.bits = row.bits;
+                state_edit.format = row.format;
+                state_edit.buffer.clear();
+                editing = false;
+                return;
+            }
+            if (row.kind == StateRow::Kind::Flag) {
+                std::uint64_t bits = 0;
+                session->read_flags(bits);
+                if (row.index >= 0 &&
+                    row.index < static_cast<int>(session->layout().flags.size())) {
+                    bits ^= 1ULL << session->layout().flags[
+                        static_cast<std::size_t>(row.index)].bit;
+                    session->write_flags(bits);
+                }
+                return;
+            }
+            return;
+        }
+        return;
+    }
+
+    scroll_click(panel, event.x, event.y);
 }
 
 void DebuggerSurface::Impl::mouse_up() {
@@ -804,11 +2251,82 @@ void DebuggerSurface::Impl::mouse_up() {
 }
 
 void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
+    tooltip_visible = false;
     for (int index = 0; index < kPanelCount; ++index) {
         const auto panel = static_cast<SurfacePanel>(index);
         if (scroll_state(panel).dragging) {
             scroll_drag(panel, event.y);
         }
+    }
+
+    const SurfacePanel panel = panel_at(event.x, event.y);
+    std::string text;
+    if (panel == SurfacePanel::State) {
+        update_scroll(SurfacePanel::State);
+        const int offset = scroll_state(SurfacePanel::State).offset;
+        for (const StateRow& row : state_rows()) {
+            Rect rect = row.rect;
+            rect.y -= offset * kRowHeight;
+            if (!rect.contains(event.x, event.y)) {
+                continue;
+            }
+            if (row.kind == StateRow::Kind::Register) {
+                for (const RegisterGroup& group : session->layout().groups) {
+                    if (group.id != row.group ||
+                        row.index >= static_cast<int>(group.registers.size())) {
+                        continue;
+                    }
+                    const RegisterDef& def = group.registers[
+                        static_cast<std::size_t>(row.index)];
+                    const char* format = "hex";
+                    switch (def.format) {
+                    case ValueFormat::Hex: format = "hex"; break;
+                    case ValueFormat::Unsigned: format = "unsigned"; break;
+                    case ValueFormat::Signed: format = "signed"; break;
+                    case ValueFormat::Float32: format = "float32"; break;
+                    case ValueFormat::Float64: format = "float64"; break;
+                    case ValueFormat::Char: format = "char"; break;
+                    case ValueFormat::Bool: format = "bool"; break;
+                    }
+                    text = group.title + " / " + def.label + " / " +
+                           std::to_string(def.bits) + "-bit " + format;
+                    break;
+                }
+            } else if (row.kind == StateRow::Kind::Flag &&
+                       row.index >= 0 &&
+                       row.index < static_cast<int>(session->layout().flags.size())) {
+                const FlagDef& flag = session->layout().flags[
+                    static_cast<std::size_t>(row.index)];
+                text = flag.label + ": " + flag.description;
+            } else if (row.kind == StateRow::Kind::Context) {
+                text = "select this core or thread context";
+            }
+            break;
+        }
+    } else if (panel == SurfacePanel::Disassembly && program.loaded) {
+        const unsigned alignment =
+            std::max(1U, session->layout().instruction_alignment);
+        const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
+        if (row >= 0 && row < 32) {
+            InstructionView instruction;
+            if (session->disassemble(
+                    disasm_base + static_cast<std::uint64_t>(row) * alignment,
+                    instruction)) {
+                text = instruction.help.empty()
+                           ? instruction.mnemonic + " " + instruction.operands
+                           : instruction.help;
+            }
+        }
+    }
+
+    if (!text.empty()) {
+        const int tooltip_width =
+            std::clamp(Canvas::text_width(text, FontRole::MonoSmall) + 12, 80, 480);
+        const int x = std::clamp(event.x + 12, 0, std::max(0, width - tooltip_width));
+        const int y = std::clamp(event.y + 18, 0, std::max(0, height - 24));
+        tooltip_rect = Rect{x, y, tooltip_width, 20};
+        tooltip_text = std::move(text);
+        tooltip_visible = true;
     }
 }
 
@@ -831,7 +2349,716 @@ void DebuggerSurface::Impl::wheel(const platform::Event& event) {
     }
 }
 
+std::vector<const SettingDescriptor*>
+DebuggerSurface::Impl::visible_settings() const {
+    std::vector<const SettingDescriptor*> result;
+    std::string group_id;
+    if (!settings_schema.groups.empty() && settings_group >= 0 &&
+        settings_group < static_cast<int>(settings_schema.groups.size())) {
+        group_id = settings_schema.groups[
+            static_cast<std::size_t>(settings_group)].id;
+    }
+    std::string search = settings_search;
+    for (char& ch : search) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    for (const SettingDescriptor& setting : settings_schema.settings) {
+        if (!settings_advanced && setting.advanced) {
+            continue;
+        }
+        if (search.empty() && !group_id.empty() && setting.group != group_id) {
+            continue;
+        }
+        if (!search.empty()) {
+            std::string haystack = setting.id + " " + setting.label + " " +
+                                   setting.description;
+            for (char& ch : haystack) {
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            }
+            if (haystack.find(search) == std::string::npos) {
+                continue;
+            }
+        }
+        result.push_back(&setting);
+    }
+    return result;
+}
+
+std::string DebuggerSurface::Impl::setting_text(
+    const SettingDescriptor& setting) const {
+    const auto found = settings_snapshot.values.find(setting.id);
+    if (found == settings_snapshot.values.end()) {
+        return "(default)";
+    }
+    if (setting.secret) {
+        return "********";
+    }
+    const SettingValue& value = found->second;
+    if (const auto* boolean = std::get_if<bool>(&value)) {
+        return *boolean ? "on" : "off";
+    }
+    if (const auto* integer = std::get_if<std::int64_t>(&value)) {
+        return std::to_string(*integer) +
+               (setting.unit.empty() ? "" : " " + setting.unit);
+    }
+    if (const auto* number = std::get_if<double>(&value)) {
+        char buffer[32] = {};
+        std::snprintf(buffer, sizeof(buffer), "%g", *number);
+        return std::string(buffer) +
+               (setting.unit.empty() ? "" : " " + setting.unit);
+    }
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        return text->empty() ? "(empty)" : *text;
+    }
+    if (const auto* list = std::get_if<std::vector<std::string>>(&value)) {
+        std::string text;
+        for (const std::string& item : *list) {
+            if (!text.empty()) text += ", ";
+            text += item;
+        }
+        return text;
+    }
+    if (const auto* map =
+            std::get_if<std::map<std::string, std::string>>(&value)) {
+        return std::to_string(map->size()) + " entries";
+    }
+    return {};
+}
+
+void DebuggerSurface::Impl::open_settings() {
+    settings_schema = host->settings_schema();
+    settings_snapshot = host->settings_values();
+    settings_group = 0;
+    settings_selected = 0;
+    settings_advanced = false;
+    settings_search.clear();
+    settings_search_focus = false;
+    settings_editing = false;
+    settings_buffer.clear();
+    settings_error.clear();
+    settings_open = true;
+    popup = false;
+    menu_open = false;
+    source_state.menu = false;
+    inspector_open = false;
+}
+
+void DebuggerSurface::Impl::close_settings() {
+    settings_open = false;
+    settings_editing = false;
+    settings_buffer.clear();
+    settings_error.clear();
+}
+
+void DebuggerSurface::Impl::apply_settings(bool reload) {
+    SettingsApplyResult result =
+        host->apply_settings(settings_snapshot, settings_layer);
+    if (!result.ok) {
+        settings_error = "apply failed";
+        if (!result.errors.empty()) {
+            settings_error += ": " + result.errors.begin()->second;
+        }
+        return;
+    }
+    if (reload) {
+        std::string error;
+        if (!host->reload(error)) {
+            settings_error = error.empty() ? "reload failed" : error;
+            return;
+        }
+    }
+    close_settings();
+}
+
+void DebuggerSurface::Impl::settings_click(const platform::Event& event) {
+    const Rect dialog = layout.settings_dialog;
+    if (!dialog.contains(event.x, event.y)) {
+        close_settings();
+        return;
+    }
+    if (layout.settings_apply.contains(event.x, event.y)) {
+        apply_settings(false);
+        return;
+    }
+    if (layout.settings_apply_reload.contains(event.x, event.y)) {
+        apply_settings(true);
+        return;
+    }
+    if (layout.settings_cancel.contains(event.x, event.y)) {
+        close_settings();
+        return;
+    }
+    if (layout.settings_layer.contains(event.x, event.y)) {
+        settings_layer = settings_layer == SettingsLayer::User
+                             ? SettingsLayer::Project
+                             : SettingsLayer::User;
+        return;
+    }
+    if (layout.settings_advanced.contains(event.x, event.y)) {
+        settings_advanced = !settings_advanced;
+        settings_selected = 0;
+        return;
+    }
+    if (event.x < dialog.x + 220) {
+        const int index = (event.y - (dialog.y + 40)) / 22;
+        if (index >= 0 &&
+            index < static_cast<int>(settings_schema.groups.size())) {
+            settings_group = index;
+            settings_selected = 0;
+            settings_error.clear();
+        }
+        return;
+    }
+    const Rect search{dialog.x + 232, dialog.y + 36, dialog.width - 244, 20};
+    if (search.contains(event.x, event.y)) {
+        settings_search_focus = true;
+        settings_editing = false;
+        return;
+    }
+    const std::vector<const SettingDescriptor*> settings = visible_settings();
+    const int index = (event.y - (dialog.y + 72)) / 24;
+    if (index < 0 || index >= static_cast<int>(settings.size())) {
+        return;
+    }
+    settings_selected = index;
+    settings_error.clear();
+    const SettingDescriptor& descriptor =
+        *settings[static_cast<std::size_t>(index)];
+    if (descriptor.read_only) {
+        return;
+    }
+    settings_search_focus = false;
+    if (descriptor.type == SettingType::Bool) {
+        bool value = false;
+        if (const auto found = settings_snapshot.values.find(descriptor.id);
+            found != settings_snapshot.values.end()) {
+            if (const auto* existing = std::get_if<bool>(&found->second)) {
+                value = *existing;
+            }
+        }
+        settings_snapshot.values[descriptor.id] = !value;
+        settings_snapshot.origins[descriptor.id] =
+            settings_layer == SettingsLayer::User ? SettingOrigin::User
+                                                  : SettingOrigin::Project;
+        return;
+    }
+    if (descriptor.type == SettingType::Enum) {
+        std::string value = descriptor.choices.empty() ? "" : descriptor.choices[0];
+        if (const auto found = settings_snapshot.values.find(descriptor.id);
+            found != settings_snapshot.values.end()) {
+            if (const auto* existing = std::get_if<std::string>(&found->second)) {
+                value = *existing;
+            }
+        }
+        if (!descriptor.choices.empty()) {
+            const auto current =
+                std::find(descriptor.choices.begin(), descriptor.choices.end(), value);
+            const std::size_t next =
+                current == descriptor.choices.end()
+                    ? 0
+                    : (static_cast<std::size_t>(current - descriptor.choices.begin()) +
+                       1) % descriptor.choices.size();
+            value = descriptor.choices[next];
+        }
+        settings_snapshot.values[descriptor.id] = value;
+        settings_snapshot.origins[descriptor.id] =
+            settings_layer == SettingsLayer::User ? SettingOrigin::User
+                                                  : SettingOrigin::Project;
+        return;
+    }
+
+    settings_editing = true;
+    settings_buffer.clear();
+    if (const auto found = settings_snapshot.values.find(descriptor.id);
+        found != settings_snapshot.values.end()) {
+        if (const auto* text = std::get_if<std::string>(&found->second)) {
+            settings_buffer = *text;
+        } else if (const auto* integer =
+                       std::get_if<std::int64_t>(&found->second)) {
+            settings_buffer = std::to_string(*integer);
+        } else if (const auto* number = std::get_if<double>(&found->second)) {
+            char buffer[32] = {};
+            std::snprintf(buffer, sizeof(buffer), "%g", *number);
+            settings_buffer = buffer;
+        } else if (const auto* list =
+                       std::get_if<std::vector<std::string>>(&found->second)) {
+            for (const std::string& item : *list) {
+                if (!settings_buffer.empty()) settings_buffer += ';';
+                settings_buffer += item;
+            }
+        } else if (const auto* map =
+                       std::get_if<std::map<std::string, std::string>>(
+                           &found->second)) {
+            for (const auto& [key, item] : *map) {
+                if (!settings_buffer.empty()) settings_buffer += ';';
+                settings_buffer += key + "=" + item;
+            }
+        }
+    }
+}
+
+void DebuggerSurface::Impl::draw_video_preview(Canvas& canvas, Rect content) {
+    const IVideoSource* source = session->video();
+    if (source == nullptr) {
+        canvas.text(content.x + 8, content.y + 8, "(no framebuffer)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+        return;
+    }
+    FramebufferView frame;
+    if (!source->frame(frame) || frame.width <= 0 || frame.height <= 0) {
+        canvas.text(content.x + 8, content.y + 8, "(no frame)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+        return;
+    }
+    const Rect fit = ui::fit_rect(frame.width, frame.height, content.width,
+                                  content.height);
+    const Rect target{content.x + fit.x, content.y + fit.y, fit.width, fit.height};
+    if (target.empty()) {
+        return;
+    }
+    for (int y = 0; y < target.height; ++y) {
+        const int source_y = y * frame.height / target.height;
+        const std::size_t row = static_cast<std::size_t>(source_y) *
+                                static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < target.width; ++x) {
+            const int source_x = x * frame.width / target.width;
+            const std::size_t offset =
+                row + static_cast<std::size_t>(source_x) * 4U;
+            if (offset + 3 >= frame.pixels.size()) {
+                continue;
+            }
+            canvas.pixel(target.x + x, target.y + y,
+                         Color{frame.pixels[offset + 2], frame.pixels[offset + 1],
+                               frame.pixels[offset], 255});
+        }
+    }
+    canvas.frame(target, ui::theme::kBorder);
+}
+
+void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
+    const Rect rect = layout.com;
+    if (rect.empty()) {
+        return;
+    }
+    if (!video_tab) {
+        draw_panel(canvas, rect, com_title(), com_status(),
+                   lines_for(SurfacePanel::Com), SurfacePanel::Com);
+    } else {
+        canvas.fill(rect, ui::theme::kPanel);
+        canvas.frame(rect,
+                     focus == SurfacePanel::Com ? ui::theme::kAccent
+                                                : ui::theme::kBorder);
+        canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                         ui::theme::kPanelHeaderHeight - 1},
+                    ui::theme::kPanelAlt);
+        canvas.text(rect.x + 8, rect.y + 5, "VIDEO", ui::theme::kAccent,
+                    FontRole::UiBold);
+        if (const IVideoSource* source = session->video(); source != nullptr) {
+            FramebufferView frame;
+            if (source->frame(frame)) {
+                const std::string fit =
+                    "fit " + std::to_string(frame.width) + "x" +
+                    std::to_string(frame.height);
+                canvas.text(layout.video_fit.x - 88, rect.y + 5,
+                            clip(fit, 82, FontRole::MonoSmall),
+                            ui::theme::kDim, FontRole::MonoSmall);
+            }
+        }
+        draw_video_preview(canvas, layout.video_preview);
+        if (video_guest_focus) {
+            canvas.fill(Rect{rect.x + 60, rect.y + 10, 5, 5},
+                        kRunGreen);
+        }
+    }
+    draw_small_button(canvas, layout.video_tab_com, "COM1",
+                      !video_tab ? ui::theme::kAccent : ui::theme::kDim,
+                      !video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    draw_small_button(canvas, layout.video_tab_video, "VIDEO",
+                      video_tab ? ui::theme::kAccent : ui::theme::kDim,
+                      video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+    draw_small_button(canvas, layout.video_pop_out,
+                      video_popped ? "CLOSE" : "POP OUT", ui::theme::kText,
+                      ui::theme::kBorder);
+    if (video_tab) {
+        draw_small_button(canvas, layout.video_fit, video_fit ? "FIT" : "1:1",
+                          ui::theme::kText, ui::theme::kBorder);
+    }
+}
+
+
+void DebuggerSurface::Impl::draw_settings(Canvas& canvas) {
+    if (!settings_open) {
+        return;
+    }
+    canvas.fill(Rect{0, 0, width, height}, ui::theme::kBackground);
+    const Rect dialog = layout.settings_dialog;
+    canvas.fill(dialog, ui::theme::kPanel);
+    canvas.frame(dialog, ui::theme::kAccent);
+    canvas.fill(Rect{dialog.x + 1, dialog.y + 1, dialog.width - 2, 28},
+                ui::theme::kPanelAlt);
+    canvas.text(dialog.x + 12, dialog.y + 6,
+                "SETTINGS  v" + std::to_string(settings_schema.version),
+                ui::theme::kAccent, FontRole::UiBold);
+
+    for (std::size_t index = 0; index < settings_schema.groups.size(); ++index) {
+        const SettingsGroup& group = settings_schema.groups[index];
+        const int y = dialog.y + 40 + static_cast<int>(index) * 22;
+        if (y + 20 > dialog.y + dialog.height - 50) {
+            break;
+        }
+        if (static_cast<int>(index) == settings_group) {
+            canvas.fill(Rect{dialog.x + 1, y - 2, 218, 20},
+                        ui::theme::kPanelAlt);
+        }
+        canvas.text(dialog.x + 10, y, clip(group.label, 200, FontRole::MonoSmall),
+                    static_cast<int>(index) == settings_group
+                        ? ui::theme::kText
+                        : ui::theme::kDim,
+                    FontRole::MonoSmall);
+    }
+    canvas.fill(Rect{dialog.x + 220, dialog.y + 30, 1, dialog.height - 64},
+                ui::theme::kBorder);
+
+    const Rect search{dialog.x + 232, dialog.y + 36, dialog.width - 244, 20};
+    canvas.fill(search, ui::theme::kPanelAlt);
+    canvas.frame(search, ui::theme::kBorder);
+    const std::string search_text =
+        settings_search.empty() ? "search"
+                                : settings_search + (settings_search_focus ? "_" : "");
+    canvas.text(search.x + 6, search.y + 3,
+                clip(search_text, search.width - 12, FontRole::MonoSmall),
+                settings_search.empty() ? ui::theme::kDim : ui::theme::kText,
+                FontRole::MonoSmall);
+
+    const std::vector<const SettingDescriptor*> settings = visible_settings();
+    int y = dialog.y + 72;
+    for (std::size_t index = 0; index < settings.size(); ++index) {
+        if (y + 24 > dialog.y + dialog.height - 48) {
+            break;
+        }
+        const SettingDescriptor& setting = *settings[index];
+        if (static_cast<int>(index) == settings_selected) {
+            canvas.fill(Rect{dialog.x + 224, y - 2, dialog.width - 232, 22},
+                        ui::theme::kPanelAlt);
+        }
+        canvas.text(dialog.x + 232, y,
+                    clip(setting.label, 300, FontRole::MonoSmall),
+                    ui::theme::kText, FontRole::MonoSmall);
+        const bool is_editing = settings_editing && static_cast<int>(index) == settings_selected;
+        const std::string value = is_editing ? settings_buffer + "_" : setting_text(setting);
+        canvas.text(dialog.x + 560, y,
+                    clip(value, dialog.width - 660, FontRole::MonoSmall),
+                    ui::theme::kDim, FontRole::MonoSmall);
+        const auto origin = settings_snapshot.origins.find(setting.id);
+        const SettingOrigin source =
+            origin == settings_snapshot.origins.end() ? SettingOrigin::Default
+                                                      : origin->second;
+        const char badge = source == SettingOrigin::User
+                               ? 'U'
+                               : source == SettingOrigin::Project ? 'P' : 'D';
+        canvas.text(dialog.x + dialog.width - 70, y, std::string(1, badge),
+                    source == SettingOrigin::Default ? ui::theme::kDim
+                                                     : ui::theme::kAccent,
+                    FontRole::MonoSmall);
+        if (setting.requires_restart) {
+            canvas.text(dialog.x + dialog.width - 38, y, "*", ui::theme::kBad,
+                        FontRole::MonoSmall);
+        }
+        y += 24;
+    }
+    if (settings.empty()) {
+        canvas.text(dialog.x + 232, dialog.y + 76, "(no settings)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+    }
+
+    if (!settings_error.empty()) {
+        canvas.text(dialog.x + 12, dialog.y + dialog.height - 58,
+                    clip(settings_error, dialog.width - 24, FontRole::MonoSmall),
+                    ui::theme::kBad, FontRole::MonoSmall);
+    }
+    if (settings_selected >= 0 &&
+        settings_selected < static_cast<int>(settings.size())) {
+        const SettingDescriptor& selected =
+            *settings[static_cast<std::size_t>(settings_selected)];
+        canvas.text(dialog.x + 12, dialog.y + dialog.height - 74,
+                    clip(selected.description, dialog.width - 24,
+                         FontRole::MonoSmall),
+                    ui::theme::kDim, FontRole::MonoSmall);
+    }
+    draw_small_button(canvas, layout.settings_layer,
+                      settings_layer == SettingsLayer::User ? "SAVE: USER"
+                                                           : "SAVE: PROJ",
+                      ui::theme::kText, ui::theme::kBorder);
+    draw_small_button(canvas, layout.settings_advanced,
+                      settings_advanced ? "ADV: ON" : "ADV: OFF",
+                      settings_advanced ? ui::theme::kAccent : ui::theme::kText,
+                      settings_advanced ? ui::theme::kAccent : ui::theme::kBorder);
+    draw_small_button(canvas, layout.settings_apply, "APPLY", ui::theme::kText,
+                      ui::theme::kBorder);
+    draw_small_button(canvas, layout.settings_apply_reload, "APPLY & RELOAD",
+                      ui::theme::kAccent, ui::theme::kAccent);
+    draw_small_button(canvas, layout.settings_cancel, "CANCEL", ui::theme::kText,
+                      ui::theme::kBorder);
+}
+
+
+bool DebuggerSurface::Impl::settings_key(const platform::Event& event) {
+    if (event.key == platform::key::Escape) {
+        if (settings_editing) {
+            settings_editing = false;
+            settings_buffer.clear();
+            settings_error.clear();
+        } else if (settings_search_focus) {
+            settings_search_focus = false;
+            settings_search.clear();
+        } else {
+            close_settings();
+        }
+        return true;
+    }
+    const std::vector<const SettingDescriptor*> settings = visible_settings();
+    if (settings_editing && settings_selected >= 0 &&
+        settings_selected < static_cast<int>(settings.size())) {
+        const SettingDescriptor& descriptor =
+            *settings[static_cast<std::size_t>(settings_selected)];
+        if (event.key == platform::key::Enter) {
+            SettingValue value;
+            bool valid = true;
+            std::string error;
+            switch (descriptor.type) {
+            case SettingType::Int: {
+                char* end = nullptr;
+                const long long parsed =
+                    std::strtoll(settings_buffer.c_str(), &end, 10);
+                valid = end != nullptr && *end == '\0';
+                if (valid && descriptor.has_range &&
+                    (static_cast<double>(parsed) < descriptor.min ||
+                     static_cast<double>(parsed) > descriptor.max)) {
+                    valid = false;
+                    error = "out of range";
+                }
+                value = static_cast<std::int64_t>(parsed);
+                break;
+            }
+            case SettingType::Float: {
+                char* end = nullptr;
+                const double parsed = std::strtod(settings_buffer.c_str(), &end);
+                valid = end != nullptr && *end == '\0';
+                if (valid && descriptor.has_range &&
+                    (parsed < descriptor.min || parsed > descriptor.max)) {
+                    valid = false;
+                    error = "out of range";
+                }
+                value = parsed;
+                break;
+            }
+            case SettingType::String:
+            case SettingType::Path:
+                value = settings_buffer;
+                break;
+            case SettingType::Enum:
+                valid = std::find(descriptor.choices.begin(),
+                                  descriptor.choices.end(),
+                                  settings_buffer) != descriptor.choices.end();
+                if (!valid) {
+                    error = "not one of the choices";
+                }
+                value = settings_buffer;
+                break;
+            case SettingType::StringList: {
+                std::vector<std::string> list;
+                std::string item;
+                for (char ch : settings_buffer) {
+                    if (ch == ';') {
+                        if (!item.empty()) list.push_back(item);
+                        item.clear();
+                    } else {
+                        item.push_back(ch);
+                    }
+                }
+                if (!item.empty()) list.push_back(item);
+                value = std::move(list);
+                break;
+            }
+            case SettingType::StringMap: {
+                std::map<std::string, std::string> map;
+                std::string item;
+                for (char ch : settings_buffer) {
+                    if (ch == ';') {
+                        const std::size_t split = item.find('=');
+                        if (split != std::string::npos) {
+                            map[item.substr(0, split)] = item.substr(split + 1);
+                        }
+                        item.clear();
+                    } else {
+                        item.push_back(ch);
+                    }
+                }
+                if (!item.empty()) {
+                    const std::size_t split = item.find('=');
+                    if (split != std::string::npos) {
+                        map[item.substr(0, split)] = item.substr(split + 1);
+                    }
+                }
+                value = std::move(map);
+                break;
+            }
+            case SettingType::Bool:
+                value = settings_buffer == "1" || settings_buffer == "true";
+                break;
+            }
+            if (!valid) {
+                settings_error = error.empty() ? "invalid value" : error;
+                return true;
+            }
+            settings_snapshot.values[descriptor.id] = std::move(value);
+            settings_snapshot.origins[descriptor.id] =
+                settings_layer == SettingsLayer::User ? SettingOrigin::User
+                                                      : SettingOrigin::Project;
+            settings_editing = false;
+            settings_buffer.clear();
+            settings_error.clear();
+            return true;
+        }
+        if (event.key == platform::key::Backspace) {
+            if (!settings_buffer.empty()) {
+                settings_buffer.pop_back();
+            }
+            return true;
+        }
+        const int character =
+            event.character != 0 ? event.character : event.key;
+        if (character >= 32 && character < 127) {
+            settings_buffer.push_back(static_cast<char>(character));
+        }
+        return true;
+    }
+    if (settings_search_focus) {
+        if (event.key == platform::key::Backspace) {
+            if (!settings_search.empty()) {
+                settings_search.pop_back();
+            }
+            return true;
+        }
+        if (event.key == platform::key::Enter) {
+            settings_search_focus = false;
+            return true;
+        }
+        const int character =
+            event.character != 0 ? event.character : event.key;
+        if (character >= 32 && character < 127) {
+            settings_search.push_back(static_cast<char>(character));
+        }
+        return true;
+    }
+    if (event.key == platform::key::Delete && settings_selected >= 0 &&
+        settings_selected < static_cast<int>(settings.size())) {
+        const SettingDescriptor& descriptor =
+            *settings[static_cast<std::size_t>(settings_selected)];
+        settings_snapshot.values.erase(descriptor.id);
+        settings_snapshot.origins[descriptor.id] = SettingOrigin::Default;
+        settings_error = "cleared override";
+        return true;
+    }
+    return true;
+}
+
+
 bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
+    if (settings_open) {
+        return settings_key(event);
+    }
+    if (memory_edit_byte != static_cast<std::uint64_t>(-1) &&
+        focus == SurfacePanel::Memory) {
+        if (event.key == platform::key::Escape) {
+            memory_edit_byte = static_cast<std::uint64_t>(-1);
+            memory_byte_buffer.clear();
+            return true;
+        }
+        const int character =
+            event.character != 0 ? event.character : event.key;
+        if (character >= 0 && character < 128 &&
+            std::isxdigit(static_cast<unsigned char>(character)) != 0) {
+            memory_byte_buffer.push_back(static_cast<char>(
+                std::toupper(static_cast<unsigned char>(character))));
+            if (memory_byte_buffer.size() == 2) {
+                const std::uint8_t value = static_cast<std::uint8_t>(
+                    std::strtoul(memory_byte_buffer.c_str(), nullptr, 16));
+                session->write_memory(memory_edit_byte,
+                                      std::span<const std::uint8_t>{&value, 1});
+                memory_edit_byte = static_cast<std::uint64_t>(-1);
+                memory_byte_buffer.clear();
+            }
+        }
+        return true;
+    }
+    if (state_edit.active) {
+        if (event.key == platform::key::Escape) {
+            state_edit.active = false;
+            state_edit.buffer.clear();
+            return true;
+        }
+        if (event.key == platform::key::Enter) {
+            std::uint64_t bits = 0;
+            bool valid = !state_edit.buffer.empty();
+            char* end = nullptr;
+            if (valid) {
+                switch (state_edit.format) {
+                case ValueFormat::Hex:
+                    bits = std::strtoull(state_edit.buffer.c_str(), &end, 16);
+                    break;
+                case ValueFormat::Unsigned:
+                    bits = std::strtoull(state_edit.buffer.c_str(), &end, 10);
+                    break;
+                case ValueFormat::Signed:
+                    bits = static_cast<std::uint64_t>(
+                        std::strtoll(state_edit.buffer.c_str(), &end, 10));
+                    break;
+                case ValueFormat::Float32: {
+                    const float value = std::strtof(state_edit.buffer.c_str(), &end);
+                    bits = std::bit_cast<std::uint32_t>(value);
+                    break;
+                }
+                case ValueFormat::Float64: {
+                    const double value = std::strtod(state_edit.buffer.c_str(), &end);
+                    bits = std::bit_cast<std::uint64_t>(value);
+                    break;
+                }
+                case ValueFormat::Char:
+                    bits = static_cast<unsigned char>(state_edit.buffer.front());
+                    end = const_cast<char*>(state_edit.buffer.c_str()) +
+                          state_edit.buffer.size();
+                    break;
+                case ValueFormat::Bool:
+                    bits = state_edit.buffer == "1" || state_edit.buffer == "true";
+                    end = const_cast<char*>(state_edit.buffer.c_str()) +
+                          state_edit.buffer.size();
+                    break;
+                }
+                valid = end != nullptr && *end == '\0';
+            }
+            if (valid) {
+                session->write_value(state_edit.group, state_edit.index,
+                                     ScalarValue{bits, state_edit.bits});
+            }
+            state_edit.active = false;
+            state_edit.buffer.clear();
+            return true;
+        }
+        if (event.key == platform::key::Backspace) {
+            if (!state_edit.buffer.empty()) {
+                state_edit.buffer.pop_back();
+            }
+            return true;
+        }
+        const int character =
+            event.character != 0 ? event.character : event.key;
+        if (character >= 32 && character < 127) {
+            state_edit.buffer.push_back(
+                static_cast<char>(std::toupper(character)));
+        }
+        return true;
+    }
     if (editing) {
         if (event.key == platform::key::Escape) {
             editing = false;
@@ -889,6 +3116,25 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         if (focus == SurfacePanel::Memory) {
             editing = true;
             edit_buffer.clear();
+        } else if (focus == SurfacePanel::Com && !video_tab) {
+            enqueue_com_input(0x0A);
+        }
+        return true;
+    case platform::key::Backspace:
+        if (focus == SurfacePanel::Com && !video_tab) {
+            enqueue_com_input(0x7F);
+        }
+        return true;
+    case platform::key::PageUp:
+        if (focus == SurfacePanel::Memory) {
+            memory_base = memory_base >= 32 ? memory_base - 32 : 0;
+            scroll_state(SurfacePanel::Memory).offset = 0;
+        }
+        return true;
+    case platform::key::PageDown:
+        if (focus == SurfacePanel::Memory) {
+            memory_base += 32;
+            scroll_state(SurfacePanel::Memory).offset = 0;
         }
         return true;
     case platform::key::F5:
@@ -911,6 +3157,29 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         return true;
     default:
         break;
+    }
+    if (focus == SurfacePanel::Com && !(video_tab && video_guest_focus)) {
+        if (event.control && (event.key == 'V' || event.key == 'v')) {
+            const std::string text = host->clipboard_text();
+            for (std::size_t index = 0; index < text.size(); ++index) {
+                const char ch = text[index];
+                if (ch == '\r') {
+                    if (index + 1 < text.size() && text[index + 1] == '\n') {
+                        continue;
+                    }
+                    enqueue_com_input(0x0A);
+                } else {
+                    enqueue_com_input(static_cast<std::uint8_t>(ch));
+                }
+            }
+            return true;
+        }
+        const int character =
+            event.character != 0 ? event.character : event.key;
+        if (character >= 32 && character < 127) {
+            enqueue_com_input(static_cast<std::uint8_t>(character));
+            return true;
+        }
     }
     if (event.key == 'R') {
         running = false;
@@ -957,8 +3226,14 @@ void DebuggerSurface::set_program_info(ProgramInfo program) {
                 break;
             }
         }
+        impl_->disasm_base = impl_->program.entry;
+        impl_->source_state.pinned = false;
+        impl_->source_state.index = 0;
+        impl_->load_source(0);
     } else {
         impl_->memory_base = 0x2000;
+        impl_->source_state.text = {"(no program loaded)"};
+        impl_->source_state.loaded_id = 0xFFFFFFFFU;
     }
     if (changed) {
         for (Impl::ScrollState& state : impl_->scrolls) {
@@ -978,6 +3253,27 @@ const ProgramInfo& DebuggerSurface::program_info() const {
 
 void DebuggerSurface::render(Canvas& canvas) {
     impl_->render(canvas);
+}
+
+void DebuggerSurface::tick() {
+    if (impl_->video_window && impl_->video_window->valid()) {
+        platform::Event event;
+        while (impl_->video_window->poll(event)) {
+            if (event.kind == platform::Event::Kind::Quit) {
+                impl_->video_window->destroy();
+                impl_->video_popped = false;
+            } else if (event.kind == platform::Event::Kind::KeyDown) {
+                impl_->key_down(event);
+            }
+        }
+    }
+    if (!impl_->running || !impl_->program.loaded) {
+        return;
+    }
+    const StopResult result = impl_->session->run(10000);
+    if (result.kind != StopKind::Budget) {
+        impl_->running = false;
+    }
 }
 
 bool DebuggerSurface::handle_event(const platform::Event& event) {
@@ -1017,11 +3313,52 @@ bool DebuggerSurface::running() const {
 }
 
 bool DebuggerSurface::popup_open() const {
-    return impl_->popup || impl_->menu_open;
+    return impl_->popup || impl_->menu_open || impl_->source_state.menu ||
+           impl_->settings_open;
 }
 
 bool DebuggerSurface::editing() const {
     return impl_->editing;
+}
+
+bool DebuggerSurface::inspector_open() const {
+    return impl_->inspector_open;
+}
+
+bool DebuggerSurface::tooltip_visible() const {
+    return impl_->tooltip_visible;
+}
+
+bool DebuggerSurface::settings_open() const {
+    return impl_->settings_open;
+}
+
+bool DebuggerSurface::video_popped() const {
+    return impl_->video_popped;
+}
+
+int DebuggerSurface::selected_frame() const {
+    return impl_->selected_frame;
+}
+
+std::string DebuggerSurface::com_text() const {
+    std::string text;
+    for (const std::string& line : impl_->com_lines) {
+        text += line;
+        text += '\n';
+    }
+    text += impl_->com_current;
+    return text;
+}
+
+int DebuggerSurface::com_queued() const {
+    return static_cast<int>(impl_->com_input.size());
+}
+
+bool DebuggerSurface::com_overrun() const {
+    IComPort* port = impl_->session->com_port();
+    return impl_->com_queue_overrun ||
+           (port != nullptr && port->status().overrun);
 }
 
 int DebuggerSurface::scroll_offset(SurfacePanel panel) const {

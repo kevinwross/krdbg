@@ -126,15 +126,17 @@ bool FakeVideoSource::frame(FramebufferView& out) const {
     return true;
 }
 
-FakeTarget::FakeTarget() : memory_(static_cast<std::size_t>(kMemorySize), 0) {
+FakeTarget::FakeTarget(bool has_com, bool has_video)
+    : has_com_(has_com), has_video_(has_video),
+      memory_(static_cast<std::size_t>(kMemorySize), 0) {
     layout_.name = "Fake32";
     layout_.address_bits = 32;
     layout_.pointer_bits = 32;
     layout_.instruction_alignment = 4;
     layout_.little_endian = true;
     layout_.step_unit = "instructions";
-    layout_.has_framebuffer = true;
-    layout_.has_com_port = true;
+    layout_.has_framebuffer = has_video_;
+    layout_.has_com_port = has_com_;
 
     RegisterGroup gpr;
     gpr.id = "gpr";
