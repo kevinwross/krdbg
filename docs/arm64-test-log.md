@@ -112,3 +112,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M2 panel gaps plus M2.8/M2.9 coverage; the loaded state changed and the empty state did not, and both match the regenerated x64 goldens exactly. `include/krdbg/target.h` gained `IVideoSource::framebuffer_base()` with a default, documented in `PLAN.md` in the same commit, so the interface rule holds. `krdbg_unit` grew from 85 to 99 checks. Golden coverage is now 13 states, and the gate still renders only empty and loaded, so **11 of 13 goldens** (`com`, `context`, `error`, `no-com`, `no-video`, `running`, `settings`, `tooltip`, `variables`, `video`, `video16`) have no ARM64 evidence at all.
+
+## 2026-11-20T11:10:51-08:00 — main @ 3e0d44e
+
+- Host: BitWhiz
+- Range: ad4f8dc..3e0d44e, 3 commits
+- Docs-only: yes — logged at the owner's request despite the skip rule
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; clean build with both preset trees removed first, 116 s cold)
+- Test: CTest — pass (2/2: `krdbg_unit` 99 checks, 0 failures, 97 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: deliberate duplicate of the `ad4f8dc` entry, requested by the owner to record a cold build. Both preset build trees were deleted before the run; the cold build took 116 s against 72–91 s for the warm incremental runs, and produced byte-identical hashes, so nothing depended on stale objects. `5cfd5d1` landed after the build and is docs-only and source-identical to `3e0d44e`, which is the revision actually built here.
