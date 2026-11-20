@@ -261,6 +261,8 @@ KRDBG_TEST(kr32_adapter_os_mode_loads_embedded_images_and_video) {
 
     const krdbg::StopResult boot = program.target->run(2'000'000);
     (void)boot;
+    CHECK(program.target->com_port()->write_input('A'));
+    CHECK(program.target->com_port()->status().rx_ready);
     krdbg::FramebufferView frame;
     CHECK(program.target->video()->frame(frame));
     CHECK(frame.width > 0);
