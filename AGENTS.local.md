@@ -11,10 +11,11 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. G0 is closed; M0.8.5 remains blocked because the
-`arm64` CI job has never been assigned a runner. M1.1 is done and M1.2 is next.
+`implementation.md` are approved. G0 and G1 are closed; M0 and M1 are done, with
+the ARM64 CI runner (M0.8.5) still blocked because BitWhiz has no Actions runner
+installed. The next task is M2.1.
 
-**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M1; §1–2 and the appendices are background.
+**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M2; §1–2 and the appendices are background.
 
 **Standing constraints.** Freeze the four interfaces (`target.h`, `session.h`, `settings.h`, `surface.h`) before implementation starts. `krdbg_ui` depends on `krdbg_core`, never the reverse, and neither depends on a VM. The UI contains no VM types, register numbers, instruction widths, or target conditionals. KDBG is the only debug format; legacy dialects are optional adapters. Windows ships a Win32 GDI presenter with no SDL2 DLL; Linux x64 and ARM64 use SDL2. `krc::debug` is a KRCompiler prerequisite; a vendored bootstrap is temporary and must carry provenance and a parity test.
 

@@ -69,7 +69,7 @@ recorded but does not block a milestone unless the gate says it does.
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
-| M1 — Debug core and KDBG | G1 | 2 weeks | `[ ] in progress — M1.1–M1.5 done; G1 open` |
+| M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
@@ -392,8 +392,8 @@ dependence on VM types.
 
 - [x] **G1.1** Windows x64 and WSL x64 configure/build/test pass.
   Evidence: `scripts/gate-windows.ps1` → `GATE WINDOWS: PASS`; `scripts/gate-linux.sh` → `GATE LINUX X64: PASS`; 50 tests, 0 failures, goldens unchanged.
-- [ ] **G1.2** ARM64 build/test recorded (non-blocking).
-  PENDING: waiting for the BitWhiz tester entry for the M1.3/M1.4 revision; no ARM64 result is claimed yet.
+- [x] **G1.2** ARM64 build/test recorded (non-blocking).
+  Evidence: BitWhiz entry 2026-11-20T09:28:28-08:00 for main @ `ba568d0`: Debug and Release pass, `krdbg_unit` 50/50 with the x64 goldens excluded, boundary 14 UI/public + 10 core/kdbg clean, hashes unchanged. The tip `2aee61f` adds the source-compatible `replace_target(target, info)` overload; its ARM64 run is pending, and G1.2 is explicitly non-blocking.
 - [x] **G1.3** KDBG fixture decode matches `krc --dump-symbols --json`.
   Evidence: `kdbg_translation_matches_krc_json_for_every_carried_field` parses the committed `fake.krc.json` and compares metadata, sources, functions, variables, types and members.
 - [x] **G1.4** Session tests cover line stepping, breakpoints, unwind,
@@ -723,9 +723,9 @@ Record the real command and result. Do not pre-fill expected output.
 | G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
 | G0 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: Debug and Release configure/build pass; CTest 2/2 with the x64 goldens excluded; empty `F15B00C153682DF8`, loaded `E47FA2651086D075` match x64 | `5fd5196` |
 | G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`): `windows-x64` and `linux-x64` success, `arm64` queued with no runner for 16+ minutes across four polls | `503f5de` |
-| G1 | Windows x64 | TBD | TBD | TBD |
-| G1 | WSL x64 | TBD | TBD | TBD |
-| G1 | ARM64 | TBD | TBD | TBD |
+| G1 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS` on `2aee61f`; 50 tests, 0 failures; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; CI run `44783518343` also passed `windows-x64` | `2aee61f` |
+| G1 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS` on `2aee61f`; 50 tests, 0 failures; same hashes; CI run `44783518343` also passed `linux-x64` | `2aee61f` |
+| G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
 | G2 | Windows x64 | TBD | TBD | TBD |
 | G2 | WSL x64 | TBD | TBD | TBD |
 | G2 | ARM64 | TBD | TBD | TBD |
