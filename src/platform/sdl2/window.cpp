@@ -95,6 +95,7 @@ bool SdlWindow::create(std::string_view title, int width, int height) {
         SDL_Quit();
         return false;
     }
+    SDL_SetWindowMinimumSize(window_, 800, 520);
     renderer_ = SDL_CreateRenderer(
         window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (renderer_ == nullptr) {

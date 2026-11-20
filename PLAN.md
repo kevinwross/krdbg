@@ -1234,6 +1234,13 @@ bottom-right, tabbed with the COM port, and to a separate video window.
 - Top row: source (left), disassembly (middle), state (right).
   Right column 28% clamped 270–420 px; source 42% clamped, disassembly fills the
   rest with a 300 px minimum (`debugger_ui.cpp:3298-3337`).
+- Minimum window 800x520, matching KR32's SDL window minimum. Resize clamps to
+  it and re-runs the layout; the Win32 and SDL2 presenters enforce the same
+  client minimum.
+- Interaction tests read the layout rectangles, the focused panel, the running
+  flag, popup/editing state and per-panel scroll offsets from the surface. These
+  are read-only observability hooks, not a second host integration API; a VM
+  host still only constructs the surface and calls render/handle_event.
 - Source pane: filename dropdown with source list, `OVER IN OUT`, gutter with
   line numbers and breakpoint squares. It stays visible while the video runs.
 - Disassembly: address + breakpoint gutter, `HEX` column with the full

@@ -144,11 +144,14 @@ if(KRDBG_BUILD_TESTS)
         tests/test_variables.cpp
         tests/test_kdbg.cpp
         tests/test_session.cpp
+        tests/test_scroll.cpp
         tests/test_surface.cpp
         tests/test_golden.cpp
     )
     target_link_libraries(krdbg_tests PRIVATE
         krdbg_ui krdbg_kdbg krdbg_platform_null krdbg_warnings)
+    target_include_directories(krdbg_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui")
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
         KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg")

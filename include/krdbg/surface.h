@@ -21,8 +21,22 @@ struct ProgramInfo {
     bool loaded = false;
 };
 
+// A focusable pane. `None` means no panel has focus.
+enum class SurfacePanel {
+    None,
+    Source,
+    Disassembly,
+    State,
+    Memory,
+    Variables,
+    Breakpoints,
+    CallStack,
+    Com,
+};
+
 // Filled by DebuggerSurface::layout(); interaction tests hit-test against these
-// rectangles instead of copying layout constants.
+// rectangles instead of copying layout constants. The toolbar rectangles are
+// empty when the action is hidden (KERNEL on a host without an embedded pair).
 struct SurfaceLayout {
     Rect toolbar;
     Rect status;
@@ -34,6 +48,15 @@ struct SurfaceLayout {
     Rect breakpoints;
     Rect call_stack;
     Rect com;
+
+    Rect toolbar_run;
+    Rect toolbar_reset;
+    Rect toolbar_load;
+    Rect toolbar_kernel;
+    Rect toolbar_clr;
+    Rect toolbar_video;
+    Rect toolbar_gear;
+    bool kernel_visible = false;
 };
 
 // The host owns everything VM- or platform-specific. krdbg calls only this
@@ -88,8 +111,16 @@ public:
     void render(Canvas& canvas);
 
     // Dispatches one platform event. Returns false when the application should
-    // quit. Events for M2 panels are accepted and ignored in the M0 shell.
+    // quit. The surface owns panel focus, popups and scrolling; execution
+    // actions call the session.
     bool handle_event(const platform::Event& event);
+
+    // Read-only observability for interaction and golden tests (PLAN.md §6.1).
+    [[nodiscard]] SurfacePanel focused_panel() const;
+    [[nodiscard]] bool running() const;
+    [[nodiscard]] bool popup_open() const;
+    [[nodiscard]] bool editing() const;
+    [[nodiscard]] int scroll_offset(SurfacePanel panel) const;
 
 private:
     struct Impl;

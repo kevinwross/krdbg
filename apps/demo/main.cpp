@@ -51,6 +51,7 @@ public:
 struct Options {
     bool headless = false;
     bool loaded = false;
+    bool running = false;
     int frames = -1;
     std::string screenshot;
 };
@@ -58,7 +59,7 @@ struct Options {
 void print_usage() {
     std::printf(
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
-        "[--state empty|loaded] [--frames <n>]\n");
+        "[--state empty|loaded|running] [--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -80,8 +81,13 @@ bool parse_options(int argc, char** argv, Options& options) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
                 options.loaded = true;
+                options.running = false;
             } else if (state == "empty") {
                 options.loaded = false;
+                options.running = false;
+            } else if (state == "running") {
+                options.loaded = true;
+                options.running = true;
             } else {
                 std::fprintf(stderr, "krdbg: unknown state '%.*s'\n",
                              static_cast<int>(state.size()), state.data());
@@ -117,6 +123,12 @@ int main(int argc, char** argv) {
     if (options.loaded) {
         surface.set_program_info(
             krdbg::ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
+    }
+    if (options.running) {
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::KeyDown;
+        event.key = krdbg::platform::key::F5;
+        surface.handle_event(event);
     }
 
     if (options.headless) {

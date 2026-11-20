@@ -41,3 +41,10 @@ KRDBG_TEST(golden_loaded_state_matches_the_committed_hash) {
     const std::string expected = read_golden("loaded.hash");
     CHECK_EQ(format_hash(scene.render_hash()), expected);
 }
+
+KRDBG_TEST(golden_running_state_matches_the_committed_hash) {
+    krdbg::test::TestScene scene(true, true);
+    CHECK(scene.surface->running());
+    const std::string expected = read_golden("running.hash");
+    CHECK_EQ(format_hash(scene.render_hash()), expected);
+}

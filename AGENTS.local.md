@@ -11,9 +11,10 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. G0 and G1 are closed; M0 and M1 are done, with
-the ARM64 CI runner (M0.8.5) still blocked because BitWhiz has no Actions runner
-installed. The next task is M2.1.
+`implementation.md` are approved. G0 and G1 are closed; M1 is done. M2 is in
+progress: M2.1 (layout, input, scrollbars, toolbar state) is done and M2.2
+(panels) is next. The ARM64 CI runner (M0.8.5) remains blocked because BitWhiz
+has no Actions runner installed; ARM64 tester evidence is non-blocking.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M2; §1–2 and the appendices are background.
 

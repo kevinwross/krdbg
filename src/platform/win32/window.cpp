@@ -233,8 +233,8 @@ LRESULT Win32Window::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     switch (message) {
     case WM_GETMINMAXINFO: {
         auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
-        info->ptMinTrackSize.x = 960;
-        info->ptMinTrackSize.y = 640;
+        info->ptMinTrackSize.x = 800;
+        info->ptMinTrackSize.y = 520;
         return 0;
     }
     case WM_SIZE:

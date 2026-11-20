@@ -70,7 +70,7 @@ recorded but does not block a milestone unless the gate says it does.
 |---|---|---|---|
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
-| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] planned` |
+| M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[ ] in progress — M2.1 done` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
@@ -416,15 +416,20 @@ presenter, golden coverage and the full CI matrix.
 
 ### M2.1 Layout and input
 
-- [ ] **M2.1.1** Exact KR32 proportions: right column 28% clamped 270–420,
+- [x] **M2.1.1** Exact KR32 proportions: right column 28% clamped 270–420,
       source 42%, disassembly minimum 300, bottom 24% clamped 190–230, memory
       112 px.
-- [ ] **M2.1.2** Resize/re-layout; minimum size enforcement.
-- [ ] **M2.1.3** Input router: toolbar, panel focus, editing, menus, popups.
-- [ ] **M2.1.4** Scrollbars, wheel, drag, page-on-track-click, console
+  Evidence: `surface_layout_uses_the_exact_kr32_proportions` checks 1440x900 (403/604/433, bottom 210), 1000x700 (280/420/300, bottom 190) and 800x520 (270/230/300, bottom 190, memory 112).
+- [x] **M2.1.2** Resize/re-layout; minimum size enforcement.
+  Evidence: `surface_resize_enforces_the_800x520_minimum`; the surface clamps and re-lays out at 800x520, and the Win32 `WM_GETMINMAXINFO` and SDL2 window minimum were changed to the same client size.
+- [x] **M2.1.3** Input router: toolbar, panel focus, editing, menus, popups.
+  Evidence: toolbar clicks and F5/Esc/R/F6/F10/F11 are routed; a panel click sets focus; memory Enter starts a hex address edit; right-click opens a context menu; the gear opens a popup. `surface_input_routes_toolbar_panels_and_running`, `surface_memory_address_editing_commits_a_new_base`, `surface_context_menu_opens_and_closes` and `surface_popup_opens_from_the_gear_and_closes` cover it.
+- [x] **M2.1.4** Scrollbars, wheel, drag, page-on-track-click, console
       autoscroll rules.
-- [ ] **M2.1.5** Toolbar: `RUN` green while running, `RESET`, `LOAD`,
+  Evidence: `src/ui/scroll.h` carries the KR32 drag and console-autoscroll rules; `test_scroll.cpp` covers them, and `surface_memory_scrolls_by_wheel_track_and_drag` exercises the memory scrollbar by wheel, track page and thumb drag.
+- [x] **M2.1.5** Toolbar: `RUN` green while running, `RESET`, `LOAD`,
       `KERNEL` hidden when unsupported; stats and `CLR`; `VIDEO`; gear.
+  Evidence: the running golden `BFAE120D47BC0386` shows RUN green with the status reading `running` / `F5 PAUSE`; `surface_toolbar_actions_reach_host_and_session` covers CLR, LOAD, KERNEL and RESET, and checks KERNEL is absent when the host reports no kernel.
 
 ### M2.2 Panels
 
@@ -744,6 +749,16 @@ Record the real command and result. Do not pre-fill expected output.
 
 - Windows: `shots/g0-4-windows.png` — 1456x939 including the frame (1440x900 client), PrintWindow, non-blank.
 - WSL: `shots/g0-4-wsl.png` — 1516x997 including WSLg's frame, PrintWindow, non-blank; command `cd build/linux-wsl && DISPLAY=:0 ./krdbg_demo --state loaded` from `wsl -e sh -lc` (WSLg: `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, `/mnt/wslg` present).
+
+### M2.1 layout and input evidence
+
+Recorded 2026-11-20T09:50:48-08:00.
+
+- `ctest --preset windows-msvc -V`: `krdbg_unit` **62 tests, 0 failures**; `platform_boundary` passed; boundary **15 UI/public files clean; 10 core/kdbg files VM-clean**.
+- `scripts/gate-windows.ps1`: `GATE WINDOWS: PASS`; empty `5B8F7CFA1DDEE5D2`, loaded `BEFD2141466934DD`; no `SDL2.dll`.
+- `scripts/gate-linux.sh`: `GATE LINUX X64: PASS`; empty `5B8F7CFA1DDEE5D2`, loaded `BEFD2141466934DD`; no `SDL2.dll`.
+- Goldens: `goldens/empty.hash` `5B8F7CFA1DDEE5D2`, `goldens/loaded.hash` `BEFD2141466934DD`, `goldens/running.hash` `BFAE120D47BC0386` (RUN green, status `running` / `F5 PAUSE`).
+- `surface_memory_scrolls_by_wheel_track_and_drag`: wheel moved the memory offset `0 -> 3 -> 0`, a track click paged it above zero, and a thumb drag moved it again.
 
 ### M0.9.1 Doctor output
 
