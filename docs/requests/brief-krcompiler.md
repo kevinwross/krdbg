@@ -22,10 +22,11 @@ Read it before touching anything. Where this brief and the plan disagree, the pl
 
 ## Scope
 
-Stage A only: items 4.1–4.12 of the plan — the two public headers, the two CMake
+Stage A only: items 4.1–4.14 of the plan — the two public headers, the two CMake
 packages, the facade, the in-memory and determinism rules, the CLI rebuild, the
 listing model, `.kdbg` in `.kex`, the embedding document, KR16 debug-info
-emission, the KR16 assembler directives, and the installed sysroot and runtime.
+emission, the KR16 assembler directives, the installed sysroot and runtime, the
+KR16 `__host_call` intrinsic, and the installed `krc`/`krld` executables.
 
 Do not: add KDBG v1.1 records, remove the `.debug_info` bridge, change codegen or
 optimization policy, or edit KR32, kr16 or krdbg.

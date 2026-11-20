@@ -66,6 +66,8 @@ consumers, then a third (krdbg) for the debug reader.
     KRCompiler build tree.
 12. The KR16 `__host_call` intrinsic, so krc can compile the shipped runtime
     wrappers that lower to `SYS #n` under kr16's own compiler.
+13. The `krc` and `krld` executables installed with the package, so a host runs
+    the build chain from an install rather than a build tree.
 
 **Out of scope**
 
@@ -168,6 +170,7 @@ record type.
 | 4.11 | KR16 assembler directives | `kr16/resources/libc.s` assembles under krc to the same linked image bytes as kr16's own assembler, and a krc-built `hello` links it and prints the same output |
 | 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.k32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
 | 4.13 | KR16 `__host_call` intrinsic | `kr16/resources/fileio.c` and the libc wrappers compile under krc, and a krc-built `.kex` links the shipped libc and passes the fileio tests |
+| 4.14 | Install `krc` and `krld` | a scratch prefix contains both executables, and a host builds a `.c` file through the installed package with no KRCompiler build tree on the path |
 
 Items 4.2 and 4.3 are the review boundary: 4.2 proves the facade is a pure
 refactor, 4.3 proves it is usable from outside.
@@ -191,9 +194,9 @@ ctest --preset linux-gcc-debug --output-on-failure
 
 Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
 comparison from 4.9, the KR16 `.kex` decode from 4.10, the `libc.s` assembly
-parity from 4.11, the installed-package consumer build from 4.12, and the krc-built
-KR16 runtime from 4.13. Every check must be run and its real output recorded;
-nothing is claimed from this plan.
+parity from 4.11, the installed-package consumer build from 4.12, the krc-built
+KR16 runtime from 4.13, and the installed tools from 4.14. Every check must be run
+and its real output recorded; nothing is claimed from this plan.
 
 The ARM64 row is the tester's `docs/arm64-test-log.md` entry for the tested SHA;
 it is not re-run here.
@@ -264,6 +267,11 @@ open questions the plan was proposed with.
    `resources/fileio.c` cannot be built for the krc path. krc learns the
    intrinsic rather than the runtime growing a dispatcher, which keeps the
    shipped runtime unchanged — the same rule as 4.10 and 4.11.
+9. **`krc` and `krld` are installed with the package (4.14).** Decided
+   2026-11-20T13:43:22-08:00. The install currently carries the two libraries
+   only, so a host that runs the build chain must point at a KRCompiler build
+   tree. The package installs the executables under `bin/`, which is what
+   krdbg's M5 host needs to build source reproducibly.
 
 ## 9. Approval
 
@@ -273,6 +281,6 @@ Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
 it, `.kdbg` in `.kex` with its base field, the KR16 debug-info emission that makes
 a `.kex` decodable, the KR16 assembler directives, the installed sysroot and
-runtime, and the KR16 `__host_call` intrinsic. It does not authorise KDBG v1.1,
-removing the `.debug_info` bridge, codegen changes, or any edit in KR32, kr16 or
-krdbg.
+runtime, the KR16 `__host_call` intrinsic, and the installed `krc` and `krld`
+executables. It does not authorise KDBG v1.1, removing the `.debug_info` bridge,
+codegen changes, or any edit in KR32, kr16 or krdbg.
