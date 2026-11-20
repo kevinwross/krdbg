@@ -164,3 +164,14 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M5.2/M5.4/M5.5 added `src/core/settings_host.*`, `tool_settings.*`, `settings_validation.h`, `apps/settings_cli` and `test_settings_host`; `krdbg_unit` grew from 99 to 105 checks and the boundary check now covers 17 core/kdbg files. `krdbg_settings` builds on ARM64 as a plain target. A sixteenth golden, `goldens/tool-settings.hash` (`3396C255BD1081B6`), has been added but the gate still renders only empty and loaded, so it has no ARM64 evidence, like the other twelve non-gate goldens.
+
+## 2026-11-20T14:30:14-08:00 — main @ 81e1c31
+
+- Host: BitWhiz
+- Range: 3b506d5..81e1c31, 6 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; `src/host/build_chain.*` and `process.*` compiled into `krdbg_host`, 76 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Extra check, not the gate: rebuilt `build/kr16-check` (`KRDBG_KR16_ADAPTER=ON`, null presenter) at this SHA. **Build OK, 115 checks, 0 failures** — the default 105 plus the eight `kr16_*` cases and the two `host_build` cases.
+- Notes: the host build chain's end-to-end tests are conditional twice over, and neither condition holds here — `tests/test_host_build.cpp` is only compiled when an adapter is enabled, and its cases `return` immediately when `KRDBG_KRC_PREFIX` is unset. So `host_build_chain_builds_c_cpp_and_s` and `host_rebuild_preserves_line_breakpoints` report PASS without asserting anything on this host, and `krc`/`krld` are not installed here. M5's build chain therefore has **no ARM64 end-to-end evidence**; only that it compiles. Goldens stay at 16, and the gate still renders only empty and loaded.
