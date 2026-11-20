@@ -92,3 +92,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 62 checks, 0 failures, 60 passed with the two x64 golden comparisons excluded; `platform_boundary` 15 UI/public files clean and 10 core/kdbg files VM-clean)
 - Hash: empty `5B8F7CFA1DDEE5D2`, loaded `BEFD2141466934DD` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: M2.1 is the first UI change since M0, so the hashes moved from `F15B00C153682DF8` / `E47FA2651086D075` to the new values; ARM64 matches the regenerated x64 goldens exactly in Debug and Release, so `goldens/*.arm64.hash` is still unnecessary. `krdbg_unit` grew from 50 to 62 checks. The boundary check now covers 15 UI/public files because `src/ui/scroll.h` joined the set. Caveat: the gate renders and hashes only the empty and loaded states, so the new `goldens/running.hash` has no ARM64 evidence — the running state is exercised by the x64 golden test, which the ARM64 unit run excludes.
+
+## 2026-11-20T10:19:12-08:00 — main @ c41e0de
+
+- Host: BitWhiz
+- Range: 1c80f16..c41e0de, 5 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the surface, settings JSON, platform and video code all compiled, 91 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 85 checks, 0 failures, 83 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 12 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `A2F1B7AEB69EB1A5` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: M2.2–M2.7 landed — ~2,700 lines of surface plus `settings_json` and `video_fit` — and both hashes match the regenerated x64 goldens exactly in Debug and Release. `krdbg_unit` grew from 62 to 85 checks. The boundary check now covers 16 UI/public files (`src/ui/video_fit.h` added) and 12 core/kdbg files (`src/core/settings_json.*` added). Same caveat as before, now larger: the gate renders and hashes only empty and loaded, so `goldens/running.hash` (`36C15F50552FF36A`) and the new `goldens/video.hash` (`45C97E0E11204576`) have no ARM64 evidence; both are checked only by the x64 golden test.
