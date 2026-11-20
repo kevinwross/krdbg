@@ -11,10 +11,9 @@ before branching.
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.6
 (the facade, the package, and `.kdbg` in `.kex`), 4.9 for the listing, and 4.10,
 which makes a KR16 `.kex` decodable.
-**Sequencing:** 4.6's container and base mechanism can land before 4.10, but this
-work starts when 4.10 is published. Until then a krc-built `.kex` carries no
-sources, lines or functions (`KRCompiler` `docs/adopt-krc-log.md`,
-2026-11-20T04:23:04-08:00).
+**Pinned:** `0f61260` on `KRCompiler` `adopt-krc` — `.kdbg` in `.kex` with the
+image base (4.6) and the KR16 debug-info emission that makes the payload real
+(4.10); both `.kex` forms decode with sources, lines, functions and variables.
 **Sibling plan:** [kr32](kr32-adopt-krc-toolchain.md). This one runs first.
 **Read at that commit:** `include/kr16/build.hpp`, `include/kr16/container.hpp`,
 `include/kr16/debug_session.hpp`, `src/debug/debug_session.cpp`,

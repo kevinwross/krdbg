@@ -3,6 +3,8 @@
 **Status:** APPROVED 2026-11-20T02:36:31-08:00 by kevinwross. Stage A only; the
 default flip and deletion of the built-in compilers return for a second
 approval.
+**Completed:** stage A implemented, verified and published; the tested revision
+is `0f61260` on `adopt-krc` (tip `797dfac`).
 **Target repository:** `C:\Users\kevin\source\repos\KRCompiler`, `master` @ `6d638c4`.
 The branch is 7 commits ahead of `origin/master`; confirm the push state before
 branching.
