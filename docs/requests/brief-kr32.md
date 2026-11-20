@@ -28,12 +28,12 @@ the C++ corpus check, the krc branches of `compile_c_source` and
 `compile_cxx_source` behind `KR32_TOOLCHAIN=krc` (default `builtin`), option and
 diagnostic mapping, the listing from facade rows, the OS-mode smoke test, the
 guest headers as files including `cons.h` replacing the generated `con.h`, the
-installed package inputs, the suite under both toolchains, and the UI/CLI/test
-migration with prebuilt OS images.
+installed package inputs, the suite under both toolchains, and the test and
+OS-image migration with the `cons.h` rename.
 
-Do not: flip the default or delete `src/cc`, `src/cxx`, `src/asm`, `src/link`
-(3.10b, second approval), change the debugger, rebuild the kernel/BIOS, or edit
-KRCompiler, kr16 or krdbg.
+Do not: flip the default, remove the UI or CLI built-in branches, delete
+`src/cc`, `src/cxx`, `src/asm`, `src/link` (3.10b, second approval), change the
+debugger, rebuild the kernel/BIOS, or edit KRCompiler, kr16 or krdbg.
 
 ## Design decisions already made
 

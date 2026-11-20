@@ -77,14 +77,15 @@ not require a debugger change, unlike kr16.
 
 **In scope (stage B, first half approved; second half on the second approval)**
 
-9. Migration: the UI and CLI lose their built-in compile branches and commands,
-   the tests move to krc-built or prebuilt fixtures, the OS images come from a
-   prebuilt carrier, and the `cons.h` body lives in a tracked file. Ends with the
-   tree green under `builtin` and the built-in paths unreferenced.
-10. Deletion: the default flips to `krc`; delete `src/cc`, `src/cxx`, `src/asm`
-    and `src/link`, with KR32's runtime and the injected guest-header strings.
-    Ends with the gate green on a clean checkout after a release in which both
-    toolchains shipped.
+9. Migration, with both toolchains still building and the default still
+   `builtin`: the tests stop invoking `kr32 build` and run against krc-built or
+   prebuilt images, the OS images come from a prebuilt carrier, and the `cons.h`
+   body lives in a tracked file. Ends with the suite green under both toolchains.
+10. Deletion: the default flips to `krc`; the UI's built-in compile branches and
+    the CLI's `as`/`ld`/`build`/`cc`/`cxx` commands are removed, then delete
+    `src/cc`, `src/cxx`, `src/asm` and `src/link`, with KR32's runtime and the
+    injected guest-header strings. Ends with the gate green on a clean checkout
+    after a release in which both toolchains shipped.
 
 **Out of scope**
 
@@ -125,8 +126,8 @@ not require a debugger change, unlike kr16.
 | 3.7 | Suite twice | all existing tests pass with `builtin` and with `krc` |
 | 3.8 | Guest headers as files | each of the five headers compiles from a source that includes it, under both toolchains |
 | 3.9 | Consume the installed package | configure, build and test with an installed KRCompiler prefix and no build tree on the path; `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` replace the build-tree paths |
-| 3.10a | Stage B migration | the UI, CLI and tests no longer reference the built-in toolchain, the OS images come from a prebuilt carrier, `cons.h` is a tracked file, and the suite is green under `builtin` |
-| 3.10b | Stage B deletion | the default is `krc`, the four directories, the runtime and the injection are gone, and the suite is green on a clean checkout |
+| 3.10a | Stage B migration | no test builds through `kr32 build`; the OS images come from a prebuilt carrier; `cons.h` is a tracked file; the suite is green under both toolchains |
+| 3.10b | Stage B deletion | the default is `krc`, the UI and CLI built-in branches are removed, the four directories, the runtime and the injection are gone, and the suite is green on a clean checkout |
 
 `3.1` is deliberately first and costs a day: if a krc image does not debug
 correctly in the current GUI, no amount of build-path work helps.
@@ -216,8 +217,10 @@ open questions the plan was proposed with.
    23 files and 42,562 deletions, with 2 of 94 tests passing: the UI and CLI
    still include the built-in headers, the tests build through `kr32 build`, the
    `con.h` generator reads the deleted body, and the OS images are built by the
-   built-in assembler. 3.10a migrates those and ends green under `builtin`;
-   3.10b deletes and flips, and still needs the second approval with its gate.
+   built-in assembler. 3.10a migrates the tests, the OS images and the header
+   while both toolchains still build; 3.10b flips the default, removes the UI and
+   CLI built-in branches, deletes, and still needs the second approval with its
+   gate.
 
 ## 9. Approval
 
@@ -227,8 +230,8 @@ approved 2026-11-20T14:25:26-08:00.
 Approving this file authorises stage A in KR32, the `con.h` → `cons.h` rename,
 and stage B's migration (3.10a): the CMake option, the krc branches of the two
 compile functions, the option and diagnostic mapping, the corpus write-up, the
-guest headers as files, the installed-package inputs, the UI/CLI/test migration,
-the prebuilt OS images and the tests. It does not authorise the default flip, the
-deletion of `src/cc`, `src/cxx`, `src/asm` or `src/link` (3.10b, second
-approval), a debugger change, the removal of the `--os`/`--bios` load path, or any
-edit in KRCompiler or kr16.
+guest headers as files, the installed-package inputs, the test and OS-image
+migration, and the tests. It does not authorise the default flip, the removal of
+the UI or CLI built-in branches, the deletion of `src/cc`, `src/cxx`, `src/asm`
+or `src/link` (3.10b, second approval), a debugger change, the removal of the
+`--os`/`--bios` load path, or any edit in KRCompiler or kr16.
