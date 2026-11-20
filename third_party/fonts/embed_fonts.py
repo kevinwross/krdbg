@@ -46,6 +46,7 @@ EmbeddedFonts embedded_fonts();
 } // namespace krdbg::ui
 """,
     encoding="utf-8",
+    newline="\n",
 )
 
 lines = [
