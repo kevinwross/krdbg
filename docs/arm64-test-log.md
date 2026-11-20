@@ -22,3 +22,13 @@ the protocol and `docs/ci-arm64.md` for the hash policy.
 - Test: CTest — pass (2/2: `krdbg_unit` 25 checks, 0 failures, with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
 - Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: the previous entry's finding is fixed in `b605e5a` — the file is truncated per run and now holds exactly four correctly-labelled lines (two per preset). Hashes are unchanged from `5fd5196` and still identical to the x64 goldens. The build was incremental because only `scripts/` and Markdown changed, so the 1 s wall time is not a clean-build time. Toolchain unchanged: g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1, SDL2 2.32.4.
+
+## 2026-11-20T08:52:46-08:00 — main @ da4d19b
+
+- Host: BitWhiz
+- Range: 121b9ab..da4d19b, 3 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; incremental, no source file changed since 121b9ab)
+- Test: CTest — pass (2/2: `krdbg_unit` 25 checks, 0 failures, with the two x64 golden comparisons excluded; `platform_boundary` 13 files clean)
+- Hash: empty `F15B00C153682DF8`, loaded `E47FA2651086D075` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: the range is the CI workflow comment, the environment record and two G0.4 screenshots, so the build was incremental again and the 1 s wall time is not a clean-build time. Hashes are unchanged. `AGENTS.local.md` now records the krdbg runner registration as confirmed, so the `arm64` CI job and this tester target the same Pi; they use separate checkouts, but a queued CI build will compete with a tester build for CPU, so both can be slower than these timings.
