@@ -50,23 +50,6 @@ jobs:
             build/linux-wsl-release/Testing/**
           if-no-files-found: warn
 
-  arm64:
-    # BitWhiz, the Raspberry Pi on the local network, polls GitHub every 7
-    # minutes. A queued job may wait that long before it starts.
-    runs-on: [self-hosted, linux, arm64, raspberry-pi]
-    timeout-minutes: 60
-    # Non-blocking until G6 (implementation.md M2.9.2); the job still reports.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Gate G2 (Linux ARM64)
-        run: ./scripts/gate-linux-arm64.sh
-      - name: Upload ARM64 evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arm64-g2-evidence
-          path: |
-            goldens/**
-            build/gate/**
-          if-no-files-found: warn
+  # ARM64 is not a GitHub Actions job. BitWhiz is a tester session that polls
+  # main, runs scripts/gate-linux-arm64.sh and appends docs/arm64-test-log.md;
+  # see docs/arm64-tester.md. Keep this job list to Windows and Ubuntu.

@@ -1,17 +1,16 @@
 # CI and build trees
 
-`.github/workflows/ci.yml` has three jobs:
+`.github/workflows/ci.yml` has two jobs:
 
 | Job | Runner | Gate script |
 |---|---|---|
 | `windows-x64` | `windows-latest` | `scripts/gate-windows.ps1` |
 | `linux-x64` | `ubuntu-latest` | `scripts/gate-linux.sh` |
-| `arm64` | self-hosted `[self-hosted, linux, arm64, raspberry-pi]` | `scripts/gate-linux-arm64.sh` |
 
 CI calls the gate scripts only; no command string is repeated in the workflow.
-The ARM64 job runs on the self-hosted `BitWhiz` runner and is non-blocking until
-G6 (`continue-on-error: true`). The runner setup is in
-[ci-arm64.md](ci-arm64.md).
+ARM64 is not a GitHub Actions job: the ARM64 tester session on BitWhiz runs
+`scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`; see
+[ci-arm64.md](ci-arm64.md) and [arm64-tester.md](arm64-tester.md).
 
 ## Build trees and artifacts
 

@@ -7,8 +7,10 @@ start; M0.1 is the next task.
 **Platforms:** Windows x64, Linux x64 (WSL), Linux ARM64 (Raspberry Pi).
 **Golden policy:** Windows and Linux x64 must match the committed frame hash;
 ARM64 runs the functional checks and may keep a separate hash.
-**CI policy:** gate workflow skeleton in M0, full matrix by M2; ARM64 is a
-required gate at M0 and M6, and tracked as non-blocking evidence between them.
+**CI policy:** the GitHub Actions workflow carries Windows and Ubuntu jobs.
+ARM64 is verified by the tester session documented in `docs/arm64-tester.md`,
+which runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`;
+it is not a GitHub Actions job.
 **Repository:** initialized and pushed in M0.0 (`6106cfe`); see §2.
 
 ---
@@ -55,9 +57,9 @@ required gate at M0 and M6, and tracked as non-blocking evidence between them.
 |---|---|---|
 | Windows x64 | G0–G6 | `scripts/gate-windows.ps1` |
 | Linux x64 (WSL) | G0–G6 | `scripts/gate-linux.sh` |
-| Linux ARM64 (Pi) | G0 and G6 required; G1–G5 tracked | `scripts/gate-linux-arm64.sh` |
+| Linux ARM64 (Pi) | G0 and G6 required; G1–G5 tracked | `scripts/gate-linux-arm64.sh`; `docs/arm64-test-log.md` |
 | CI (Windows/Ubuntu) | G0 and every gate after the matrix lands in M2 | `.github/workflows/ci.yml` |
-| CI (ARM64 self-hosted) | G0 and G6 | `arm64` runner job |
+| ARM64 tester session | G0 and G6 | `docs/arm64-tester.md`; `docs/arm64-test-log.md` |
 
 A gate fails if any required platform fails. ARM64 evidence between M0 and M6 is
 recorded but does not block a milestone unless the gate says it does.
@@ -68,7 +70,7 @@ recorded but does not block a milestone unless the gate says it does.
 
 | Milestone | Gate | Estimate | Status |
 |---|---|---|---|
-| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[ ] in progress — M0.8.5 blocked (the arm64 CI job is not assigned a runner)` |
+| M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[x] done` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[x] done` |
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
@@ -85,7 +87,7 @@ M0 ──► M1 ──► M2 ──► M3 ──► M4 ──► M5 ──► M6
 
 M1 needs `krc::debug` or the vendored bootstrap. M3 needs the KR32 adapter.
 M4 needs the KR16 adapter and the `.kex` debug decision. M5 needs the build
-chain. M6 needs the ARM64 runner.
+chain. M6 needs an ARM64 tester-log entry for the release revision.
 
 ---
 
@@ -244,14 +246,19 @@ on `refs/heads/main`.
 - [x] **M0.8.3** `scripts/gate-linux-arm64.sh`: build/CTest/headless on the Pi;
       hash recorded separately.
   Evidence: the wrapper delegates to `gate-linux.sh --arch arm64`, which selects the `linux-arm64` presets, requires `uname -m` to be ARM64 and records the hash in `build/gate/arm64-hashes.txt`. The tester's 5fd5196 run found the hash lines reused the last preset in their labels; fixed to `${presets[$index]}` in this change and the x64 gate reran PASS.
-- [x] **M0.8.4** `.github/workflows/ci.yml`: `windows-x64`, `linux-x64`
-      (Ubuntu, supplementary to the WSL gate), and `arm64` self-hosted job.
-  Evidence: the workflow declares all three jobs; `arm64` is non-blocking until G6.
-- [ ] **M0.8.5** ARM64 runner registered with labels
-      `[self-hosted, linux, arm64, raspberry-pi]`; document setup in
-      `docs/ci-arm64.md`, including that BitWhiz polls every 7 minutes, so a
-      queued job may wait that long before it starts.
-  BLOCKED: `docs/ci-arm64.md` contains the labels, setup and polling note. The `arm64` jobs in runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`) stayed queued with no runner assigned for 16+ minutes across four polls. The BitWhiz tester inspected the host at `50b6a0d` and found no `actions.runner.*` unit, no `Runner.Listener` process, and no runner installation or `_work` directory. Install and register the GitHub Actions runner before this can be green.
+- [x] **M0.8.4** `.github/workflows/ci.yml`: `windows-x64` and `linux-x64`
+      (Ubuntu, supplementary to the WSL gate). ARM64 is not a GitHub Actions
+      job; its tester path is documented separately.
+  Evidence: the workflow declares the two hosted jobs; ARM64 runs through the
+  tester session in `docs/arm64-tester.md`.
+- [x] **M0.8.5** ARM64 verification is a docs/arm64-test-log.md entry for the
+      revision, produced by the tester session on BitWhiz; there is no runner
+      registration and none is planned.
+  Evidence: the protocol is `docs/arm64-tester.md`; the entry
+  2026-11-20T14:30:14-08:00 for main @ `81e1c31` records
+  `scripts/gate-linux-arm64.sh` passing Debug and Release, `krdbg_unit` 105
+  checks with 0 failures, and the adapter-on extra check at 115 checks. The
+  tester entry is the acceptance; no `arm64` job exists.
 - [x] **M0.8.6** CI runs the same gate scripts; no duplicate command strings.
   Evidence: each CI job invokes one gate script; no configure/build/test command appears in the workflow.
 - [x] **M0.8.7** Cache or artefact policy for build trees; no generated files
@@ -291,9 +298,13 @@ Pass only when all of these are checked and §9 has the real output.
   Evidence: `dumpbin /dependents build\windows-msvc-release\krdbg_demo.exe` lists no `SDL2.dll`, and a recursive tree scan found none.
 - [x] **G0.8** Platform-boundary check passes (`src/ui`/`include/krdbg` clean).
   Evidence: `platform boundary: 13 UI/public files clean`; CTest `platform_boundary` passes on Windows and WSL.
-- [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 job is green or
-      the gate records `BLOCKED` for a missing runner.
-  Evidence: CI runs `44733345483` (`b325a7f`), `44777407987` (`da4d19b`) and `44778060127` (`503f5de`): `windows-x64` and `linux-x64` succeeded in every run. The `arm64` jobs were queued with no runner for 16+ minutes across four polls and are recorded BLOCKED (M0.8.5), not green.
+- [x] **G0.9** CI skeleton is green on Windows and Ubuntu; ARM64 has a tester
+      log entry for the revision.
+  Evidence: CI runs `44733345483` (`b325a7f`), `44777407987` (`da4d19b`) and
+  `44778060127` (`503f5de`) show `windows-x64` and `linux-x64` succeeding. The
+  ARM64 tester entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` records
+  `krdbg_unit` 105 checks, 0 failures; the workflow no longer has an `arm64`
+  job.
 - [x] **G0.10** `AGENTS.local.md` has the real commands; no invented command
       remains in this file.
   Evidence: `AGENTS.local.md` records the gate entry points and the presets that ran; every command in §9 was executed on the platform named.
@@ -550,10 +561,14 @@ presenter, golden coverage and the full CI matrix.
 
 ### M2.9 CI full matrix
 
-- [x] **M2.9.1** Windows, Ubuntu and ARM64 jobs run the gate scripts.
-  Evidence: `.github/workflows/ci.yml` calls `gate-windows.ps1`, `gate-linux.sh` and `gate-linux-arm64.sh`.
-- [x] **M2.9.2** ARM64 job is non-blocking until G6 but reports.
-  Evidence: the `arm64` job keeps `continue-on-error: true` and runs the gate script.
+- [x] **M2.9.1** Windows and Ubuntu jobs run the gate scripts; the ARM64
+      tester runs `scripts/gate-linux-arm64.sh`.
+  Evidence: `.github/workflows/ci.yml` calls `gate-windows.ps1` and
+  `gate-linux.sh`; the ARM64 path is the tester session in
+  `docs/arm64-tester.md`.
+- [x] **M2.9.2** ARM64 tester evidence is non-blocking until G6 but recorded.
+  Evidence: the tester log entry 2026-11-20T14:30:14-08:00 @ `81e1c31` is
+  recorded; there is no `arm64` CI job to queue.
 - [x] **M2.9.3** Artifact upload for test logs and goldens; no secrets.
   Evidence: `actions/upload-artifact@v4` uploads `goldens/**` and each build's `Testing/**` with `if: always()`; no credential or environment file is archived.
 
@@ -576,8 +591,10 @@ presenter, golden coverage and the full CI matrix.
   Evidence: the Windows gate reports `no SDL2.dll dependency and no SDL2.dll in the tree`.
 - [x] **G2.8** No VM types or target conditionals in `src/ui`/`include/krdbg`.
   Evidence: boundary check reports `16 UI/public files clean; 12 core/kdbg files VM-clean`.
-- [x] **G2.9** CI matrix green on Windows/Ubuntu; ARM64 reported.
-  Evidence: run `44792372626` for `ad4f8dc`: `windows-x64` success, `linux-x64` success, `arm64` queued with no runner (M0.8.5) and non-blocking under M2.9.2.
+- [x] **G2.9** CI matrix green on Windows/Ubuntu; ARM64 recorded by the tester.
+  Evidence: run `44792372626` for `ad4f8dc`: `windows-x64` success,
+  `linux-x64` success; the ARM64 tester entry 2026-11-20T14:30:14-08:00 @
+  `81e1c31` is the current ARM64 evidence, and no `arm64` job remains.
 - [x] **G2.10** Goldens and `PLAN.md` updated for every UI/interface change.
   Evidence: `PLAN.md` records the surface observability, `tick`, video-base and member-storage contracts; all thirteen goldens are committed.
 
@@ -821,14 +838,15 @@ is post-v1 and does not block this gate.
 
 ### M6.3 Linux ARM64
 
-- [ ] **M6.3.1** ARM64 build/test on the Pi.
+- [ ] **M6.3.1** ARM64 build/test recorded by the tester log.
 - [ ] **M6.3.2** ARM64 AppImage or tarball.
 - [ ] **M6.3.3** Clean-machine smoke test.
 
 ### M6.4 CI and release
 
-- [ ] **M6.4.1** ARM64 job required at G6.
-- [ ] **M6.4.2** Release workflow produces artifacts for all three.
+- [ ] **M6.4.1** ARM64 tester entry required at G6.
+- [ ] **M6.4.2** Release workflow produces Windows and Linux x64 artifacts; ARM64
+      packaging is verified by the tester log.
 - [ ] **M6.4.3** Checksums and release notes.
 
 ### M6.5 Documentation
@@ -849,8 +867,8 @@ is post-v1 and does not block this gate.
 - [ ] **G6.1** Windows artifact runs; no `SDL2.dll`.
 - [ ] **G6.2** Linux x64 AppImage runs.
 - [ ] **G6.3** ARM64 artifact runs on the Pi.
-- [ ] **G6.4** CI release green on all three.
-- [ ] **G6.5** Goldens and functional tests pass; ARM64 hash recorded.
+- [ ] **G6.4** Windows/Linux CI release green; ARM64 tester entry recorded.
+- [ ] **G6.5** Goldens and functional tests pass; ARM64 hash recorded by the tester.
 - [ ] **G6.6** Docs and checksums present.
 - [ ] **G6.7** No open BLOCKS or FIX-BEFORE findings.
 
@@ -865,7 +883,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G0 | Windows x64 | `scripts/gate-windows.ps1` | PASS — Debug and Release configure/build/CTest; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; no `SDL2.dll`; `GATE WINDOWS: PASS`. CI run `44733345483` also passed `windows-x64`. | `77c4e00` |
 | G0 | WSL x64 | `scripts/gate-linux.sh` | PASS — GCC 15.2.0, Debug and Release configure/build/CTest; the same two hashes; `GATE LINUX X64: PASS`. CI run `44733345483` also passed `linux-x64` on Ubuntu. | `77c4e00` |
 | G0 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T08:36:36-08:00 for main @ `5fd5196`: Debug and Release configure/build pass; CTest 2/2 with the x64 goldens excluded; empty `F15B00C153682DF8`, loaded `E47FA2651086D075` match x64 | `5fd5196` |
-| G0 | CI | `.github/workflows/ci.yml` | PASS on Windows and Ubuntu, BLOCKED on ARM64 — runs `44777407987` (`da4d19b`) and `44778060127` (`503f5de`): `windows-x64` and `linux-x64` success, `arm64` queued with no runner for 16+ minutes across four polls | `503f5de` |
+| G0 | CI | `.github/workflows/ci.yml`; `docs/arm64-tester.md` | PASS — Windows and Ubuntu CI green; ARM64 evidence is tester entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` (105 gate checks, 0 failures); no ARM64 CI job remains | `81e1c31` |
 | G1 | Windows x64 | `scripts/gate-windows.ps1` | PASS — `GATE WINDOWS: PASS` on `2aee61f`; 50 tests, 0 failures; empty `F15B00C153682DF8`, loaded `E47FA2651086D075`; CI run `44783518343` also passed `windows-x64` | `2aee61f` |
 | G1 | WSL x64 | `scripts/gate-linux.sh` | PASS — `GATE LINUX X64: PASS` on `2aee61f`; 50 tests, 0 failures; same hashes; CI run `44783518343` also passed `linux-x64` | `2aee61f` |
 | G1 | ARM64 | `scripts/gate-linux-arm64.sh` | PASS — BitWhiz entry 2026-11-20T09:28:28-08:00 for `ba568d0`: Debug and Release, 50/50 checks, boundary 14 UI/public + 10 core/kdbg, hashes unchanged; `2aee61f` follow-up pending and non-blocking | `ba568d0` |
@@ -880,7 +898,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G4 | ARM64 | `scripts/gate-linux-arm64.sh` (adapter OFF); extra adapter-ON build with `-DKRDBG_KR16_ROOT=/home/kevinro/repos/kr16 -DKRDBG_PLATFORM=null` | PASS — tester entry 2026-11-20T13:01:18-08:00 @ `dee054e`: gate 99 checks, 0 failures; adapter ON **107 checks, 0 failures**, 16-bit golden `A1F5B45032915A96`; sibling KR16 `b9f7436` is host evidence, not pinned | `0d5a272` |
 | G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `e4dd179` |
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
-| G5 | ARM64 | not run | PENDING (non-blocking) — no M5 entry in `docs/arm64-test-log.md`; the host process runner is platform-gated and covered on Windows/WSL | — |
+| G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
 | G6 | Windows x64 | TBD | TBD | TBD |
 | G6 | Linux x64 | TBD | TBD | TBD |
 | G6 | ARM64 | TBD | TBD | TBD |
@@ -1120,7 +1138,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 self-hosted runner `BitWhiz` (Raspberry Pi on the local network; polls GitHub every 7 minutes) and its labels | G0 / G6 | kevinwross | `[ ]` The owner reports BitWhiz registered with the labels `[self-hosted, linux, arm64, raspberry-pi]`; the setup is in `docs/ci-arm64.md`. The CI `arm64` jobs stayed queued with no runner for 16+ minutes across four polls (runs `44777407987`, `44778060127`). The tester inspected the host at `50b6a0d` and found no Actions runner unit, process, installation or `_work` directory. M0.8.5 and the ARM64 half of G0.9 are BLOCKED until the runner is installed. The ARM64 tester gate itself passes (G0.3, `5fd5196`; M1.1 on `50b6a0d`). |
+| ARM64 tester session on `BitWhiz` (Raspberry Pi on the local network; polls `main`) | G0 / G6 | kevinwross | `[x]` The tester path is `docs/arm64-tester.md`; it runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`. There is no GitHub Actions runner and none is planned. The entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` records `krdbg_unit` 105 checks, 0 failures, plus the adapter-on 115-check extra run. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout and CI never depend on a local KRCompiler install. |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
@@ -1137,12 +1155,13 @@ claim the prerequisite is met.
 - [x] The user approves `implementation.md`.
 - [x] The user approves repository initialization and supplies a remote.
 - [x] The user approves the platform gate policy and golden policy.
-- [x] The user confirms the ARM64 runner owner and labels.
+- [x] The user confirms the ARM64 tester path and its owner.
 - [x] The milestone order and estimates are acceptable.
 - [x] The first task to execute is M0.0.1.
 
 Approval is recorded at 2026-11-20T03:04:50-08:00; implementation starts at M0.1.
-The ARM64 runner is `BitWhiz`, a Raspberry Pi on the local network owned by
-kevinwross, polling GitHub every 7 minutes (§10). It is a prerequisite for
-G0.3/G0.9 and G6; M0.8 confirms the krdbg registration and its labels, and G0 may
-record that job `BLOCKED` until it can run this repository's jobs.
+The ARM64 verifier is the tester session `BitWhiz`, a Raspberry Pi on the local
+network owned by kevinwross, polling `main`; its protocol is
+`docs/arm64-tester.md` and its evidence is `docs/arm64-test-log.md`. It is a
+prerequisite for G0.3/G0.9 and G6; M0.8.5 is the tester path and G0 records the
+entry for the tested revision. There is no GitHub Actions runner.

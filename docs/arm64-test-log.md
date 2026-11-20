@@ -1,7 +1,8 @@
 # ARM64 test log — krdbg
 
 Append-only. One entry per tested SHA, newest last. See `docs/arm64-tester.md` for
-the protocol and `docs/ci-arm64.md` for the hash policy.
+the protocol; `docs/ci-arm64.md` records that ARM64 is tester-verified, not a CI
+job.
 
 ## 2026-11-20T08:36:36-08:00 — main @ 5fd5196
 

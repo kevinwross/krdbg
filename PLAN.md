@@ -787,10 +787,14 @@ Chosen shape: **two thin presenters, one surface.**
 |---|---|---|
 | Windows x64 | Win32 GDI (`StretchDIBits` of the software Canvas) | None; single exe |
 | Linux x64 | SDL2 | `libSDL2` (system package or bundled in AppImage) |
-| Linux ARM64 | SDL2 | same |
+| Linux ARM64 | SDL2 | same; verified by the ARM64 tester log, not a GitHub Actions runner |
 
 - `IWindow` is per-top-level-window; the debugger and the video display each own
   one, and both presenters stay independent of the surface.
+- ARM64 has no GitHub Actions runner. The verification path is the ARM64 tester
+  session on BitWhiz: it polls `main`, runs `scripts/gate-linux-arm64.sh` and
+  appends one entry to `docs/arm64-test-log.md`; the protocol is in
+  `docs/arm64-tester.md`. The entry is the ARM64 evidence for that revision.
 - Win32 GDI is the same presenter strategy KR16 already ships, so it is proven
   in this family of projects.
 - Static SDL2 was considered and rejected for v1: it requires building SDL2
@@ -1703,7 +1707,7 @@ link krdbg, done.
 | **M3 — KR32 vertical slice** | KR32 adapter; load a `krc`-built `.k32` with `.kdbg`; set source breakpoint, step line, inspect locals/struct/globals, call stack, memory, disassembly | Side-by-side with KR32 GUI on the same image; behaviour matches `docs/ui.md` | 2 weeks |
 | **M4 — Second architecture** | KR16 adapter; 16-bit image; address width/registers/flags adapt | Same interactions on KR16; only adapter code changed; no `if (kr16)` in UI | 2 weeks |
 | **M5 — Compiler pipeline** | Load/build provider invoking `krc`/`krld`; `LOAD` builds source and loads it; `RESET` rebuilds from source; `KERNEL` loads the embedded pair; source roots; compiler/linker/assembler settings schemas | Load a `.c`/`.cpp`/`.s`, build, stop at `main`, step to a line, inspect a local; `KERNEL` loads the embedded OS; source resolves from a clean checkout; tool settings appear in the dialog without UI changes | 2–3 weeks |
-| **M6 — Packaging and post-v1** | Linux x64/ARM64 packaging (SDL2/AppImage), DAP front end, extra architectures | AppImage runs; DAP and GUI share the session | 2+ weeks |
+| **M6 — Packaging and post-v1** | Linux x64/ARM64 packaging (SDL2/AppImage), DAP front end, extra architectures | Windows and Linux x64 artifacts run; the ARM64 tester log records the Pi artifact; DAP and GUI share the session | 2+ weeks |
 
 The order is deliberate: **visual baseline first** (the user's priority), then
 the engine, then a real target, then a second architecture to prove the

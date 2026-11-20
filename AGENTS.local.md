@@ -13,8 +13,8 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
 `implementation.md` are approved. G0–G5 are closed; M1–M5 are done. The host
 runs the installed KRCompiler `402cfaf` package; M5.1–M5.3 and G5 pass on
-Windows and WSL, with ARM64 evidence non-blocking. The ARM64 CI runner
-(M0.8.5) remains blocked because BitWhiz has no Actions runner installed.
+Windows and WSL, with ARM64 verified by the tester log. There is no ARM64
+GitHub Actions runner and none is planned.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M2; §1–2 and the appendices are background.
 
@@ -54,7 +54,7 @@ Target-specific notes:
 - **Linux (Raspberry Pi):**
   - Confirm every native dependency has a prebuilt artifact for ARM64, or document the build-from-source requirement.
   - Do not assume word size, byte order, or the presence of SIMD.
-  - No hosted runner here by default: record the machine and the last verified revision, and keep it current.
+  - Verification is the ARM64 tester session on BitWhiz, which polls `main`, runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`; there is no GitHub Actions runner.
 <!-- project:targets:end -->
 
 ## Architecture boundaries
@@ -104,7 +104,7 @@ its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 
 ## Known traps
 
-- The CI workflow is `.github/workflows/ci.yml`. The ARM64 runner `BitWhiz` is a Raspberry Pi on the local network, reported by the owner as registered with the labels `[self-hosted, linux, arm64, raspberry-pi]`. The `arm64` jobs have stayed queued with no runner assigned across four polls (runs `44777407987` and `44778060127`); the tester inspected the host at `50b6a0d` and found no Actions runner unit, process, installation or `_work` directory. Install and register the runner before trusting a green ARM64 CI result. Setup is in `docs/ci-arm64.md`.
+- ARM64 is verified by a tester session, not GitHub Actions: BitWhiz polls `main`, runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`. There is no self-hosted runner and none is planned; do not add an `arm64` job. The protocol is `docs/arm64-tester.md`; the latest entry is the ARM64 evidence for its revision.
 - WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - KRCompiler at `797dfacf` exports `krc::debug`; krdbg vendors the exact `kdbg.*` pair under `third_party/krc-debug/` so a bare checkout and CI build without a KRCompiler install. The vendored copy carries the commit SHA and a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).
