@@ -9,10 +9,9 @@
 | `arm64` | self-hosted `[self-hosted, linux, arm64, raspberry-pi]` | `scripts/gate-linux-arm64.sh` |
 
 CI calls the gate scripts only; no command string is repeated in the workflow.
-The ARM64 job runs only when the repository variable
-`KRDBG_ARM64_RUNNER` is `true`; until a runner is registered it is skipped and
-G0.9 records ARM64 as BLOCKED rather than leaving a job queued. The runner setup
-is in [ci-arm64.md](ci-arm64.md).
+The ARM64 job runs on the self-hosted `BitWhiz` runner and is non-blocking until
+G6 (`continue-on-error: true`). The runner setup is in
+[ci-arm64.md](ci-arm64.md).
 
 ## Build trees and artifacts
 

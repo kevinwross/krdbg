@@ -1,9 +1,9 @@
 # ARM64 CI runner
 
 The ARM64 gate runs on `BitWhiz`, a Raspberry Pi on the local network owned by
-kevinwross. It polls GitHub every 7 minutes, so a queued job may wait that long
-before it starts. The same machine is registered for KRCompiler; the krdbg
-registration and its labels are confirmed by the owner in M0.8.
+kevinwross. It is registered as the krdbg runner with the labels below and polls
+GitHub every 7 minutes, so a queued job may wait that long before it starts. The
+same machine is also registered for KRCompiler.
 
 ## Labels
 
@@ -41,18 +41,6 @@ sudo ./svc.sh start
 ```
 
 The token is a one-time registration secret; it is never committed.
-
-## Enabling the CI job
-
-The `arm64` job is gated on a repository variable so CI does not leave a job
-queued while no runner exists:
-
-1. Register the runner above and confirm it is idle under **Settings → Actions →
-   Runners**.
-2. Set **Settings → Secrets and variables → Actions → Variables →
-   `KRDBG_ARM64_RUNNER`** to `true`.
-3. The next push runs the `arm64` job with the labels above. Until step 2, the
-   job is skipped and G0.9 records ARM64 as BLOCKED for the missing runner.
 
 ## Gate and hash policy
 
