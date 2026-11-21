@@ -228,6 +228,12 @@ open questions the plan was proposed with.
    green with the four directories, the runtime and the injection gone. Until
    then the session prepares the final diff, the release note and the gate, and
    the default stays `builtin`.
+10. **The C++ corpus sign-off is accepted as written.** Signed by kevinwross on
+    2026-11-20T22:18:58-08:00. The accepted differences, all permanent once the
+    built-in compiler is deleted: `throw <scalar>`; runtime-bound `new[]`; `T()`
+    construction; the plain-aggregate `S()` correction; `std::thread::id`;
+    `<fstream>`; and the debug-information display differences listed in
+    `docs/cxx-gap-signoff.md`. This satisfies decision 9's second condition.
 
 ## 9. Approval
 
