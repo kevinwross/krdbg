@@ -786,7 +786,7 @@ Chosen shape: **two thin presenters, one surface.**
 | Platform | Presenter | Runtime dependency |
 |---|---|---|
 | Windows x64 | Win32 GDI (`StretchDIBits` of the software Canvas) | None; single exe |
-| Linux x64 | SDL2 | `libSDL2` (system package or bundled in AppImage) |
+| Linux x64 | SDL2 | `libSDL2` 2.32 system package; the release is a tarball with no bundled SDL2 |
 | Linux ARM64 | SDL2 | same; verified by the ARM64 tester log, not a GitHub Actions runner |
 
 - `IWindow` is per-top-level-window; the debugger and the video display each own
@@ -1707,11 +1707,16 @@ link krdbg, done.
 | **M3 — KR32 vertical slice** | KR32 adapter; load a `krc`-built `.k32` with `.kdbg`; set source breakpoint, step line, inspect locals/struct/globals, call stack, memory, disassembly | Side-by-side with KR32 GUI on the same image; behaviour matches `docs/ui.md` | 2 weeks |
 | **M4 — Second architecture** | KR16 adapter; 16-bit image; address width/registers/flags adapt | Same interactions on KR16; only adapter code changed; no `if (kr16)` in UI | 2 weeks |
 | **M5 — Compiler pipeline** | Load/build provider invoking `krc`/`krld`; `LOAD` builds source and loads it; `RESET` rebuilds from source; `KERNEL` loads the embedded pair; source roots; compiler/linker/assembler settings schemas | Load a `.c`/`.cpp`/`.s`, build, stop at `main`, step to a line, inspect a local; `KERNEL` loads the embedded OS; source resolves from a clean checkout; tool settings appear in the dialog without UI changes | 2–3 weeks |
-| **M6 — Packaging and post-v1** | Linux x64/ARM64 packaging (SDL2/AppImage), DAP front end, extra architectures | Windows and Linux x64 artifacts run; the ARM64 tester log records the Pi artifact; DAP and GUI share the session | 2+ weeks |
+| **M6 — Packaging and post-v1** | Windows zip; Linux x64/ARM64 tarballs (SDL2 2.32 system requirement, no bundled SDL2), DAP front end, extra architectures | Windows and Linux x64 artifacts run from clean checkouts; the ARM64 tester log records the Pi tarball; DAP and GUI share the session | 2+ weeks |
 
 The order is deliberate: **visual baseline first** (the user's priority), then
 the engine, then a real target, then a second architecture to prove the
 abstraction, then the compiler pipeline.
+
+**M6.2 packaging:** Linux x64 ships a tarball, not an AppImage. The tarball
+contains no SDL2; SDL2 2.32 is a system requirement documented in the release
+notes and README. ARM64 packaging waits for the tester machine and uses a
+tarball as well; a cross-build is not a substitute.
 
 ### 8.1 Companion work in KRCompiler
 
@@ -1825,6 +1830,7 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 | v1 feature scope | Core panels, register/flag editing, FPR/matrix groups, video preview and separate video window, COM port panel, instruction/time/IPS statistics and CLR, schema-driven settings, host load/build, cores/threads selection and inspection. DAP is post-v1. |
 | Load/build model | `LOAD` handles an image or source (host builds), `RESET` reloads/rebuilds, `KERNEL` loads the embedded pair; no Build button and no embedded compiler in krdbg |
 | Platform | Windows: Win32 GDI presenter (no DLL); Linux x64/ARM64: SDL2. Static SDL2 was considered and rejected for v1. |
+| License | MIT, `Copyright (c) 2026 Kevin Ross`. Every artifact ships the root `LICENSE`, `LICENSES.md`, both OFL texts and the `krc-debug` MIT notice. SDL2 is system-provided and not bundled. |
 | DAP | Model threads/scopes/typed values now; implement the server post-v1 |
 
 ### Prerequisites

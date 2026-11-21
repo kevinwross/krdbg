@@ -1,14 +1,28 @@
 # Release artifacts
 
+Version: `0.2.0`.
+
+## Licensing
+
+Every artifact carries the project `LICENSE` (MIT), `LICENSES.md`, both OFL
+texts (`OFL-Inter.txt`, `OFL-JetBrainsMono.txt`) and
+`third_party/krc-debug/LICENSE`. The packaging scan fails when any of those is
+missing. SDL2 is not bundled on either platform.
+
 ## Windows x64
 
 ```text
-krdbg-0.1.0-windows-x64.zip
+krdbg-0.2.0-windows-x64.zip
   krdbg_demo.exe
   README.md
+  LICENSE
   LICENSES.md
-  LICENSES-krc-debug.txt
+  OFL-Inter.txt
+  OFL-JetBrainsMono.txt
+  third_party/krc-debug/LICENSE
   release.md
+  docs/release.md
+  docs/licenses.md
   VERIFY.txt
   SHA256SUMS
 ```
@@ -23,20 +37,40 @@ powershell -File scripts/package-windows.ps1 `
 
 The script runs the executable from the staging directory, records its frame
 hash in `VERIFY.txt`, checks with `dumpbin` that no `SDL2.dll` dependency exists,
-scans the staging tree for `SDL2.dll`, writes `SHA256SUMS`, and prints the zip
-size and SHA-256.
+scans for `SDL2.dll`, asserts the license payload, writes `SHA256SUMS`, and
+prints the zip size and SHA-256.
 
-The clean-checkout evidence is a `git archive` of the recorded commit; configure
-and build `windows-msvc-release` inside that tree, then run the same command.
+## Linux x64 tarball
 
-## Linux x64 AppImage
+```text
+krdbg-0.2.0-linux-x64.tar.gz
+  krdbg_demo
+  README.md
+  LICENSE
+  LICENSES.md
+  OFL-Inter.txt
+  OFL-JetBrainsMono.txt
+  third_party/krc-debug/LICENSE
+  release.md
+  docs/release.md
+  docs/licenses.md
+  SYSTEM-REQUIREMENTS.txt
+  VERIFY.txt
+  SHA256SUMS
+```
 
-The AppImage contains the same payload as the Windows zip, with the Linux
-executable and the system SDL2 bundled by the AppImage tooling.
+SDL2 **2.32** is a system requirement; the tarball bundles no SDL2 library and
+therefore carries no SDL2 notice. Build `linux-wsl-release`, then run:
 
-This machine does not have `appimagetool` or `linuxdeploy`; no AppImage can be
-built here without installing them. Installation is outside the gate rules, so
-M6.2/G6.2 await an environment that already provides the tooling.
+```sh
+./scripts/package-linux-tarball.sh \
+    --build-dir build/linux-wsl-release \
+    --commit <40-character commit>
+```
+
+The script runs the binary from the staging directory, records its frame hash,
+asserts the license payload and the absence of bundled SDL2, writes
+`SHA256SUMS`, and prints the tarball size and SHA-256.
 
 ## Linux ARM64
 

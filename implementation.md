@@ -76,7 +76,7 @@ recorded but does not block a milestone unless the gate says it does.
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
-| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[ ] in progress — M6.1 done; M6.2 blocked (AppImage tooling absent)` |
+| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[ ] in progress — M6.1 done; M6.2 tarball pending` |
 
 Dependencies:
 
@@ -843,10 +843,9 @@ is post-v1 and does not block this gate.
 
 ### M6.2 Linux x64
 
-- [ ] **M6.2.1** AppImage with SDL2 bundled.
-  BLOCKED: this machine has no `appimagetool` or `linuxdeploy`; only
-  `mksquashfs` is present. No AppImage was produced and nothing was installed.
-- [ ] **M6.2.2** Clean-machine smoke test.
+- [ ] **M6.2.1** Linux x64 tarball with a system-SDL2 2.32 note; no SDL2
+      bundled.
+- [ ] **M6.2.2** Clean-extraction smoke test.
   BLOCKED by M6.2.1.
 
 ### M6.3 Linux ARM64
@@ -916,7 +915,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
 | G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `eed9778`; `krdbg-0.1.0-windows-x64.zip` 258,698 B, SHA-256 `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`; extracted run exit 0; no `SDL2.dll` | `eed9778` |
-| G6 | Linux x64 | AppImage tooling | BLOCKED — `appimagetool` and `linuxdeploy` absent on WSL; no AppImage built; no install attempted | — |
+| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PENDING — tarball build and extraction smoke are recorded after the 0.2.0 clean rebuild | — |
 | G6 | ARM64 | tester machine | TBD — waits for the ARM64 tester artifact run | — |
 | G6 | CI | release workflow | TBD — no release workflow yet | — |
 

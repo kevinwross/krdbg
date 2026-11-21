@@ -1,7 +1,7 @@
 param(
     [string]$BuildDir = "build/windows-msvc-release",
     [string]$OutputDir = "build/release",
-    [string]$Version = "0.1.0",
+    [string]$Version = "0.2.0",
     [string]$Commit = ""
 )
 
@@ -49,16 +49,40 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination (Join-Path $stage "krdbg_demo.exe")
 Copy-Item -LiteralPath (Join-Path $root "README.md") -Destination $stage
+Copy-Item -LiteralPath (Join-Path $root "LICENSE") -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root "docs\licenses.md") `
     -Destination (Join-Path $stage "LICENSES.md")
+Copy-Item -LiteralPath (Join-Path $root "third_party\fonts\OFL-Inter.txt") `
+    -Destination (Join-Path $stage "OFL-Inter.txt")
+Copy-Item -LiteralPath (Join-Path $root "third_party\fonts\OFL-JetBrainsMono.txt") `
+    -Destination (Join-Path $stage "OFL-JetBrainsMono.txt")
+New-Item -ItemType Directory -Path (Join-Path $stage "third_party\krc-debug") `
+    -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root "third_party\krc-debug\LICENSE") `
-    -Destination (Join-Path $stage "LICENSES-krc-debug.txt")
+    -Destination (Join-Path $stage "third_party\krc-debug\LICENSE")
 Copy-Item -LiteralPath (Join-Path $root "docs\release.md") -Destination $stage
 New-Item -ItemType Directory -Path (Join-Path $stage "docs") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root "docs\release.md") `
     -Destination (Join-Path $stage "docs\release.md")
 Copy-Item -LiteralPath (Join-Path $root "docs\licenses.md") `
     -Destination (Join-Path $stage "docs\licenses.md")
+
+$required = @(
+    "README.md",
+    "LICENSE",
+    "LICENSES.md",
+    "OFL-Inter.txt",
+    "OFL-JetBrainsMono.txt",
+    "third_party\krc-debug\LICENSE",
+    "release.md",
+    "docs\release.md",
+    "docs\licenses.md"
+)
+foreach ($item in $required) {
+    if (-not (Test-Path -LiteralPath (Join-Path $stage $item))) {
+        throw "required release file is missing: $item"
+    }
+}
 
 $smoke = Join-Path $stage "smoke-loaded.ppm"
 Push-Location $stage
@@ -89,10 +113,11 @@ $verify = @(
     "krdbg $Version windows-x64",
     "Commit: $Commit",
     "Build: windows-msvc-release",
-    "Contents: krdbg_demo.exe, README.md, LICENSES.md, LICENSES-krc-debug.txt, release.md, docs/release.md, docs/licenses.md",
+    "Contents: krdbg_demo.exe, README.md, LICENSE, LICENSES.md, OFL-Inter.txt, OFL-JetBrainsMono.txt, third_party/krc-debug/LICENSE, release.md, docs/release.md, docs/licenses.md",
     "Smoke: headless loaded state exit 0",
     "Frame: $hashLine",
     "Dependencies: $dependencies",
+    "License payload: all required files present",
     "SDL2.dll in package: no",
     "",
     "SHA256SUMS covers every file except SHA256SUMS itself."
@@ -100,11 +125,12 @@ $verify = @(
 $verify | Set-Content -LiteralPath (Join-Path $stage "VERIFY.txt") `
     -Encoding utf8
 
-$files = Get-ChildItem -LiteralPath $stage -File |
+$files = Get-ChildItem -LiteralPath $stage -Recurse -File |
     Where-Object { $_.Name -ne "SHA256SUMS" } |
-    Sort-Object Name
+    Sort-Object FullName
 $hashes = foreach ($file in $files) {
-    "$(Get-Sha256 $file.FullName)  $($file.Name)"
+    $relative = $file.FullName.Substring($stage.Length + 1).Replace("\", "/")
+    "$(Get-Sha256 $file.FullName)  $relative"
 }
 $hashes | Set-Content -LiteralPath (Join-Path $stage "SHA256SUMS") `
     -Encoding ascii
