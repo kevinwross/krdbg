@@ -834,9 +834,9 @@ is post-v1 and does not block this gate.
 ### M6.1 Windows
 
 - [x] **M6.1.1** Release zip with `krdbg_demo.exe`, docs, licenses.
-  Evidence: `krdbg-0.2.0-windows-x64.zip`, 264,358 bytes, SHA-256
-  `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`;
-  built from clean checkout `5223177`; contents are the exe, `README.md`,
+  Evidence: `krdbg-0.2.0-windows-x64.zip`, 264,352 bytes, SHA-256
+  `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`;
+  built from clean checkout `68e56c6`; contents are the exe, `README.md`,
   `LICENSE`, `LICENSES.md`, `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`,
   `third_party/krc-debug/LICENSE`, `release.md`, `VERIFY.txt`, `SHA256SUMS`,
   `docs/release.md` and `docs/licenses.md`.
@@ -852,9 +852,9 @@ is post-v1 and does not block this gate.
 
 - [x] **M6.2.1** Linux x64 tarball with a system-SDL2 2.32 note; no SDL2
       bundled.
-  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`, 442,372 bytes, SHA-256
-  `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`;
-  built from clean checkout `5223177`; contents are the binary, `README.md`,
+  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`, 442,367 bytes, SHA-256
+  `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`;
+  built from clean checkout `68e56c6`; contents are the binary, `README.md`,
   `LICENSE`, `LICENSES.md`, both OFL texts, `third_party/krc-debug/LICENSE`,
   `release.md`, `docs/release.md`, `docs/licenses.md`,
   `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt` and `SHA256SUMS`. The note requires
@@ -932,8 +932,8 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `e4dd179` |
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
-| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `5223177`; `krdbg-0.2.0-windows-x64.zip` 264,358 B, SHA-256 `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`; license scan and no `SDL2.dll`; extracted run exit 0 | `5223177` |
-| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PASS — `5223177`; `krdbg-0.2.0-linux-x64.tar.gz` 442,372 B, SHA-256 `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`; license scan, no bundled SDL2; extracted run exit 0 | `5223177` |
+| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `68e56c6`; `krdbg-0.2.0-windows-x64.zip` 264,352 B, SHA-256 `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`; license scan and no `SDL2.dll`; extracted run exit 0 | `68e56c6` |
+| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PASS — `68e56c6`; `krdbg-0.2.0-linux-x64.tar.gz` 442,367 B, SHA-256 `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`; license scan, no bundled SDL2; extracted run exit 0 | `68e56c6` |
 | G6 | ARM64 | tester machine | TBD — waits for the ARM64 tester artifact run | — |
 | G6 | CI | release workflow | TBD — no release workflow yet | — |
 
@@ -1183,28 +1183,28 @@ Recorded 2026-11-20T22:14:07-08:00.
   the script's final newline. `tests/test_kdbg.cpp` checks the v1.1 `minor`,
   pointer width, `variableInfo` scope and parameter/local/static flags as well
   as the carried v1 fields; the KDBG tests pass.
-- Windows clean-checkout artifact: `git archive` of `5223177`, configured with
+- Windows clean-checkout artifact: `git archive` of `68e56c6`, configured with
   the `windows-msvc-release` preset, built with MSVC. `scripts/package-windows.ps1`
-  produced `krdbg-0.2.0-windows-x64.zip`: **264,358 bytes**, SHA-256
-  `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`.
+  produced `krdbg-0.2.0-windows-x64.zip`: **264,352 bytes**, SHA-256
+  `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`.
   Contents: `krdbg_demo.exe`, `README.md`, `LICENSE`, `LICENSES.md`,
   `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
   `release.md`, `VERIFY.txt`, `SHA256SUMS`, `docs/release.md`,
   `docs/licenses.md`. `VERIFY.txt` records `License payload: all required
   files present`, `dumpbin /dependents: no SDL2.dll` and `SDL2.dll in package:
   no`.
-- Extracted that zip to `build/release/final-win` and ran
+- Extracted that zip to `build/release/final-win4` and ran
   `krdbg_demo.exe --headless --state loaded --screenshot artifact.ppm` from the
   extracted directory: exit 0, frame hash `DE4BCC6064D8B4F7` at 1440x900.
-- Linux clean-checkout artifact: the same `5223177` archive configured with
+- Linux clean-checkout artifact: the same `68e56c6` archive configured with
   `linux-wsl-release`, packaged by `scripts/package-linux-tarball.sh` as
-  `krdbg-0.2.0-linux-x64.tar.gz`: **442,372 bytes**, SHA-256
-  `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`.
+  `krdbg-0.2.0-linux-x64.tar.gz`: **442,367 bytes**, SHA-256
+  `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`.
   Contents: `krdbg_demo`, `README.md`, `LICENSE`, `LICENSES.md`,
   `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
   `release.md`, `docs/release.md`, `docs/licenses.md`,
   `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt`, `SHA256SUMS`.
-- Extracted that tarball to `build/release/linux-smoke-final` and ran
+- Extracted that tarball to `build/release/linux-smoke-4` and ran
   `./krdbg_demo --headless --state loaded --screenshot artifact.ppm`: exit 0,
   frame hash `DE4BCC6064D8B4F7` at 1440x900. `VERIFY.txt` records
   `System SDL2: 2.32 required; not bundled`, `License payload: all required
