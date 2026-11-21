@@ -25,6 +25,8 @@ enum class Section : std::uint16_t {
     Variable = 5,
     Type = 6,
     Build = 7,
+    Location = 8,
+    Scope = 9,
 };
 
 enum class Record : std::uint16_t {
@@ -36,7 +38,20 @@ enum class Record : std::uint16_t {
     Type = 6,
     Member = 7,
     Build = 8,
+    // v1.1 additions. No v1 tag changes number or payload.
+    Location = 9,
+    Scope = 10,
+    VarInfo = 11,
+    Base = 12,
+    ArrayType = 13,
+    TypeRef = 14,
+    Line64 = 15,
+    Function64 = 16,
+    Symbol64 = 17,
+    Location64 = 18,
 };
+
+constexpr std::uint16_t kSupportedMinor = 1;
 
 std::uint32_t crc32(std::span<const std::uint8_t> data) {
     std::uint32_t crc = 0xFFFFFFFFu;
@@ -208,9 +223,9 @@ std::string json_escape(const std::string& text) {
 
 std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
     StringPool strings;
-    const std::array<std::string, 7> section_names = {
-        ".kdbg_src", ".kdbg_line", ".kdbg_func", ".kdbg_sym",
-        ".kdbg_var", ".kdbg_type", ".kdbg_build"};
+    const std::array<std::string, 9> section_names = {
+        ".kdbg_src", ".kdbg_line", ".kdbg_func", ".kdbg_sym", ".kdbg_var",
+        ".kdbg_type", ".kdbg_build", ".kdbg_loc", ".kdbg_scope"};
     for (const auto& name : section_names) {
         strings.add(name);
     }
@@ -228,8 +243,25 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
         strings.add(variable.name);
         strings.add(variable.type);
     }
+    for (const auto& info : image.variable_info) {
+        strings.add(info.function);
+        strings.add(info.name);
+        strings.add(info.scope);
+    }
+    for (const auto& location : image.locations) {
+        strings.add(location.function);
+        strings.add(location.name);
+    }
+    for (const auto& scope : image.scopes) {
+        strings.add(scope.function);
+        strings.add(scope.name);
+        strings.add(scope.parent);
+    }
     for (const auto& type : image.types) {
         strings.add(type.name);
+        strings.add(type.base);
+        strings.add(type.element);
+        strings.add(type.target);
         for (const auto& member : type.members) {
             strings.add(member.name);
             strings.add(member.type);
@@ -237,37 +269,57 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
     }
     strings.add(image.compiler);
 
-    std::array<std::vector<std::uint8_t>, 7> payloads;
+    std::array<std::vector<std::uint8_t>, 9> payloads;
     for (const auto& source : image.sources) {
         std::vector<std::uint8_t> data;
         put_u32(data, source.id);
         put_u32(data, strings.add(source.path));
         record(payloads[0], Record::Source, data);
     }
+    const bool wide = image.pointer_width == 8;
     for (const auto& line : image.lines) {
         std::vector<std::uint8_t> data;
-        put_u32(data, line.address);
+        if (wide) {
+            put_u64(data, line.address);
+        } else {
+            put_u32(data, static_cast<std::uint32_t>(line.address));
+        }
         put_u32(data, line.source);
         put_u32(data, line.line);
         put_u32(data, line.column);
-        record(payloads[1], Record::Line, data);
+        record(payloads[1], wide ? Record::Line64 : Record::Line, data);
     }
     for (const auto& function : image.functions) {
         std::vector<std::uint8_t> data;
         put_u32(data, strings.add(function.name));
-        put_u32(data, function.start);
-        put_u32(data, function.end);
-        put_u32(data, function.frame);
-        put_u32(data, strings.add(function.type));
-        record(payloads[2], Record::Function, data);
+        if (wide) {
+            put_u64(data, function.start);
+            put_u64(data, function.end);
+            put_u32(data, function.frame);
+            put_u32(data, strings.add(function.type));
+            record(payloads[2], Record::Function64, data);
+        } else {
+            put_u32(data, static_cast<std::uint32_t>(function.start));
+            put_u32(data, static_cast<std::uint32_t>(function.end));
+            put_u32(data, function.frame);
+            put_u32(data, strings.add(function.type));
+            record(payloads[2], Record::Function, data);
+        }
     }
     for (const auto& symbol : image.symbols) {
         std::vector<std::uint8_t> data;
         put_u32(data, strings.add(symbol.name));
-        put_u32(data, symbol.address);
-        put_u32(data, symbol.size);
-        put_u32(data, strings.add(symbol.type));
-        record(payloads[3], Record::Symbol, data);
+        if (wide) {
+            put_u64(data, symbol.address);
+            put_u64(data, symbol.size);
+            put_u32(data, strings.add(symbol.type));
+            record(payloads[3], Record::Symbol64, data);
+        } else {
+            put_u32(data, static_cast<std::uint32_t>(symbol.address));
+            put_u32(data, static_cast<std::uint32_t>(symbol.size));
+            put_u32(data, strings.add(symbol.type));
+            record(payloads[3], Record::Symbol, data);
+        }
     }
     for (const auto& variable : image.variables) {
         std::vector<std::uint8_t> data;
@@ -277,6 +329,15 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
         put_u32(data, strings.add(variable.type));
         put_u32(data, variable.size);
         record(payloads[4], Record::Variable, data);
+    }
+    for (const auto& info : image.variable_info) {
+        std::vector<std::uint8_t> data;
+        put_u32(data, strings.add(info.function));
+        put_u32(data, strings.add(info.name));
+        put_u16(data, static_cast<std::uint16_t>(info.kind));
+        put_u16(data, info.flags);
+        put_u32(data, strings.add(info.scope));
+        record(payloads[4], Record::VarInfo, data);
     }
     for (const auto& type : image.types) {
         std::vector<std::uint8_t> data;
@@ -294,6 +355,51 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
             put_u32(member_data, member.size);
             record(payloads[5], Record::Member, member_data);
         }
+        if (!type.base.empty()) {
+            std::vector<std::uint8_t> base_data;
+            put_u32(base_data, strings.add(type.name));
+            put_u32(base_data, strings.add(type.base));
+            record(payloads[5], Record::Base, base_data);
+        }
+        if (!type.element.empty()) {
+            std::vector<std::uint8_t> array_data;
+            put_u32(array_data, strings.add(type.name));
+            put_u32(array_data, strings.add(type.element));
+            put_u32(array_data, type.element_count);
+            record(payloads[5], Record::ArrayType, array_data);
+        }
+        if (!type.target.empty()) {
+            std::vector<std::uint8_t> ref_data;
+            put_u32(ref_data, strings.add(type.name));
+            put_u32(ref_data, strings.add(type.target));
+            record(payloads[5], Record::TypeRef, ref_data);
+        }
+    }
+    for (const auto& location : image.locations) {
+        std::vector<std::uint8_t> data;
+        put_u32(data, strings.add(location.function));
+        put_u32(data, strings.add(location.name));
+        put_u16(data, location.reg);
+        data.push_back(location.fp ? 1 : 0);
+        data.push_back(0);
+        if (wide) {
+            put_u64(data, location.start);
+            put_u64(data, location.end);
+            record(payloads[7], Record::Location64, data);
+        } else {
+            put_u32(data, static_cast<std::uint32_t>(location.start));
+            put_u32(data, static_cast<std::uint32_t>(location.end));
+            record(payloads[7], Record::Location, data);
+        }
+    }
+    for (const auto& scope : image.scopes) {
+        std::vector<std::uint8_t> data;
+        put_u32(data, strings.add(scope.function));
+        put_u32(data, strings.add(scope.name));
+        put_u32(data, strings.add(scope.parent));
+        put_u32(data, static_cast<std::uint32_t>(scope.start));
+        put_u32(data, static_cast<std::uint32_t>(scope.end));
+        record(payloads[8], Record::Scope, data);
     }
     {
         std::vector<std::uint8_t> data;
@@ -337,8 +443,8 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
     for (std::size_t index = 0; index < magic.size(); ++index) {
         output[index] = static_cast<std::uint8_t>(magic[index]);
     }
-    set_u16(output, 4, 1);
-    set_u16(output, 6, 0);
+    set_u16(output, 4, image.major_version);
+    set_u16(output, 6, image.minor_version);
     set_u32(output, 8, kHeaderSize);
     set_u32(output, 12, 0);
     set_u32(output, 16, image.target_id);
@@ -364,7 +470,6 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
     set_u32(output, kCrcOffset, checksum);
     return output;
 }
-
 bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::string& error) {
     image = KdbgImage{};
     if (data.size() < kHeaderSize) {
@@ -380,6 +485,8 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
         error = "unsupported KDBG major version";
         return false;
     }
+    image.major_version = major;
+    image.minor_version = read_u16(data, 6);
     const auto header_size = read_u32(data, 8);
     if (header_size < kHeaderSize || header_size > data.size()) {
         error = "invalid KDBG header size";
@@ -411,6 +518,15 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
         return false;
     }
     const auto strings = data.subspan(string_offset, string_size);
+
+    const auto find_type = [&](const std::string& name) -> KdbgType* {
+        for (auto it = image.types.rbegin(); it != image.types.rend(); ++it) {
+            if (it->name == name) {
+                return &*it;
+            }
+        }
+        return nullptr;
+    };
 
     for (std::size_t index = 0; index < section_count; ++index) {
         const auto entry = table_offset + index * kSectionEntrySize;
@@ -453,12 +569,26 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
                                            read_u32(payload, 8), read_u32(payload, 12)});
                 }
                 break;
+            case Record::Line64:
+                if (payload.size() >= 20) {
+                    image.lines.push_back({read_u64(payload, 0), read_u32(payload, 8),
+                                           read_u32(payload, 12), read_u32(payload, 16)});
+                }
+                break;
             case Record::Function:
                 if (payload.size() >= 20) {
                     image.functions.push_back(
                         {string_at(strings, read_u32(payload, 0)), read_u32(payload, 4),
                          read_u32(payload, 8), read_u32(payload, 12),
                          string_at(strings, read_u32(payload, 16))});
+                }
+                break;
+            case Record::Function64:
+                if (payload.size() >= 28) {
+                    image.functions.push_back(
+                        {string_at(strings, read_u32(payload, 0)), read_u64(payload, 4),
+                         read_u64(payload, 12), read_u32(payload, 20),
+                         string_at(strings, read_u32(payload, 24))});
                 }
                 break;
             case Record::Symbol:
@@ -468,6 +598,13 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
                          read_u32(payload, 8), string_at(strings, read_u32(payload, 12))});
                 }
                 break;
+            case Record::Symbol64:
+                if (payload.size() >= 24) {
+                    image.symbols.push_back(
+                        {string_at(strings, read_u32(payload, 0)), read_u64(payload, 4),
+                         read_u64(payload, 12), string_at(strings, read_u32(payload, 20))});
+                }
+                break;
             case Record::Variable:
                 if (payload.size() >= 20) {
                     image.variables.push_back(
@@ -475,6 +612,52 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
                          string_at(strings, read_u32(payload, 4)), read_u32(payload, 8),
                          read_u32(payload, 16),
                          string_at(strings, read_u32(payload, 12))});
+                }
+                break;
+            case Record::VarInfo:
+                if (payload.size() >= 16) {
+                    KdbgVarInfo info;
+                    info.function = string_at(strings, read_u32(payload, 0));
+                    info.name = string_at(strings, read_u32(payload, 4));
+                    info.kind = static_cast<KdbgVariableKind>(read_u16(payload, 8));
+                    info.flags = read_u16(payload, 10);
+                    info.scope = string_at(strings, read_u32(payload, 12));
+                    image.variable_info.push_back(std::move(info));
+                }
+                break;
+            case Record::Location:
+                if (payload.size() >= 20) {
+                    KdbgLocation location;
+                    location.function = string_at(strings, read_u32(payload, 0));
+                    location.name = string_at(strings, read_u32(payload, 4));
+                    location.reg = read_u16(payload, 8);
+                    location.fp = payload[10] != 0;
+                    location.start = read_u32(payload, 12);
+                    location.end = read_u32(payload, 16);
+                    image.locations.push_back(std::move(location));
+                }
+                break;
+            case Record::Location64:
+                if (payload.size() >= 28) {
+                    KdbgLocation location;
+                    location.function = string_at(strings, read_u32(payload, 0));
+                    location.name = string_at(strings, read_u32(payload, 4));
+                    location.reg = read_u16(payload, 8);
+                    location.fp = payload[10] != 0;
+                    location.start = read_u64(payload, 12);
+                    location.end = read_u64(payload, 20);
+                    image.locations.push_back(std::move(location));
+                }
+                break;
+            case Record::Scope:
+                if (payload.size() >= 20) {
+                    KdbgScope scope;
+                    scope.function = string_at(strings, read_u32(payload, 0));
+                    scope.name = string_at(strings, read_u32(payload, 4));
+                    scope.parent = string_at(strings, read_u32(payload, 8));
+                    scope.start = read_u32(payload, 12);
+                    scope.end = read_u32(payload, 16);
+                    image.scopes.push_back(std::move(scope));
                 }
                 break;
             case Record::Type:
@@ -494,6 +677,28 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
                          read_u32(payload, 12), string_at(strings, read_u32(payload, 8))});
                 }
                 break;
+            case Record::Base:
+                if (payload.size() >= 8) {
+                    if (auto* target = find_type(string_at(strings, read_u32(payload, 0)))) {
+                        target->base = string_at(strings, read_u32(payload, 4));
+                    }
+                }
+                break;
+            case Record::ArrayType:
+                if (payload.size() >= 12) {
+                    if (auto* target = find_type(string_at(strings, read_u32(payload, 0)))) {
+                        target->element = string_at(strings, read_u32(payload, 4));
+                        target->element_count = read_u32(payload, 8);
+                    }
+                }
+                break;
+            case Record::TypeRef:
+                if (payload.size() >= 8) {
+                    if (auto* target = find_type(string_at(strings, read_u32(payload, 0)))) {
+                        target->target = string_at(strings, read_u32(payload, 4));
+                    }
+                }
+                break;
             case Record::Build:
                 if (payload.size() >= 16) {
                     image.compiler = string_at(strings, read_u32(payload, 0));
@@ -508,6 +713,78 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
     }
     return true;
 }
+bool require_kdbg_feature(const KdbgImage& image, KdbgFeature feature,
+                          std::string& error) {
+    if (image.minor_version > kSupportedMinor) {
+        error = "newer KDBG: payload minor " + std::to_string(image.minor_version) +
+                " is newer than this reader (" + std::to_string(kSupportedMinor) + ")";
+        return false;
+    }
+    const char* name = "feature";
+    switch (feature) {
+    case KdbgFeature::Locations:
+        name = "location";
+        break;
+    case KdbgFeature::Scopes:
+        name = "scope";
+        break;
+    case KdbgFeature::VariableInfo:
+        name = "variable-info";
+        break;
+    case KdbgFeature::BaseTypes:
+        name = "base-type";
+        break;
+    case KdbgFeature::ArrayTypes:
+        name = "array-type";
+        break;
+    case KdbgFeature::TypeRefs:
+        name = "type-ref";
+        break;
+    case KdbgFeature::WideAddresses:
+        name = "wide-address";
+        break;
+    }
+    if (image.minor_version < 1) {
+        error = "KDBG 1.0 payload predates the " + std::string(name) +
+                " records; newer KDBG required";
+        return false;
+    }
+    bool present = false;
+    switch (feature) {
+    case KdbgFeature::Locations:
+        present = !image.locations.empty();
+        break;
+    case KdbgFeature::Scopes:
+        present = !image.scopes.empty();
+        break;
+    case KdbgFeature::VariableInfo:
+        present = !image.variable_info.empty();
+        break;
+    case KdbgFeature::BaseTypes:
+        for (const auto& type : image.types) {
+            present = present || !type.base.empty();
+        }
+        break;
+    case KdbgFeature::ArrayTypes:
+        for (const auto& type : image.types) {
+            present = present || !type.element.empty();
+        }
+        break;
+    case KdbgFeature::TypeRefs:
+        for (const auto& type : image.types) {
+            present = present || !type.target.empty();
+        }
+        break;
+    case KdbgFeature::WideAddresses:
+        present = image.pointer_width == 8;
+        break;
+    }
+    if (!present) {
+        error = "KDBG payload has no " + std::string(name) + " records";
+        return false;
+    }
+    return true;
+}
 
 std::string dump_kdbg_text(const KdbgImage& image) {
     std::ostringstream out;
@@ -515,7 +792,11 @@ std::string dump_kdbg_text(const KdbgImage& image) {
         << " sources=" << image.sources.size() << " lines=" << image.lines.size()
         << " functions=" << image.functions.size() << " symbols=" << image.symbols.size()
         << " variables=" << image.variables.size() << " types=" << image.types.size()
-        << '\n';
+        << " minor=" << image.minor_version
+        << " pointer=" << static_cast<unsigned>(image.pointer_width)
+        << " locations=" << image.locations.size()
+        << " scopes=" << image.scopes.size()
+        << " varinfo=" << image.variable_info.size() << '\n';
     for (const auto& source : image.sources) {
         out << "source " << source.id << " " << source.path << '\n';
     }
@@ -526,8 +807,8 @@ std::string dump_kdbg_text(const KdbgImage& image) {
             << line.source << " line=" << line.line << " column=" << line.column << '\n';
     }
     for (const auto& function : image.functions) {
-        out << "function " << function.name << " 0x" << std::hex << function.start << "-0x"
-            << function.end << std::dec << " frame=" << function.frame
+        out << "function " << function.name << " 0x" << std::hex << function.start
+            << "-0x" << function.end << std::dec << " frame=" << function.frame
             << " type=" << function.type << '\n';
     }
     for (const auto& symbol : image.symbols) {
@@ -535,11 +816,20 @@ std::string dump_kdbg_text(const KdbgImage& image) {
             << " size=" << symbol.size << " type=" << symbol.type << '\n';
     }
     for (const auto& type : image.types) {
-        out << "type " << type.name << " size=" << type.size << " kind=" << type.kind
-            << '\n';
+        out << "type " << type.name << " size=" << type.size << " kind=" << type.kind;
+        if (!type.base.empty()) {
+            out << " base=" << type.base;
+        }
+        if (!type.element.empty()) {
+            out << " element=" << type.element << " count=" << type.element_count;
+        }
+        if (!type.target.empty()) {
+            out << " target=" << type.target;
+        }
+        out << '\n';
         for (const auto& member : type.members) {
             out << "  member " << member.name << " offset=" << member.offset
-                << " type=" << member.type << '\n';
+                << " type=" << member.type << " size=" << member.size << '\n';
         }
     }
     for (const auto& variable : image.variables) {
@@ -547,12 +837,34 @@ std::string dump_kdbg_text(const KdbgImage& image) {
             << " offset=" << variable.offset << " type=" << variable.type
             << " size=" << variable.size << '\n';
     }
+    for (const auto& info : image.variable_info) {
+        const char* kind = info.kind == KdbgVariableKind::Parameter
+                               ? "param"
+                               : (info.kind == KdbgVariableKind::Static ? "static"
+                                                                        : "local");
+        out << "varinfo " << info.function << "." << info.name << " kind=" << kind
+            << " flags=0x" << std::hex << info.flags << std::dec
+            << " scope=" << (info.scope.empty() ? "-" : info.scope) << '\n';
+    }
+    for (const auto& location : image.locations) {
+        out << "location " << location.function << "." << location.name << " reg="
+            << (location.fp ? "F" : "R") << location.reg << " fp="
+            << (location.fp ? 1 : 0) << " 0x" << std::hex << location.start << "-0x"
+            << location.end << std::dec << '\n';
+    }
+    for (const auto& scope : image.scopes) {
+        out << "scope " << scope.function << ":" << scope.name << " parent="
+            << (scope.parent.empty() ? "-" : scope.parent) << " 0x" << std::hex
+            << scope.start << "-0x" << scope.end << std::dec << '\n';
+    }
     return out.str();
 }
 
 std::string dump_kdbg_json(const KdbgImage& image) {
     std::ostringstream out;
     out << "{\"target\":" << image.target_id << ",\"abi\":" << image.abi_version
+        << ",\"minor\":" << image.minor_version
+        << ",\"pointer\":" << static_cast<unsigned>(image.pointer_width)
         << ",\"compiler\":\"" << json_escape(image.compiler) << "\",";
     out << "\"sources\":[";
     for (std::size_t index = 0; index < image.sources.size(); ++index) {
@@ -578,6 +890,38 @@ std::string dump_kdbg_json(const KdbgImage& image) {
             << ",\"size\":" << variable.size << ",\"type\":\""
             << json_escape(variable.type) << "\"}";
     }
+    out << "],\"variableInfo\":[";
+    for (std::size_t index = 0; index < image.variable_info.size(); ++index) {
+        if (index != 0) out << ',';
+        const auto& info = image.variable_info[index];
+        const char* kind = info.kind == KdbgVariableKind::Parameter
+                               ? "param"
+                               : (info.kind == KdbgVariableKind::Static ? "static"
+                                                                        : "local");
+        out << "{\"function\":\"" << json_escape(info.function) << "\",\"name\":\""
+            << json_escape(info.name) << "\",\"kind\":\"" << kind
+            << "\",\"flags\":" << info.flags << ",\"scope\":\""
+            << json_escape(info.scope) << "\"}";
+    }
+    out << "],\"locations\":[";
+    for (std::size_t index = 0; index < image.locations.size(); ++index) {
+        if (index != 0) out << ',';
+        const auto& location = image.locations[index];
+        out << "{\"function\":\"" << json_escape(location.function)
+            << "\",\"name\":\"" << json_escape(location.name) << "\",\"reg\":\""
+            << (location.fp ? "F" : "R") << location.reg << "\",\"fp\":"
+            << (location.fp ? "true" : "false") << ",\"start\":" << location.start
+            << ",\"end\":" << location.end << '}';
+    }
+    out << "],\"scopes\":[";
+    for (std::size_t index = 0; index < image.scopes.size(); ++index) {
+        if (index != 0) out << ',';
+        const auto& scope = image.scopes[index];
+        out << "{\"function\":\"" << json_escape(scope.function) << "\",\"name\":\""
+            << json_escape(scope.name) << "\",\"parent\":\""
+            << json_escape(scope.parent) << "\",\"start\":" << scope.start
+            << ",\"end\":" << scope.end << '}';
+    }
     out << "],\"types\":[";
     for (std::size_t index = 0; index < image.types.size(); ++index) {
         if (index != 0) out << ',';
@@ -592,7 +936,18 @@ std::string dump_kdbg_json(const KdbgImage& image) {
                 << member.offset << ",\"type\":\"" << json_escape(member.type)
                 << "\",\"size\":" << member.size << "}";
         }
-        out << "]}";
+        out << ']';
+        if (!type.base.empty()) {
+            out << ",\"base\":\"" << json_escape(type.base) << '"';
+        }
+        if (!type.element.empty()) {
+            out << ",\"element\":\"" << json_escape(type.element)
+                << "\",\"count\":" << type.element_count;
+        }
+        if (!type.target.empty()) {
+            out << ",\"target\":\"" << json_escape(type.target) << '"';
+        }
+        out << '}';
     }
     out << "]}";
     return out.str();

@@ -10,6 +10,7 @@ at build time.
 | Inter Regular | 3.19 subset | SIL Open Font License 1.1 | `third_party/fonts/Inter-Regular-Subset.ttf`, `OFL-Inter.txt` | Copied unchanged from the sibling KR16 `resources/fonts/` directory on 2026-11-20; Latin-1 subset, no hinting or layout features. |
 | Inter Bold | 3.19 subset | SIL Open Font License 1.1 | `third_party/fonts/Inter-Bold-Subset.ttf`, `OFL-Inter.txt` | Same as Inter Regular. |
 | JetBrains Mono Regular | 2.304 subset | SIL Open Font License 1.1 | `third_party/fonts/JetBrainsMono-Regular-Subset.ttf`, `OFL-JetBrainsMono.txt` | Same as Inter Regular. |
+| krc-debug (KDBG v1.1 reader) | `e04b3b2` | MIT | `third_party/krc-debug/` | Copied unchanged from KRCompiler `include/krc/debug/kdbg.h` and `src/debug/kdbg.cpp`; license in `third_party/krc-debug/LICENSE`. |
 | SDL2 | 2.32.x (system) | zlib | Not vendored | Linux-only runtime dependency discovered with `find_package(SDL2 CONFIG)` or `pkg-config`; never linked on Windows. |
 
 Regeneration instructions are in `third_party/fonts/README.md` and

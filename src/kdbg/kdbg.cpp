@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -91,12 +92,18 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
                                  static_cast<TypeId>(index));
     }
     for (std::size_t index = 0; index < image.types.size(); ++index) {
-        for (const krc::debug::KdbgMember& member : image.types[index].members) {
+        const krc::debug::KdbgType& type = image.types[index];
+        TypeInfo& translated = out.types[index];
+        translated.base = type_id(out, type.base);
+        translated.element = type_id(
+            out, type.element.empty() ? type.target : type.element);
+        translated.element_count = type.element_count;
+        for (const krc::debug::KdbgMember& member : type.members) {
             MemberInfo info;
             info.name = member.name;
             info.offset = member.offset;
             info.type = type_id(out, member.type);
-            out.types[index].members.push_back(std::move(info));
+            translated.members.push_back(std::move(info));
         }
     }
 
@@ -135,9 +142,15 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         SymbolInfo info;
         info.name = symbol.name;
         info.address = symbol.address;
-        info.size = symbol.size;
+        info.size = static_cast<std::uint32_t>(symbol.size);
         info.type = type_id(out, symbol.type);
         out.symbols.push_back(std::move(info));
+    }
+
+    std::map<std::string, const krc::debug::KdbgVarInfo*> variable_info;
+    for (const krc::debug::KdbgVarInfo& metadata : image.variable_info) {
+        variable_info.emplace(metadata.function + "\n" + metadata.name,
+                              &metadata);
     }
 
     out.variables.reserve(image.variables.size() + image.symbols.size());
@@ -150,6 +163,22 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         info.location = Location{LocationKind::FrameOffset,
                                  static_cast<std::int64_t>(variable.offset), {}, 0, 0};
         info.flags = variable.function.empty() ? VariableGlobal : VariableLocal;
+        const auto metadata =
+            variable_info.find(variable.function + "\n" + variable.name);
+        if (metadata != variable_info.end()) {
+            info.scope = metadata->second->scope;
+            switch (metadata->second->kind) {
+            case krc::debug::KdbgVariableKind::Parameter:
+                info.flags = VariableParam;
+                break;
+            case krc::debug::KdbgVariableKind::Static:
+                info.flags = VariableStatic;
+                break;
+            case krc::debug::KdbgVariableKind::Local:
+                info.flags = VariableLocal;
+                break;
+            }
+        }
         out.variables.push_back(std::move(info));
     }
 
@@ -176,7 +205,7 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         VariableInfo info;
         info.name = symbol.name;
         info.type = type_id(out, symbol.type);
-        info.size = symbol.size;
+        info.size = static_cast<std::uint32_t>(symbol.size);
         info.location =
             Location{LocationKind::Absolute, 0, {}, 0, symbol.address};
         info.flags = VariableGlobal;

@@ -8,7 +8,7 @@
 
 Source path is recorded relative to the repository root (`--source-root`), so
 the fixture is portable and deterministic. It is built with KRCompiler
-`797dfacf7bbbc3e7744a40e627e7777a1c63b9c9`, `krc`/`krld` 0.1.0.
+`e04b3b27541d62d98d6779e66f4508c77e91a1f6`, KDBG v1.1, `krc`/`krld` 0.1.0.
 
 ## Regenerate
 

@@ -189,6 +189,9 @@ KRDBG_TEST(kdbg_translation_matches_krc_json_for_every_carried_field) {
 
     CHECK_EQ(expected["target"].number, static_cast<long long>(info.target_id));
     CHECK_EQ(expected["abi"].number, static_cast<long long>(info.abi_version));
+    CHECK_EQ(expected["minor"].number, 1);
+    CHECK_EQ(expected["pointer"].number,
+             static_cast<long long>(info.pointer_bits / 8U));
     CHECK_EQ(expected["compiler"].text, info.compiler);
 
     const auto& sources = expected["sources"].array;
@@ -226,6 +229,29 @@ KRDBG_TEST(kdbg_translation_matches_krc_json_for_every_carried_field) {
         CHECK_EQ(want["offset"].number, variable.location.frame_offset);
         CHECK_EQ(want["size"].number, static_cast<long long>(variable.size));
         CHECK_EQ(want["type"].text, type_name(info, variable.type));
+    }
+
+    // KDBG v1.1 carries parameter/local/static metadata and the owning scope.
+    const auto& variable_info = expected["variableInfo"].array;
+    for (const test_json::Value& want : variable_info) {
+        const auto found = std::find_if(
+            info.variables.begin(), info.variables.end(),
+            [&want](const krdbg::VariableInfo& variable) {
+                return variable.function == want["function"].text &&
+                       variable.name == want["name"].text;
+            });
+        CHECK(found != info.variables.end());
+        if (found == info.variables.end()) {
+            continue;
+        }
+        CHECK_EQ(want["scope"].text, found->scope);
+        if (want["kind"].text == "param") {
+            CHECK((found->flags & krdbg::VariableParam) != 0U);
+        } else if (want["kind"].text == "local") {
+            CHECK((found->flags & krdbg::VariableLocal) != 0U);
+        } else if (want["kind"].text == "static") {
+            CHECK((found->flags & krdbg::VariableStatic) != 0U);
+        }
     }
 
     const auto& types = expected["types"].array;

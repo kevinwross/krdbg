@@ -3,7 +3,8 @@
 `kdbg.h` and `kdbg.cpp` are copied unchanged from KRCompiler:
 
 - Repository: <https://github.com/kevinwross/KRCompiler>
-- Commit: `797dfacf7bbbc3e7744a40e627e7777a1c63b9c9` (branch `adopt-krc`)
+- Commit: `e04b3b27541d62d98d6779e66f4508c77e91a1f6` (branch `adopt-krc`)
+- Version: KDBG v1.1
 - Source paths: `include/krc/debug/kdbg.h`, `src/debug/kdbg.cpp`
 - Copied: 2026-11-20
 - License: MIT, copied to `LICENSE`
