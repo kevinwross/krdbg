@@ -1,0 +1,88 @@
+name: Release
+
+# A tag is the release event. Build both x64 artifacts from the tagged commit,
+# then attach them to the GitHub release. ARM64 is not a job here: the tester
+# session records its artifact in docs/arm64-test-log.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate (Windows x64)
+        shell: pwsh
+        run: ./scripts/gate-windows.ps1
+      - name: Package (Windows x64)
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          ./scripts/package-windows.ps1 -Version $version -Commit "${{ github.sha }}"
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: krdbg-windows-x64
+          path: build/release/krdbg-*-windows-x64.zip
+          if-no-files-found: error
+
+  linux-x64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2 development package
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - name: Gate (Linux x64)
+        run: ./scripts/gate-linux.sh
+      - name: Package (Linux x64)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ./scripts/package-linux-tarball.sh \
+            --arch x64 \
+            --build-dir build/linux-wsl-release \
+            --version "$version" \
+            --commit "$GITHUB_SHA"
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: krdbg-linux-x64
+          path: build/release/krdbg-*-linux-x64.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [windows-x64, linux-x64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Attach artifacts to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber
+          else
+            gh release create "$tag" release-assets/* \
+              --title "krdbg $version" \
+              --notes-file docs/release.md \
+              --verify-tag
+          fi
+
+  # ARM64: no job. The tester session runs scripts/gate-linux-arm64.sh,
+  # packages with `--arch arm64`, and records docs/arm64-test-log.md.

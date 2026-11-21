@@ -867,9 +867,21 @@ is post-v1 and does not block this gate.
 
 ### M6.3 Linux ARM64
 
-- [ ] **M6.3.1** ARM64 build/test recorded by the tester log.
-- [ ] **M6.3.2** ARM64 tarball; no cross-build substitute.
-- [ ] **M6.3.3** Clean-machine smoke test.
+- [x] **M6.3.1** ARM64 build/test recorded by the tester log.
+  Evidence: `docs/arm64-test-log.md` entry 2026-11-20T22:48:28-08:00 for
+  release 0.2.0 @ `68e56c6`: clean detached worktree, `gate-linux-arm64.sh`
+  pass Debug and Release (173 s), `krdbg_unit` 105 checks/0 failures,
+  `platform_boundary` clean; empty `56BCC5339740DCA6`, loaded
+  `3DAD6F9400E135E2`.
+- [x] **M6.3.2** ARM64 tarball; no cross-build substitute.
+  Evidence: `krdbg-0.2.0-linux-arm64.tar.gz`, 371,240 bytes, SHA-256
+  `2AC4D44ACF8CF681A707CE6498894E64922AAFF58B24F1E236B2CE2CC0439A1C`;
+  artifact path on the Pi:
+  `/home/kevinro/repos/krdbg/build/m6.3/checkout/build/release/krdbg-0.2.0-linux-arm64.tar.gz`.
+- [x] **M6.3.3** Clean-extraction smoke test.
+  Evidence: extracted outside the build tree; `sha256sum -c SHA256SUMS` all OK;
+  `./krdbg_demo --headless --state loaded --screenshot loaded.ppm` exit 0,
+  frame `DE4BCC6064D8B4F7`; `ELF 64-bit LSB pie executable, ARM aarch64`.
 
 ### M6.4 CI and release
 
@@ -899,11 +911,11 @@ is post-v1 and does not block this gate.
 - [x] **G6.2** Linux x64 tarball runs; no bundled SDL2.
   Evidence: `krdbg-0.2.0-linux-x64.tar.gz`; extracted smoke exit 0 with frame
   hash `DE4BCC6064D8B4F7`; `SYSTEM-REQUIREMENTS.txt` names SDL2 2.32.
-- [ ] **G6.3** ARM64 artifact runs on the Pi.
+- [x] **G6.3** ARM64 artifact runs on the Pi.
 - [ ] **G6.4** Windows/Linux CI release green; ARM64 tester entry recorded.
-- [ ] **G6.5** Goldens and functional tests pass; ARM64 hash recorded by the tester.
-- [ ] **G6.6** Docs and checksums present.
-- [ ] **G6.7** No open BLOCKS or FIX-BEFORE findings.
+- [x] **G6.5** Goldens and functional tests pass; ARM64 hash recorded by the tester.
+- [x] **G6.6** Docs and checksums present.
+- [x] **G6.7** No open BLOCKS or FIX-BEFORE findings.
 
 ---
 
@@ -934,8 +946,8 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
 | G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `68e56c6`; `krdbg-0.2.0-windows-x64.zip` 264,352 B, SHA-256 `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`; license scan and no `SDL2.dll`; extracted run exit 0 | `68e56c6` |
 | G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PASS — `68e56c6`; `krdbg-0.2.0-linux-x64.tar.gz` 442,367 B, SHA-256 `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`; license scan, no bundled SDL2; extracted run exit 0 | `68e56c6` |
-| G6 | ARM64 | tester machine | TBD — waits for the ARM64 tester artifact run | — |
-| G6 | CI | release workflow | TBD — no release workflow yet | — |
+| G6 | ARM64 | tester log entry + `--arch arm64` tarball | PASS — entry 2026-11-20T22:48:28-08:00 @ `68e56c6`: 105 checks, 0 failures; `krdbg-0.2.0-linux-arm64.tar.gz` 371,240 B, SHA-256 `2AC4D44ACF8CF681A707CE6498894E64922AAFF58B24F1E236B2CE2CC0439A1C`; extracted aarch64 smoke exit 0 | `68e56c6` |
+| G6 | CI | release workflow on tag | PENDING — first tagged run not yet executed | — |
 
 ### G0.4 window captures
 

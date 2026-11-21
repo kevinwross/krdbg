@@ -12,6 +12,10 @@ ARM64 is not a GitHub Actions job: the ARM64 tester session on BitWhiz runs
 `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`; see
 [ci-arm64.md](ci-arm64.md) and [arm64-tester.md](arm64-tester.md).
 
+Tag pushes (`v*`) run [release.yml](../.github/workflows/release.yml), which runs
+the same Windows/Linux gates, packages both x64 artifacts and attaches them to
+the GitHub release. It has no ARM64 job.
+
 ## Build trees and artifacts
 
 - Build trees live under `build/` and are ignored by Git; no configure output,

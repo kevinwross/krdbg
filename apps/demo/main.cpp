@@ -1,5 +1,6 @@
 #include "krdbg/session.h"
 #include "krdbg/surface.h"
+#include "krdbg/version.h"
 #include "krdbg/window.h"
 
 #include <chrono>
@@ -218,6 +219,7 @@ struct Options {
     bool no_video = false;
     bool kernel = false;
     bool reset = false;
+    bool version = false;
     int frames = -1;
     std::string screenshot;
     std::string kr32_image;
@@ -236,7 +238,8 @@ void print_usage() {
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
         "[--kr32-os] [--kr16 <image.kex>] [--load <source-or-image>] "
         "[--toolchain <krc-install-prefix>] [--target kr32|kr16] "
-        "[--source-root <dir>] [--kernel] [--reset] [--frames <n>]\n");
+        "[--source-root <dir>] [--kernel] [--reset] [--version] "
+        "[--frames <n>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -254,6 +257,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.kernel = true;
         } else if (argument == "--reset") {
             options.reset = true;
+        } else if (argument == "--version") {
+            options.version = true;
         } else if (argument == "--kr16" && index + 1 < argc) {
             options.kr16_image = argv[++index];
         } else if (argument == "--load" && index + 1 < argc) {
@@ -337,6 +342,10 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse_options(argc, argv, options)) {
         return 2;
+    }
+    if (options.version) {
+        std::printf("krdbg %s\n", krdbg::kVersionString);
+        return 0;
     }
     if (options.source_root.empty()) {
         options.source_root = std::filesystem::current_path().string();

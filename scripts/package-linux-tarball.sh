@@ -2,18 +2,20 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-build_dir="build/linux-wsl-release"
+arch="x64"
+build_dir=""
 output_dir="build/release"
 version="0.2.0"
 commit=""
 
 usage() {
-    echo "usage: $0 [--build-dir DIR] [--output-dir DIR] [--version V] [--commit SHA]" >&2
+    echo "usage: $0 [--arch x64|arm64] [--build-dir DIR] [--output-dir DIR] [--version V] [--commit SHA]" >&2
     exit 2
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --arch) arch=$2; shift 2 ;;
         --build-dir) build_dir=$2; shift 2 ;;
         --output-dir) output_dir=$2; shift 2 ;;
         --version) version=$2; shift 2 ;;
@@ -21,6 +23,18 @@ while [ $# -gt 0 ]; do
         *) usage ;;
     esac
 done
+
+case "$arch" in
+    x64) default_build_dir="build/linux-wsl-release" ;;
+    arm64) default_build_dir="build/linux-arm64-release" ;;
+    *) echo "unsupported architecture: $arch" >&2; usage ;;
+esac
+if [ -z "$build_dir" ]; then
+    build_dir=$default_build_dir
+fi
+
+platform="linux-$arch"
+build_label=$(basename "$build_dir")
 
 if [ -z "$commit" ]; then
     commit=$(git -C "$root" rev-parse HEAD)
@@ -32,7 +46,7 @@ if [ ! -f "$binary" ]; then
     exit 1
 fi
 
-name="krdbg-$version-linux-x64"
+name="krdbg-$version-$platform"
 stage="$root/$output_dir/$name"
 tarball="$root/$output_dir/$name.tar.gz"
 rm -rf "$stage" "$tarball"
@@ -52,7 +66,7 @@ cp "$root/docs/release.md" "$stage/docs/release.md"
 cp "$root/docs/licenses.md" "$stage/docs/licenses.md"
 
 cat > "$stage/SYSTEM-REQUIREMENTS.txt" <<EOF
-krdbg $version linux-x64
+krdbg $version $platform
 
 Requires SDL2 2.32 (libSDL2-2.0.so.0) from the system package manager.
 The tarball bundles no SDL2 library and carries no SDL2 notice.
@@ -88,9 +102,9 @@ if find "$stage" -type f \( -name 'SDL2.dll' -o -name 'libSDL2*.so*' \) |
 fi
 
 {
-    echo "krdbg $version linux-x64"
+    echo "krdbg $version $platform"
     echo "Commit: $commit"
-    echo "Build: linux-wsl-release"
+    echo "Build: $build_label"
     echo "Contents: krdbg_demo, README.md, LICENSE, LICENSES.md, OFL-Inter.txt, OFL-JetBrainsMono.txt, third_party/krc-debug/LICENSE, release.md, docs/release.md, docs/licenses.md, SYSTEM-REQUIREMENTS.txt"
     echo "Smoke: headless loaded state exit 0"
     echo "Frame: $frame_line"

@@ -13,6 +13,34 @@ $name = "krdbg-$Version-windows-x64"
 $stage = Join-Path $output $name
 $zip = Join-Path $output "$name.zip"
 
+function Get-Dumpbin {
+    $command = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+        "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        return $null
+    }
+    $install = (& $vswhere -latest -products * `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($install)) {
+        return $null
+    }
+    $tools = Get-ChildItem -LiteralPath (Join-Path $install "VC\Tools\MSVC") `
+        -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending
+    foreach ($tool in $tools) {
+        $candidate = Join-Path $tool.FullName "bin\Hostx64\x64\dumpbin.exe"
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
 function Get-Sha256([string]$Path) {
     $stream = [System.IO.File]::OpenRead($Path)
     try {
@@ -100,14 +128,18 @@ $hashLine = ($smokeOutput | Select-String -Pattern "frame hash").Line
 Remove-Item -LiteralPath $smoke -Force -ErrorAction SilentlyContinue
 
 $dependencies = "dumpbin not available; dependency scan not run"
-$dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
-if ($null -ne $dumpbin) {
-    $dependencies = (& $dumpbin.Source /dependents $exe 2>&1 | Out-String)
-    if ($dependencies -match "SDL2\.dll") {
-        throw "release executable depends on SDL2.dll"
-    }
-    $dependencies = "dumpbin /dependents: no SDL2.dll"
+$dumpbin = Get-Dumpbin
+if ($null -eq $dumpbin) {
+    throw "dumpbin.exe was not found; cannot verify the release dependencies"
 }
+$dependencies = (& $dumpbin /dependents $exe 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    throw "dumpbin /dependents failed"
+}
+if ($dependencies -match "SDL2\.dll") {
+    throw "release executable depends on SDL2.dll"
+}
+$dependencies = "dumpbin /dependents: no SDL2.dll"
 
 $verify = @(
     "krdbg $Version windows-x64",

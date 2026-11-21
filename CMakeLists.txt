@@ -235,6 +235,7 @@ if(KRDBG_BUILD_TESTS)
         tests/test_surface.cpp
         tests/test_video_fit.cpp
         tests/test_golden.cpp
+        tests/test_version.cpp
     )
     target_link_libraries(krdbg_tests PRIVATE
         krdbg_ui krdbg_kdbg krdbg_host krdbg_platform_null krdbg_warnings)
@@ -243,6 +244,7 @@ if(KRDBG_BUILD_TESTS)
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
         KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg"
+        KRDBG_PROJECT_VERSION="${PROJECT_VERSION}"
         KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
     if(KRDBG_KR32_ADAPTER OR KRDBG_KR16_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_host_build.cpp)
@@ -271,6 +273,9 @@ if(KRDBG_BUILD_TESTS)
     endif()
     set_tests_properties(krdbg_unit PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME krdbg_version COMMAND krdbg_demo --version)
+    set_tests_properties(krdbg_version PROPERTIES
+        PASS_REGULAR_EXPRESSION "krdbg ${PROJECT_VERSION}")
 endif()
 
 # The boundary check runs on every build and as its own CTest entry, so G0.8 can

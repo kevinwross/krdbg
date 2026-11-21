@@ -2,6 +2,14 @@
 
 Version: `0.2.0`.
 
+## Release workflow
+
+Pushing a tag matching `v*` (for example `v0.2.0`) runs
+[.github/workflows/release.yml](../.github/workflows/release.yml). The workflow
+runs the Windows and Linux x64 gates, builds and packages both artifacts, and
+attaches them to the GitHub release. ARM64 is not a job: the tester session
+records its tarball and smoke test in `docs/arm64-test-log.md`.
+
 ## Licensing
 
 Every artifact carries the project `LICENSE` (MIT), `LICENSES.md`, both OFL
@@ -64,9 +72,14 @@ therefore carries no SDL2 notice. Build `linux-wsl-release`, then run:
 
 ```sh
 ./scripts/package-linux-tarball.sh \
+    --arch x64 \
     --build-dir build/linux-wsl-release \
     --commit <40-character commit>
 ```
+
+For ARM64 on the tester machine, use `--arch arm64`; the default build
+directory is `build/linux-arm64-release` and the artifact is
+`krdbg-0.2.0-linux-arm64.tar.gz`. Do not cross-build it on x64.
 
 The script runs the binary from the staging directory, records its frame hash,
 asserts the license payload and the absence of bundled SDL2, writes
