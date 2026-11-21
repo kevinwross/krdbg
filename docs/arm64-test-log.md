@@ -229,3 +229,13 @@ job.
 - Test: CTest — pass (3/3: `krdbg_unit` 106 checks, 0 failures, 104 passed with the two x64 golden comparisons excluded; the new `krdbg_version` passes; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`) — unchanged
 - Notes: both findings in the two preceding entries are fixed. `scripts/package-linux-tarball.sh` now takes `--arch x64|arm64` (default x64; arm64 selects `build/linux-arm64-release` and sets `platform="linux-$arch"`), and `include/krdbg/version.h` is now consumed by `apps/demo/main.cpp`, so `krdbg_demo --version` prints `krdbg 0.2.0` and `tests/test_version.cpp` adds the `krdbg_version` CTest entry. I verified `--arch arm64` end to end at this commit into `build/verify-arch`: `krdbg-0.2.0-linux-arm64.tar.gz`, 371 800 bytes, SHA-256 `57939078fa49e27c075f1c319b81f621624275992a71c023e5bc8b8a6a7683e3`, with `linux-arm64` in the artifact name, `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt` and `Build:`. That run is a verification of the new option, **not** a release artifact: the 0.2.0 tarball remains the one built from `68e56c6` (`2ac4d44a…`). The new `.github/workflows/release.yml` runs on GitHub-hosted runners and was not exercised here.
+
+## 2026-11-21T15:52:47-08:00 — main @ 4533e5b
+
+- Host: BitWhiz
+- Range: 228fd03..4533e5b, 2 commits
+- Docs-only: yes — logged at the maintainer's instruction under the trunk-only branch policy
+- Build: `scripts/gate-linux-arm64.sh` — pass (5 s, no rebuild: only Markdown changed)
+- Test: CTest — pass (3/3: `krdbg_unit` 106 checks, 0 failures, 104 passed with the two x64 golden comparisons excluded; `krdbg_version`; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`) — unchanged
+- Notes: first entry logged under the trunk-only policy. krdbg's default branch is `main` and `origin` has **no** `adopt-krc` branch, so no ARM64 entry was ever appended to one and there is nothing for the maintainer to merge; `git branch -r` lists only `origin/main`. The code at this tip is identical to the tested `228fd03` — the only changes are `AGENTS.local.md`, `README.md`, `implementation.md`, the kr16 request plan and this log — so the 106-check result and the hashes carry over unchanged, and the 5 s gate confirms the trunk is green rather than claiming a fresh build.
