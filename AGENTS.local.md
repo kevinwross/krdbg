@@ -11,10 +11,11 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 ## Plan
 
 **Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. G0–G5 are closed; M1–M5 are done. M6.1 ships
-the Windows x64 zip; M6.2 is blocked on absent AppImage tooling. The host runs
-the installed KRCompiler `402cfaf` package; ARM64 is verified by the tester log.
-There is no ARM64 GitHub Actions runner and none is planned.
+`implementation.md` are approved. G0–G5 are closed; M1–M5 are done. Release
+0.2.0 ships the Windows x64 zip and Linux x64 tarball; ARM64 packaging waits for
+the tester. The host runs the installed KRCompiler `402cfaf` package; ARM64 is
+verified by the tester log. There is no ARM64 GitHub Actions runner and none is
+planned.
 
 **Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M2; §1–2 and the appendices are background.
 

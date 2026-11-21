@@ -76,7 +76,7 @@ recorded but does not block a milestone unless the gate says it does.
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
-| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[ ] in progress — M6.1 done; M6.2 tarball pending` |
+| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[ ] in progress — M6.1/M6.2 done; M6.3/M6.4 pending` |
 
 Dependencies:
 
@@ -394,11 +394,16 @@ dependence on VM types.
 ### M1.5 Fixtures
 
 - [x] **M1.5.1** A small `.k32` fixture with `.kdbg` from `krc`/`krld`.
-  Evidence: `tests/fixtures/kdbg/fake.k32` (4671 bytes) was linked by KRCompiler `krld` 0.1.0 from `fake.c` at commit `797dfacf`; `kdbg_section_translates_the_k32_fixture` decodes it.
+  Evidence: `tests/fixtures/kdbg/fake.k32` (5086 bytes) was linked by KRCompiler
+  `krld` 0.1.0 from `fake.c` at `e04b3b2` (KDBG v1.1);
+  `kdbg_section_translates_the_k32_fixture` decodes it.
 - [x] **M1.5.2** A `.kdbg` binary fixture for decode tests.
-  Evidence: `tests/fixtures/kdbg/fake.kdbg` (1455 bytes) is the raw payload from the same image; `kdbg_payload_and_section_translate_identically` decodes both.
+  Evidence: `tests/fixtures/kdbg/fake.kdbg` (1662 bytes) is the raw payload from
+  the same image; `kdbg_payload_and_section_translate_identically` decodes both.
 - [x] **M1.5.3** Document how to regenerate fixtures; deterministic output.
-  Evidence: `tests/fixtures/kdbg/README.md` and `regenerate.py` document the commands; re-running produced byte-identical fixtures (SHA-256 `9EB4454F...D5C3`, `6EA7445D...B14F`, `A3217701...513C`).
+  Evidence: `tests/fixtures/kdbg/README.md` and `regenerate.py` document the
+  commands; re-running produced byte-identical fixtures (SHA-256
+  `B45CFF40...40C3`, `E017DA13...E303`, `6CDAA5DE...EC3C`).
 
 ### Gate G1 — Debug core
 
@@ -829,29 +834,41 @@ is post-v1 and does not block this gate.
 ### M6.1 Windows
 
 - [x] **M6.1.1** Release zip with `krdbg_demo.exe`, docs, licenses.
-  Evidence: `krdbg-0.1.0-windows-x64.zip`, 258,698 bytes, SHA-256
-  `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`;
-  built from clean checkout `eed9778`; contents are the exe, `README.md`,
-  `LICENSES.md`, `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt`,
-  `SHA256SUMS`, `docs/release.md` and `docs/licenses.md`.
-- [x] **M6.1.2** No `SDL2.dll`; `dumpbin` and artifact scan.
-  Evidence: `dumpbin /dependents` reports no `SDL2.dll`; the staged tree and
-  archive contain no `SDL2.dll`.
+  Evidence: `krdbg-0.2.0-windows-x64.zip`, 264,358 bytes, SHA-256
+  `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`;
+  built from clean checkout `5223177`; contents are the exe, `README.md`,
+  `LICENSE`, `LICENSES.md`, `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`,
+  `third_party/krc-debug/LICENSE`, `release.md`, `VERIFY.txt`, `SHA256SUMS`,
+  `docs/release.md` and `docs/licenses.md`.
+- [x] **M6.1.2** License payload and no `SDL2.dll`; `dumpbin` and artifact scan.
+  Evidence: `VERIFY.txt` says `License payload: all required files present`,
+  `dumpbin /dependents: no SDL2.dll` and `SDL2.dll in package: no`; the staged
+  tree and archive contain no `SDL2.dll`.
 - [x] **M6.1.3** Clean-machine smoke test.
   Evidence: extracted the zip outside the build tree and ran the exe from the
   extracted directory; exit 0, frame hash `DE4BCC6064D8B4F7` at 1440x900.
 
 ### M6.2 Linux x64
 
-- [ ] **M6.2.1** Linux x64 tarball with a system-SDL2 2.32 note; no SDL2
+- [x] **M6.2.1** Linux x64 tarball with a system-SDL2 2.32 note; no SDL2
       bundled.
-- [ ] **M6.2.2** Clean-extraction smoke test.
-  BLOCKED by M6.2.1.
+  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`, 442,372 bytes, SHA-256
+  `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`;
+  built from clean checkout `5223177`; contents are the binary, `README.md`,
+  `LICENSE`, `LICENSES.md`, both OFL texts, `third_party/krc-debug/LICENSE`,
+  `release.md`, `docs/release.md`, `docs/licenses.md`,
+  `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt` and `SHA256SUMS`. The note requires
+  SDL2 2.32 and says no SDL2 is bundled.
+- [x] **M6.2.2** Clean-extraction smoke test.
+  Evidence: extracted the tarball outside the build tree and ran
+  `./krdbg_demo --headless --state loaded --screenshot artifact.ppm`; exit 0,
+  frame hash `DE4BCC6064D8B4F7` at 1440x900. `VERIFY.txt` records
+  `License payload: all required files present` and `Bundled SDL2: no`.
 
 ### M6.3 Linux ARM64
 
 - [ ] **M6.3.1** ARM64 build/test recorded by the tester log.
-- [ ] **M6.3.2** ARM64 AppImage or tarball.
+- [ ] **M6.3.2** ARM64 tarball; no cross-build substitute.
 - [ ] **M6.3.3** Clean-machine smoke test.
 
 ### M6.4 CI and release
@@ -879,8 +896,9 @@ is post-v1 and does not block this gate.
 ### Gate G6 — Release
 
 - [x] **G6.1** Windows artifact runs; no `SDL2.dll`.
-- [ ] **G6.2** Linux x64 AppImage runs.
-  BLOCKED: `appimagetool` and `linuxdeploy` are absent; no AppImage was built.
+- [x] **G6.2** Linux x64 tarball runs; no bundled SDL2.
+  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`; extracted smoke exit 0 with frame
+  hash `DE4BCC6064D8B4F7`; `SYSTEM-REQUIREMENTS.txt` names SDL2 2.32.
 - [ ] **G6.3** ARM64 artifact runs on the Pi.
 - [ ] **G6.4** Windows/Linux CI release green; ARM64 tester entry recorded.
 - [ ] **G6.5** Goldens and functional tests pass; ARM64 hash recorded by the tester.
@@ -914,8 +932,8 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `e4dd179` |
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
-| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `eed9778`; `krdbg-0.1.0-windows-x64.zip` 258,698 B, SHA-256 `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`; extracted run exit 0; no `SDL2.dll` | `eed9778` |
-| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PENDING — tarball build and extraction smoke are recorded after the 0.2.0 clean rebuild | — |
+| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `5223177`; `krdbg-0.2.0-windows-x64.zip` 264,358 B, SHA-256 `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`; license scan and no `SDL2.dll`; extracted run exit 0 | `5223177` |
+| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PASS — `5223177`; `krdbg-0.2.0-linux-x64.tar.gz` 442,372 B, SHA-256 `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`; license scan, no bundled SDL2; extracted run exit 0 | `5223177` |
 | G6 | ARM64 | tester machine | TBD — waits for the ARM64 tester artifact run | — |
 | G6 | CI | release workflow | TBD — no release workflow yet | — |
 
@@ -1150,6 +1168,9 @@ doctor: this machine can build, but only from the Visual Studio developer enviro
 
 Recorded 2026-11-20T22:14:07-08:00.
 
+- Added the root MIT `LICENSE` (`Copyright (c) 2026 Kevin Ross`), byte-identical
+  to kr16's (`E388F238157D84C25BDB7D89637A6B286915AB7737F420DD994BC9A257A3C77F`);
+  `PLAN.md` §11 records the MIT decision and the artifact license payload.
 - Re-vendored `third_party/krc-debug` unchanged from KRCompiler
   `e04b3b27541d62d98d6779e66f4508c77e91a1f6` (KDBG v1.1):
   `include/krc/debug/kdbg.h` and `src/debug/kdbg.cpp`. File SHA-256 values are
@@ -1162,23 +1183,34 @@ Recorded 2026-11-20T22:14:07-08:00.
   the script's final newline. `tests/test_kdbg.cpp` checks the v1.1 `minor`,
   pointer width, `variableInfo` scope and parameter/local/static flags as well
   as the carried v1 fields; the KDBG tests pass.
-- Windows clean-checkout artifact: `git archive` of `eed9778`, configured with
+- Windows clean-checkout artifact: `git archive` of `5223177`, configured with
   the `windows-msvc-release` preset, built with MSVC. `scripts/package-windows.ps1`
-  produced `krdbg-0.1.0-windows-x64.zip`: **258,698 bytes**, SHA-256
-  `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`.
-  Contents: `krdbg_demo.exe`, `README.md`, `LICENSES.md`,
-  `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt`, `SHA256SUMS`,
-  `docs/release.md`, `docs/licenses.md`.
-- Extracted that zip to `build/release/smoke-clean-2` and ran
+  produced `krdbg-0.2.0-windows-x64.zip`: **264,358 bytes**, SHA-256
+  `5B69EECB46392194035010C18A12E0A2C8EA3E57A3044DFE90E28FE1972F3012`.
+  Contents: `krdbg_demo.exe`, `README.md`, `LICENSE`, `LICENSES.md`,
+  `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
+  `release.md`, `VERIFY.txt`, `SHA256SUMS`, `docs/release.md`,
+  `docs/licenses.md`. `VERIFY.txt` records `License payload: all required
+  files present`, `dumpbin /dependents: no SDL2.dll` and `SDL2.dll in package:
+  no`.
+- Extracted that zip to `build/release/final-win` and ran
   `krdbg_demo.exe --headless --state loaded --screenshot artifact.ppm` from the
   extracted directory: exit 0, frame hash `DE4BCC6064D8B4F7` at 1440x900.
-  `VERIFY.txt` records `dumpbin /dependents: no SDL2.dll`; the archive scan
-  found no `SDL2.dll`.
+- Linux clean-checkout artifact: the same `5223177` archive configured with
+  `linux-wsl-release`, packaged by `scripts/package-linux-tarball.sh` as
+  `krdbg-0.2.0-linux-x64.tar.gz`: **442,372 bytes**, SHA-256
+  `6E532092C46973B1747525233D7A89A8A8E503FB3CDE7E71B1C5E58A9C96F871`.
+  Contents: `krdbg_demo`, `README.md`, `LICENSE`, `LICENSES.md`,
+  `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
+  `release.md`, `docs/release.md`, `docs/licenses.md`,
+  `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt`, `SHA256SUMS`.
+- Extracted that tarball to `build/release/linux-smoke-final` and ran
+  `./krdbg_demo --headless --state loaded --screenshot artifact.ppm`: exit 0,
+  frame hash `DE4BCC6064D8B4F7` at 1440x900. `VERIFY.txt` records
+  `System SDL2: 2.32 required; not bundled`, `License payload: all required
+  files present` and `Bundled SDL2: no`.
 - Tests after the v1.1 vendor change: Windows bare **105/0**, KR16 **115/0**,
   KR32 **114/0**; WSL bare **105/0**, KR16 **115/0**, KR32 **114/0**.
-- Linux x64 AppImage: `appimagetool`, `linuxdeploy` and
-  `linuxdeploy-x86_64.AppImage` are absent on WSL; only `mksquashfs` exists.
-  M6.2/G6.2 are blocked and no tool was installed.
 
 ## 10. Blocked or external prerequisites
 
