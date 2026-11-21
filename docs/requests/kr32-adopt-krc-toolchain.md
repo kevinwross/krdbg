@@ -1,7 +1,7 @@
 # Request plan — KR32: adopt `krc::toolchain`
 
 **Status:** APPROVED 2026-11-20T02:36:31-08:00 by kevinwross. Stage A and stage B
-are complete. Stage B (default flip and deletion) landed at `863fe13` after the
+are complete. Stage B (default flip and deletion) landed at `91165ae` after the
 three conditions in decision 9 held.
 **Target repository:** `C:\Users\kevin\source\repos\KR32`, `main` @ `fa7a886`.
 The working tree has a modified `AGENTS.local.md` and an untracked `.agents/`;
@@ -15,7 +15,7 @@ plus 4.9 for the listing.
 runtime that item 3.9 consumes.
 **Stage A:** complete at `1de7012` — items 3.1–3.9, with the gate at 98/98 on
 Windows and WSL under both toolchains.
-**Stage B:** complete at `863fe13` — item 3.10b landed after 0.2.0; the clean
+**Stage B:** complete at `91165ae` — item 3.10b landed after 0.2.0; the clean
 Windows and WSL clone gates passed 40/40 with `src/cc`, `src/cxx`, `src/asm`,
 `src/link`, the runtime and the injection gone.
 **Sibling plan:** [kr16](kr16-adopt-krc-toolchain.md). This one runs second, on
@@ -129,7 +129,7 @@ not require a debugger change, unlike kr16.
 | 3.8 | Guest headers as files | each of the five headers compiles from a source that includes it, under both toolchains |
 | 3.9 | Consume the installed package | configure, build and test with an installed KRCompiler prefix and no build tree on the path; `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` replace the build-tree paths |
 | 3.10a | Stage B migration | no test builds through `kr32 build`; the OS images come from a prebuilt carrier; `cons.h` is a tracked file; the suite is green under both toolchains |
-| 3.10b | Stage B deletion — **complete at `863fe13`** | the default is `krc`, the UI and CLI built-in branches are removed, the four directories, the runtime and the injection are gone, and the suite is green on a clean checkout |
+| 3.10b | Stage B deletion — **complete at `91165ae`** | the default is `krc`, the UI and CLI built-in branches are removed, the four directories, the runtime and the injection are gone, and the suite is green on a clean checkout |
 
 `3.1` is deliberately first and costs a day: if a krc image does not debug
 correctly in the current GUI, no amount of build-path work helps.
@@ -231,7 +231,7 @@ open questions the plan was proposed with.
    then the session prepares the final diff, the release note and the gate, and
    the default stays `builtin`. **Satisfied 2026-11-20:** 0.2.0 shipped, decision
    10 signed, and the clean Windows and WSL clones passed 40/40; the deletion
-   landed at `863fe13`.
+   landed at `91165ae`.
 10. **The C++ corpus sign-off is accepted as written.** Signed by kevinwross on
     2026-11-20T22:18:58-08:00. The accepted differences, all permanent once the
     built-in compiler is deleted: `throw <scalar>`; runtime-bound `new[]`; `T()`
@@ -244,7 +244,7 @@ open questions the plan was proposed with.
 Approved by kevinwross on 2026-11-20T02:36:31-08:00; stage B's migration half
 approved 2026-11-20T14:25:26-08:00; its deletion half approved conditionally
 2026-11-20T17:45:29-08:00. **Stage B completed
-2026-11-20T22:38:26-08:00 at `863fe13`; all three conditions in decision 9 held.**
+2026-11-20T22:38:26-08:00 at `91165ae`; all three conditions in decision 9 held.**
 
 Approving this file authorises stage A in KR32, the `con.h` → `cons.h` rename,
 stage B's migration (3.10a), and stage B's deletion (3.10b) subject to the three
