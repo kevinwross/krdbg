@@ -829,11 +829,11 @@ is post-v1 and does not block this gate.
 ### M6.1 Windows
 
 - [x] **M6.1.1** Release zip with `krdbg_demo.exe`, docs, licenses.
-  Evidence: `krdbg-0.1.0-windows-x64.zip`, 256,818 bytes, SHA-256
-  `7BEFBF6772B53D8ED69CCF8479ECAC86AABAA1A74ADB0E4E8ECB8A2E5B9556E0`;
-  built from clean checkout `325eaf9`; contents are the exe, `README.md`,
-  `LICENSES.md`, `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt` and
-  `SHA256SUMS`.
+  Evidence: `krdbg-0.1.0-windows-x64.zip`, 258,698 bytes, SHA-256
+  `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`;
+  built from clean checkout `eed9778`; contents are the exe, `README.md`,
+  `LICENSES.md`, `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt`,
+  `SHA256SUMS`, `docs/release.md` and `docs/licenses.md`.
 - [x] **M6.1.2** No `SDL2.dll`; `dumpbin` and artifact scan.
   Evidence: `dumpbin /dependents` reports no `SDL2.dll`; the staged tree and
   archive contain no `SDL2.dll`.
@@ -915,7 +915,7 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `e4dd179` |
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
-| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `325eaf9`; `krdbg-0.1.0-windows-x64.zip` 256,818 B, SHA-256 `7BEFBF6772B53D8ED69CCF8479ECAC86AABAA1A74ADB0E4E8ECB8A2E5B9556E0`; extracted run exit 0; no `SDL2.dll` | `325eaf9` |
+| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `eed9778`; `krdbg-0.1.0-windows-x64.zip` 258,698 B, SHA-256 `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`; extracted run exit 0; no `SDL2.dll` | `eed9778` |
 | G6 | Linux x64 | AppImage tooling | BLOCKED — `appimagetool` and `linuxdeploy` absent on WSL; no AppImage built; no install attempted | — |
 | G6 | ARM64 | tester machine | TBD — waits for the ARM64 tester artifact run | — |
 | G6 | CI | release workflow | TBD — no release workflow yet | — |
@@ -1163,13 +1163,14 @@ Recorded 2026-11-20T22:14:07-08:00.
   the script's final newline. `tests/test_kdbg.cpp` checks the v1.1 `minor`,
   pointer width, `variableInfo` scope and parameter/local/static flags as well
   as the carried v1 fields; the KDBG tests pass.
-- Windows clean-checkout artifact: `git archive` of `325eaf9`, configured with
+- Windows clean-checkout artifact: `git archive` of `eed9778`, configured with
   the `windows-msvc-release` preset, built with MSVC. `scripts/package-windows.ps1`
-  produced `krdbg-0.1.0-windows-x64.zip`: **256,818 bytes**, SHA-256
-  `7BEFBF6772B53D8ED69CCF8479ECAC86AABAA1A74ADB0E4E8ECB8A2E5B9556E0`.
+  produced `krdbg-0.1.0-windows-x64.zip`: **258,698 bytes**, SHA-256
+  `BA951783CC7115C432BC0A387927113CEDD66D149E706EB14FC148C42023662E`.
   Contents: `krdbg_demo.exe`, `README.md`, `LICENSES.md`,
-  `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt`, `SHA256SUMS`.
-- Extracted that zip to `build/release/smoke-clean` and ran
+  `LICENSES-krc-debug.txt`, `release.md`, `VERIFY.txt`, `SHA256SUMS`,
+  `docs/release.md`, `docs/licenses.md`.
+- Extracted that zip to `build/release/smoke-clean-2` and ran
   `krdbg_demo.exe --headless --state loaded --screenshot artifact.ppm` from the
   extracted directory: exit 0, frame hash `DE4BCC6064D8B4F7` at 1440x900.
   `VERIFY.txt` records `dumpbin /dependents: no SDL2.dll`; the archive scan
