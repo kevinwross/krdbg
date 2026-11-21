@@ -4,9 +4,9 @@ A target-agnostic, linked-in debugger surface for KR virtual machines. `krdbg`
 provides one C++20 surface over a neutral session model, with per-VM adapters
 and KDBG as the debug format.
 
-- Design: [PLAN.md](PLAN.md)
-- Implementation plan and gates: [implementation.md](implementation.md)
-- Standing instructions: [AGENTS.md](AGENTS.md)
+- Design: <https://github.com/kevinwross/krdbg/blob/main/PLAN.md>
+- Implementation plan and gates: <https://github.com/kevinwross/krdbg/blob/main/implementation.md>
+- Standing instructions: <https://github.com/kevinwross/krdbg/blob/main/AGENTS.md>
 - Release layout: [docs/release.md](docs/release.md)
 - Third-party licenses: [docs/licenses.md](docs/licenses.md)
 

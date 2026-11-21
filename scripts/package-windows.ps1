@@ -54,6 +54,11 @@ Copy-Item -LiteralPath (Join-Path $root "docs\licenses.md") `
 Copy-Item -LiteralPath (Join-Path $root "third_party\krc-debug\LICENSE") `
     -Destination (Join-Path $stage "LICENSES-krc-debug.txt")
 Copy-Item -LiteralPath (Join-Path $root "docs\release.md") -Destination $stage
+New-Item -ItemType Directory -Path (Join-Path $stage "docs") -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root "docs\release.md") `
+    -Destination (Join-Path $stage "docs\release.md")
+Copy-Item -LiteralPath (Join-Path $root "docs\licenses.md") `
+    -Destination (Join-Path $stage "docs\licenses.md")
 
 $smoke = Join-Path $stage "smoke-loaded.ppm"
 Push-Location $stage
@@ -84,7 +89,7 @@ $verify = @(
     "krdbg $Version windows-x64",
     "Commit: $Commit",
     "Build: windows-msvc-release",
-    "Contents: krdbg_demo.exe, README.md, LICENSES.md, LICENSES-krc-debug.txt, release.md",
+    "Contents: krdbg_demo.exe, README.md, LICENSES.md, LICENSES-krc-debug.txt, release.md, docs/release.md, docs/licenses.md",
     "Smoke: headless loaded state exit 0",
     "Frame: $hashLine",
     "Dependencies: $dependencies",
