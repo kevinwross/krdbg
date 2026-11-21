@@ -186,3 +186,13 @@ job.
 - Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
 - Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
 - Notes: `85f6221` removes the `arm64` GitHub Actions job and names this tester log as the only ARM64 verification path, which `AGENTS.local.md` and `docs/ci-arm64.md` now say. No source, test or adapter file changed since `81e1c31`, so the 105-check result and the code-compiles evidence carry over unchanged; this entry records the workflow change and the fact that the gate had nothing to compile (4 s, not a build claim).
+
+## 2026-11-20T22:26:39-08:00 — main @ 1e6ea28
+
+- Host: BitWhiz
+- Range: 348e0a2..1e6ea28, 7 commits
+- Docs-only: no
+- Build: `scripts/gate-linux-arm64.sh` — pass (Debug and Release; the vendored KDBG translator and tests recompiled, 26 s)
+- Test: CTest — pass (2/2: `krdbg_unit` 105 checks, 0 failures, 103 passed with the two x64 golden comparisons excluded; `platform_boundary` 16 UI/public files clean and 17 core/kdbg files VM-clean)
+- Hash: empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` (recorded in `build/gate/arm64-hashes.txt`)
+- Notes: KDBG v1.1 is vendored from KRCompiler `e04b3b2` — `third_party/krc-debug/` and `src/kdbg/kdbg.cpp` were replaced and the `.k32`/`.kdbg` fixtures regenerated. The five `kdbg_*` cases all pass, including `kdbg_rejects_truncated_bad_crc_and_bad_version` and `kdbg_translation_matches_krc_json_for_every_carried_field`, so the v1.1 pair decodes the new fixtures and keeps the `krc --dump-symbols --json` parity on ARM64. The check count stays at 105. `scripts/package-windows.ps1` is Windows-only and was not exercised here; M6.2 (AppImage) remains blocked per `AGENTS.local.md`.
