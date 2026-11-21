@@ -13,8 +13,8 @@ and KDBG as the debug format.
 
 Version: `0.2.0`.
 
-Status: M0–M5 are complete. M6 packaging provides the Windows x64 zip and the
-Linux x64 tarball; ARM64 packaging waits for the tester machine.
+Status: M0–M6 complete. Release 0.2.0 provides the Windows x64 zip, Linux x64
+tarball and the tester-built ARM64 tarball.
 
 ## Run
 

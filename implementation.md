@@ -76,7 +76,7 @@ recorded but does not block a milestone unless the gate says it does.
 | M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
 | M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
-| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[ ] in progress — M6.1/M6.2 done; M6.3/M6.4 pending` |
+| M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[x] done` |
 
 Dependencies:
 
@@ -834,9 +834,9 @@ is post-v1 and does not block this gate.
 ### M6.1 Windows
 
 - [x] **M6.1.1** Release zip with `krdbg_demo.exe`, docs, licenses.
-  Evidence: `krdbg-0.2.0-windows-x64.zip`, 264,352 bytes, SHA-256
-  `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`;
-  built from clean checkout `68e56c6`; contents are the exe, `README.md`,
+  Evidence: `krdbg-0.2.0-windows-x64.zip`, 266,124 bytes, SHA-256
+  `B8925CCA276D52BD074D16ED32486636AB3DDC09DBA12938DB5C41FDE76F0E55`;
+  built by release workflow `44877925433` from tag `v0.2.0` (`228fd03`); contents are the exe, `README.md`,
   `LICENSE`, `LICENSES.md`, `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`,
   `third_party/krc-debug/LICENSE`, `release.md`, `VERIFY.txt`, `SHA256SUMS`,
   `docs/release.md` and `docs/licenses.md`.
@@ -852,9 +852,9 @@ is post-v1 and does not block this gate.
 
 - [x] **M6.2.1** Linux x64 tarball with a system-SDL2 2.32 note; no SDL2
       bundled.
-  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`, 442,367 bytes, SHA-256
-  `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`;
-  built from clean checkout `68e56c6`; contents are the binary, `README.md`,
+  Evidence: `krdbg-0.2.0-linux-x64.tar.gz`, 454,656 bytes, SHA-256
+  `FCCCF912705D03EBD117EB0A51F8E9D21545E6E9E595A16C6E8C7BC48CCFCEEC`;
+  built by release workflow `44877925433` from tag `v0.2.0` (`228fd03`); contents are the binary, `README.md`,
   `LICENSE`, `LICENSES.md`, both OFL texts, `third_party/krc-debug/LICENSE`,
   `release.md`, `docs/release.md`, `docs/licenses.md`,
   `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt` and `SHA256SUMS`. The note requires
@@ -885,10 +885,21 @@ is post-v1 and does not block this gate.
 
 ### M6.4 CI and release
 
-- [ ] **M6.4.1** ARM64 tester entry required at G6.
-- [ ] **M6.4.2** Release workflow produces Windows and Linux x64 artifacts; ARM64
+- [x] **M6.4.1** ARM64 tester entry required at G6.
+  Evidence: `docs/arm64-test-log.md` entry 2026-11-20T22:48:28-08:00 @
+  `68e56c6` records the 0.2.0 ARM64 package, smoke test and hashes.
+- [x] **M6.4.2** Release workflow produces Windows and Linux x64 artifacts; ARM64
       packaging is verified by the tester log.
-- [ ] **M6.4.3** Checksums and release notes.
+  Evidence: `.github/workflows/release.yml` runs on `v*` tags with Windows and
+  Ubuntu jobs, then attaches both artifacts to the GitHub release. First run
+  `44877925433` on `v0.2.0` (`228fd03`) completed success; no ARM64 job.
+- [x] **M6.4.3** Checksums and release notes.
+  Evidence: each artifact carries `SHA256SUMS`; the release uses
+  `docs/release.md` as its notes; the attached assets are:
+  `krdbg-0.2.0-windows-x64.zip` 266,124 B / SHA-256
+  `b8925cca276d52bd074d16ed32486636ab3ddc09dba12938db5c41fde76f0e55`,
+  and `krdbg-0.2.0-linux-x64.tar.gz` 454,656 B / SHA-256
+  `fcccf912705d03ebd117eb0a51f8e9d21545e6e9e595a16c6e8c7bc48ccfceec`.
 
 ### M6.5 Documentation
 
@@ -896,8 +907,7 @@ is post-v1 and does not block this gate.
 - [x] **M6.5.2** `docs/` for settings schema, adapters, CI, release layout and
       licenses.
 - [x] **M6.5.3** `AGENTS.local.md` current; no stale gate commands.
-- [ ] **M6.5.4** `PLAN.md` and this file reflect the shipped state.
-  Pending M6.2/M6.3; the Windows release is recorded, Linux x64 and ARM64 are not.
+- [x] **M6.5.4** `PLAN.md` and this file reflect the shipped state.
 
 ### M6.6 Post-v1 (tracked, non-blocking)
 
@@ -912,7 +922,7 @@ is post-v1 and does not block this gate.
   Evidence: `krdbg-0.2.0-linux-x64.tar.gz`; extracted smoke exit 0 with frame
   hash `DE4BCC6064D8B4F7`; `SYSTEM-REQUIREMENTS.txt` names SDL2 2.32.
 - [x] **G6.3** ARM64 artifact runs on the Pi.
-- [ ] **G6.4** Windows/Linux CI release green; ARM64 tester entry recorded.
+- [x] **G6.4** Windows/Linux CI release green; ARM64 tester entry recorded.
 - [x] **G6.5** Goldens and functional tests pass; ARM64 hash recorded by the tester.
 - [x] **G6.6** Docs and checksums present.
 - [x] **G6.7** No open BLOCKS or FIX-BEFORE findings.
@@ -944,10 +954,10 @@ Record the real command and result. Do not pre-fill expected output.
 | G5 | Windows x64 | `scripts/gate-windows.ps1`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain` then `krdbg_tests`; `krdbg_demo --load ... --toolchain ...` | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET, KERNEL and settings; clean archive 115/0 | `e4dd179` |
 | G5 | WSL x64 | `scripts/gate-linux.sh`; adapter ON with `KRDBG_KRC_PREFIX=build/m5-toolchain-linux` then `krdbg_tests`; source-load demo | PASS — bare 105/0; KR16 115/0, KR32 114/0; host builds C/C++/assembly, RESET and KERNEL | `e4dd179` |
 | G5 | ARM64 | tester entry + adapter-ON build | PENDING (non-blocking) — entry 2026-11-20T14:30:14-08:00 @ `81e1c31` records the 105-check gate and a 115-check adapter-ON build, but the host build-chain tests skip without `KRDBG_KRC_PREFIX`; no end-to-end M5 ARM64 run | `81e1c31` |
-| G6 | Windows x64 | clean-checkout `windows-msvc-release`; extracted zip smoke | PASS — `68e56c6`; `krdbg-0.2.0-windows-x64.zip` 264,352 B, SHA-256 `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`; license scan and no `SDL2.dll`; extracted run exit 0 | `68e56c6` |
-| G6 | Linux x64 | clean-checkout `linux-wsl-release`; extracted tarball smoke | PASS — `68e56c6`; `krdbg-0.2.0-linux-x64.tar.gz` 442,367 B, SHA-256 `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`; license scan, no bundled SDL2; extracted run exit 0 | `68e56c6` |
+| G6 | Windows x64 | release workflow; extracted zip smoke | PASS — `228fd03`/`v0.2.0`; `krdbg-0.2.0-windows-x64.zip` 266,124 B, SHA-256 `B8925CCA276D52BD074D16ED32486636AB3DDC09DBA12938DB5C41FDE76F0E55`; license scan and no `SDL2.dll`; extracted run exit 0 | `228fd03` |
+| G6 | Linux x64 | release workflow; extracted tarball smoke | PASS — `228fd03`/`v0.2.0`; `krdbg-0.2.0-linux-x64.tar.gz` 454,656 B, SHA-256 `FCCCF912705D03EBD117EB0A51F8E9D21545E6E9E595A16C6E8C7BC48CCFCEEC`; license scan, no bundled SDL2; extracted run exit 0 | `228fd03` |
 | G6 | ARM64 | tester log entry + `--arch arm64` tarball | PASS — entry 2026-11-20T22:48:28-08:00 @ `68e56c6`: 105 checks, 0 failures; `krdbg-0.2.0-linux-arm64.tar.gz` 371,240 B, SHA-256 `2AC4D44ACF8CF681A707CE6498894E64922AAFF58B24F1E236B2CE2CC0439A1C`; extracted aarch64 smoke exit 0 | `68e56c6` |
-| G6 | CI | release workflow on tag | PENDING — first tagged run not yet executed | — |
+| G6 | CI | release workflow on tag | PASS — run `44877925433` on `v0.2.0` (`228fd03`): `windows-x64`, `linux-x64` and `release` all success; both assets attached to the GitHub release | `228fd03` |
 
 ### G0.4 window captures
 
@@ -1195,34 +1205,35 @@ Recorded 2026-11-20T22:14:07-08:00.
   the script's final newline. `tests/test_kdbg.cpp` checks the v1.1 `minor`,
   pointer width, `variableInfo` scope and parameter/local/static flags as well
   as the carried v1 fields; the KDBG tests pass.
-- Windows clean-checkout artifact: `git archive` of `68e56c6`, configured with
-  the `windows-msvc-release` preset, built with MSVC. `scripts/package-windows.ps1`
-  produced `krdbg-0.2.0-windows-x64.zip`: **264,352 bytes**, SHA-256
-  `21CA31F348410260E480BC1B8DA787B732211D688D0C729231C104DF12170627`.
+- Windows release artifact: workflow `44877925433` from tag `v0.2.0`
+  (`228fd03`) built `krdbg-0.2.0-windows-x64.zip`: **266,124 bytes**, SHA-256
+  `B8925CCA276D52BD074D16ED32486636AB3DDC09DBA12938DB5C41FDE76F0E55`.
   Contents: `krdbg_demo.exe`, `README.md`, `LICENSE`, `LICENSES.md`,
   `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
   `release.md`, `VERIFY.txt`, `SHA256SUMS`, `docs/release.md`,
   `docs/licenses.md`. `VERIFY.txt` records `License payload: all required
   files present`, `dumpbin /dependents: no SDL2.dll` and `SDL2.dll in package:
   no`.
-- Extracted that zip to `build/release/final-win4` and ran
+- Extracted the release asset to `build/release/workflow-win` and ran
   `krdbg_demo.exe --headless --state loaded --screenshot artifact.ppm` from the
   extracted directory: exit 0, frame hash `DE4BCC6064D8B4F7` at 1440x900.
-- Linux clean-checkout artifact: the same `68e56c6` archive configured with
-  `linux-wsl-release`, packaged by `scripts/package-linux-tarball.sh` as
-  `krdbg-0.2.0-linux-x64.tar.gz`: **442,367 bytes**, SHA-256
-  `64610429EA9B65FC047A771CD593A51C21BF425B64AC29FF4E9D52727474CF5B`.
+- Linux release artifact: the same workflow/tag, packaged with
+  `scripts/package-linux-tarball.sh --arch x64` as
+  `krdbg-0.2.0-linux-x64.tar.gz`: **454,656 bytes**, SHA-256
+  `FCCCF912705D03EBD117EB0A51F8E9D21545E6E9E595A16C6E8C7BC48CCFCEEC`.
   Contents: `krdbg_demo`, `README.md`, `LICENSE`, `LICENSES.md`,
   `OFL-Inter.txt`, `OFL-JetBrainsMono.txt`, `third_party/krc-debug/LICENSE`,
   `release.md`, `docs/release.md`, `docs/licenses.md`,
   `SYSTEM-REQUIREMENTS.txt`, `VERIFY.txt`, `SHA256SUMS`.
-- Extracted that tarball to `build/release/linux-smoke-4` and ran
+- Extracted the release asset to `build/release/workflow-linux` and ran
   `./krdbg_demo --headless --state loaded --screenshot artifact.ppm`: exit 0,
   frame hash `DE4BCC6064D8B4F7` at 1440x900. `VERIFY.txt` records
   `System SDL2: 2.32 required; not bundled`, `License payload: all required
   files present` and `Bundled SDL2: no`.
-- Tests after the v1.1 vendor change: Windows bare **105/0**, KR16 **115/0**,
-  KR32 **114/0**; WSL bare **105/0**, KR16 **115/0**, KR32 **114/0**.
+- Tests after the version consumer: Windows/Linux release gates passed with
+  `krdbg_unit` **106 checks, 0 failures**, plus the `krdbg_version` CTest entry.
+  The local KR16 adapter run reports **116/0**. The KR32 adapter build was not
+  rerun; its sibling checkout now requires `krc-toolchain`.
 
 ## 10. Blocked or external prerequisites
 
