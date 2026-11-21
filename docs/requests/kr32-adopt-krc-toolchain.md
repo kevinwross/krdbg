@@ -2,7 +2,7 @@
 
 **Status:** APPROVED 2026-11-20T02:36:31-08:00 by kevinwross. Stage A and stage B
 are complete. Stage B (default flip and deletion) landed at `91165ae` after the
-three conditions in decision 9 held.
+three conditions in decision 9 held; 0.3.0 is released at `f00518d`.
 **Target repository:** `C:\Users\kevin\source\repos\KR32`, `main` @ `fa7a886`.
 The working tree has a modified `AGENTS.local.md` and an untracked `.agents/`;
 confirm before branching.
@@ -18,6 +18,8 @@ Windows and WSL under both toolchains.
 **Stage B:** complete at `91165ae` — item 3.10b landed after 0.2.0; the clean
 Windows and WSL clone gates passed 40/40 with `src/cc`, `src/cxx`, `src/asm`,
 `src/link`, the runtime and the injection gone.
+**Release:** 0.3.0 at `f00518d`, tag `v0.3.0` — krc-only and breaking; the final
+release on `adopt-krc` until the merge decision.
 **Sibling plan:** [kr16](kr16-adopt-krc-toolchain.md). This one runs second, on
 the evidence that kr32 has the harder compiler.
 **Read at that commit:** `src/ui/debugger_ui.cpp`, `include/kr32/cc/cc.h`,
