@@ -174,10 +174,16 @@ open questions the plan was proposed with.
    `fileio.c` 35,158 B and `C-for-U.c` 48,972 B, 86,172 B against 65,536. So the
    runtime is not the lever and a runtime diet recovers little; codegen density
    is, and it is KRCompiler 4.17, tracked and not started.
+6. **C-for-U is accepted as over budget for stage A.** Decided
+   2026-11-21T06:32:35-08:00. After 4.16's function sections and GC, C-for-U is
+   still 18,602 B over before libc — the mass is its own code and `fileio.c`.
+   Every other program in the suite fits, and the debug surface works. Stage A
+   closes with that as a named limitation: the five `cforu` checks become one
+   test that asserts the krc build fails with the linker overflow diagnostic, so
+   the wall is recorded as expected behaviour rather than a red suite. 4.17 stays
+   tracked; when krc's 16-bit output shrinks, that test fails and says so.
 
-Not yet decided: whether C-for-U counts as over budget for stage A while
-KRCompiler 4.17 is outstanding — the five `cforu` checks stay red under krc until
-that is answered. Also needed before stage B: whether the `.kdbg` reader keeps the
+Not yet decided, and needed before stage B: whether the `.kdbg` reader keeps the
 `.debug_*` branch for `.kex` files built before the swap. Dropping it makes those
 images undebuggable; keeping it costs one branch the reader already has.
 
