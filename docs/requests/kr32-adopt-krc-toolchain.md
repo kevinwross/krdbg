@@ -219,19 +219,29 @@ open questions the plan was proposed with.
    `con.h` generator reads the deleted body, and the OS images are built by the
    built-in assembler. 3.10a migrates the tests, the OS images and the header
    while both toolchains still build; 3.10b flips the default, removes the UI and
-   CLI built-in branches, deletes, and still needs the second approval with its
-   gate.
+   CLI built-in branches, and deletes.
+9. **The deletion (3.10b) is approved conditionally.** Decided
+   2026-11-20T17:45:29-08:00. It may land only when three conditions hold: a
+   release has shipped in which both toolchains are available and
+   `KR32_TOOLCHAIN=krc` is documented; a written sign-off names the C++ corpus
+   differences accepted as permanent (decision 1); and the clean-checkout gate is
+   green with the four directories, the runtime and the injection gone. Until
+   then the session prepares the final diff, the release note and the gate, and
+   the default stays `builtin`.
 
 ## 9. Approval
 
 Approved by kevinwross on 2026-11-20T02:36:31-08:00; stage B's migration half
-approved 2026-11-20T14:25:26-08:00.
+approved 2026-11-20T14:25:26-08:00; its deletion half approved conditionally
+2026-11-20T17:45:29-08:00.
 
 Approving this file authorises stage A in KR32, the `con.h` → `cons.h` rename,
-and stage B's migration (3.10a): the CMake option, the krc branches of the two
+stage B's migration (3.10a), and stage B's deletion (3.10b) subject to the three
+conditions in decision 9: the CMake option, the krc branches of the two
 compile functions, the option and diagnostic mapping, the corpus write-up, the
 guest headers as files, the installed-package inputs, the test and OS-image
-migration, and the tests. It does not authorise the default flip, the removal of
-the UI or CLI built-in branches, the deletion of `src/cc`, `src/cxx`, `src/asm`
-or `src/link` (3.10b, second approval), a debugger change, the removal of the
+migration, the tests, and — once the conditions hold — the default flip, the
+removal of the UI or CLI built-in branches, and the deletion of `src/cc`,
+`src/cxx`, `src/asm`, `src/link`, KR32's runtime and the injection. It does not
+authorise a debugger change, the removal of the
 `--os`/`--bios` load path, or any edit in KRCompiler or kr16.

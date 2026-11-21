@@ -31,9 +31,12 @@ guest headers as files including `cons.h` replacing the generated `con.h`, the
 installed package inputs, the suite under both toolchains, and the test and
 OS-image migration with the `cons.h` rename.
 
-Do not: flip the default, remove the UI or CLI built-in branches, delete
-`src/cc`, `src/cxx`, `src/asm`, `src/link` (3.10b, second approval), change the
-debugger, rebuild the kernel/BIOS, or edit KRCompiler, kr16 or krdbg.
+Do not: flip the default, remove the UI or CLI built-in branches, or delete
+`src/cc`, `src/cxx`, `src/asm`, `src/link` until the three conditions in the
+plan's decision 9 hold — the both-toolchain release, the C++ corpus sign-off, and
+the clean-checkout gate. Do not change the debugger, rebuild the kernel/BIOS, or
+edit KRCompiler, kr16 or krdbg. You may prepare the deletion diff, the release
+note and the gate in advance.
 
 ## Design decisions already made
 
