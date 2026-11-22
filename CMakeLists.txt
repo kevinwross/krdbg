@@ -154,6 +154,23 @@ if(KRDBG_KR16_ADAPTER)
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr16")
 endif()
 
+# Optional kr216 adapter. Same contract as KR16: OFF by default, and ON with a
+# missing tree stops configuration naming the expected path.
+option(KRDBG_KR216_ADAPTER "Build the optional kr216 IDebugTarget adapter" OFF)
+set(KRDBG_KR216_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../kr216" CACHE PATH
+    "kr216 source tree for KRDBG_KR216_ADAPTER=ON")
+if(KRDBG_KR216_ADAPTER)
+    if(NOT EXISTS "${KRDBG_KR216_ROOT}/CMakeLists.txt" OR
+       NOT EXISTS "${KRDBG_KR216_ROOT}/include/kr216/machine.h")
+        message(FATAL_ERROR
+            "KRDBG_KR216_ADAPTER=ON expects the kr216 source tree at "
+            "'${KRDBG_KR216_ROOT}' (CMakeLists.txt and "
+            "include/kr216/machine.h). Set KRDBG_KR216_ROOT to that tree; "
+            "krdbg never vendors or guesses kr216.")
+    endif()
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr216")
+endif()
+
 add_library(krdbg_ui STATIC
     src/ui/canvas.cpp
     src/ui/embedded_fonts.cpp
@@ -211,6 +228,10 @@ if(KRDBG_KR16_ADAPTER)
     target_link_libraries(krdbg_demo PRIVATE krdbg_kr16)
     target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR16=1)
 endif()
+if(KRDBG_KR216_ADAPTER)
+    target_link_libraries(krdbg_demo PRIVATE krdbg_kr216)
+    target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR216=1)
+endif()
 
 # External tool contract: schema and values as JSON without the UI.
 add_executable(krdbg_settings apps/settings_cli/main.cpp)
@@ -263,6 +284,11 @@ if(KRDBG_BUILD_TESTS)
             KRDBG_HAVE_KR16=1
             KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kex"
             KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
+    endif()
+    if(KRDBG_KR216_ADAPTER)
+        target_sources(krdbg_tests PRIVATE tests/test_kr216_adapter.cpp)
+        target_link_libraries(krdbg_tests PRIVATE krdbg_kr216)
+        target_compile_definitions(krdbg_tests PRIVATE KRDBG_HAVE_KR216=1)
     endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately

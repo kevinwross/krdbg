@@ -22,6 +22,9 @@
 #if defined(KRDBG_HAVE_KR16)
 #include "kr16_adapter.h"
 #endif
+#if defined(KRDBG_HAVE_KR216)
+#include "kr216_adapter.h"
+#endif
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
@@ -225,6 +228,7 @@ struct Options {
     std::string kr32_image;
     bool kr32_os = false;
     std::string kr16_image;
+    std::string kr216_image;
     std::string load_path;
     std::string toolchain;
     std::string build_target = "kr32";
@@ -236,8 +240,9 @@ void print_usage() {
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
-        "[--kr32-os] [--kr16 <image.kex>] [--load <source-or-image>] "
-        "[--toolchain <krc-install-prefix>] [--target kr32|kr16] "
+        "[--kr32-os] [--kr16 <image.kex>] [--kr216 <image.k216>] "
+        "[--load <source-or-image>] "
+        "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216] "
         "[--source-root <dir>] [--kernel] [--reset] [--version] "
         "[--frames <n>]\n");
 }
@@ -261,6 +266,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.version = true;
         } else if (argument == "--kr16" && index + 1 < argc) {
             options.kr16_image = argv[++index];
+        } else if (argument == "--kr216" && index + 1 < argc) {
+            options.kr216_image = argv[++index];
         } else if (argument == "--load" && index + 1 < argc) {
             options.load_path = argv[++index];
         } else if (argument == "--toolchain" && index + 1 < argc) {
@@ -449,6 +456,45 @@ int main(int argc, char** argv) {
         }
     }
 #endif
+#if defined(KRDBG_HAVE_KR216)
+    if (!session && !options.kr216_image.empty()) {
+        krdbg::kr216adapter::LoadedProgram loaded;
+        krdbg::kr216adapter::Options adapter_options;
+        adapter_options.source_roots = {options.source_root};
+        std::string error;
+        if (!krdbg::kr216adapter::load_image(options.kr216_image,
+                                             adapter_options, loaded, error)) {
+            std::fprintf(stderr, "krdbg: kr216 load failed: %s\n",
+                         error.c_str());
+            return 1;
+        }
+        const std::string name =
+            std::filesystem::path(options.kr216_image).filename().string();
+        real_program = krdbg::ProgramInfo{
+            options.kr216_image, name, loaded.target->pc(), true};
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(loaded.target), loaded.info,
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+        const krdbg::DebugInfo& info = session->info();
+        for (std::size_t index = 0; index < info.functions.size(); ++index) {
+            if (info.functions[index].name != "main") {
+                continue;
+            }
+            std::uint64_t first_line = 0;
+            for (const krdbg::LineInfo& line : info.lines) {
+                if (line.function == index &&
+                    (first_line == 0 || line.address < first_line)) {
+                    first_line = line.address;
+                }
+            }
+            if (first_line != 0) {
+                session->run_to_address(first_line);
+                real_program->entry = session->pc();
+            }
+            break;
+        }
+    }
+#endif
     if (!session) {
         auto target =
             std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
@@ -509,7 +555,7 @@ int main(int argc, char** argv) {
         surface.set_program_info(krdbg::ProgramInfo{path, name, entry, true});
         surface.resize(surface.width(), surface.height());
     };
-#if defined(KRDBG_HAVE_KR16) || defined(KRDBG_HAVE_KR32)
+#if defined(KRDBG_HAVE_KR16) || defined(KRDBG_HAVE_KR32) || defined(KRDBG_HAVE_KR216)
     const auto load_any = [&](const std::string& path, std::string& error) {
         namespace fs = std::filesystem;
         if (path.empty()) {
@@ -551,6 +597,8 @@ int main(int argc, char** argv) {
             target_name = "kr16";
         } else if (lower.ends_with(".k32")) {
             target_name = "kr32";
+        } else if (lower.ends_with(".k216")) {
+            target_name = "kr216";
         }
 
         if (target_name == "kr16") {
@@ -579,6 +627,20 @@ int main(int argc, char** argv) {
             session->replace_target(std::move(loaded.target), loaded.info);
 #else
             error = "this build has no KR32 adapter";
+            return false;
+#endif
+        } else if (target_name == "kr216") {
+#if defined(KRDBG_HAVE_KR216)
+            krdbg::kr216adapter::LoadedProgram loaded;
+            krdbg::kr216adapter::Options adapter_options;
+            adapter_options.source_roots = {options.source_root};
+            if (!krdbg::kr216adapter::load_image(image_path, adapter_options,
+                                                 loaded, error)) {
+                return false;
+            }
+            session->replace_target(std::move(loaded.target), loaded.info);
+#else
+            error = "this build has no kr216 adapter";
             return false;
 #endif
         } else {
