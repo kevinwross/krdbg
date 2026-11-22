@@ -34,12 +34,6 @@ std::vector<std::uint8_t> read_file(const std::string& path, std::string& error)
                                      std::istreambuf_iterator<char>());
 }
 
-std::string file_name(std::string_view path) {
-    const std::size_t slash = path.find_last_of("/\\");
-    return std::string(slash == std::string_view::npos ? path
-                                                       : path.substr(slash + 1));
-}
-
 void resolve_sources(DebugInfo& info, const std::string& image_path,
                      const std::vector<std::string>& roots) {
     const std::filesystem::path image_directory =
