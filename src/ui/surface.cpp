@@ -282,6 +282,7 @@ struct DebuggerSurface::Impl {
     std::string memory_byte_buffer;
     SourceState source_state;
     std::uint64_t disasm_base = 0x1000;
+    std::vector<std::uint64_t> disasm_rows;
     int selected_frame = 0;
     struct StateEdit {
         bool active = false;
@@ -1352,17 +1353,23 @@ void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
     }
     const TargetLayout& target = session->layout();
     const unsigned alignment = std::max(1U, target.instruction_alignment);
+    const bool variable = target.variable_instruction_length;
     const std::uint64_t pc = session->pc();
-    if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
+    if (variable) {
+        if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
+            disasm_base = pc;
+        }
+    } else if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
         disasm_base = pc > 8ULL * alignment ? pc - 8ULL * alignment : 0;
     }
 
     int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
     const int rows = 32;
+    std::uint64_t address = disasm_base;
+    disasm_rows.clear();
     for (int row = 0; row < rows && y + kRowHeight <= rect.y + rect.height;
          ++row) {
-        const std::uint64_t address =
-            disasm_base + static_cast<std::uint64_t>(row) * alignment;
+        disasm_rows.push_back(address);
         InstructionView instruction;
         const bool valid = session->disassemble(address, instruction);
         const bool current = address == pc;
@@ -1406,6 +1413,10 @@ void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
         canvas.text(rect.x + 190, y,
                     clip(text, rect.width - 196, FontRole::MonoSmall),
                     current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
+        const std::uint64_t advance =
+            variable && valid && instruction.length != 0 ? instruction.length
+                                                         : alignment;
+        address += advance;
         y += kRowHeight;
     }
 }
@@ -2051,7 +2062,9 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
         const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
         if (row >= 0 && row < 32) {
             const std::uint64_t address =
-                disasm_base + static_cast<std::uint64_t>(row) * alignment;
+                static_cast<std::size_t>(row) < disasm_rows.size()
+                    ? disasm_rows[static_cast<std::size_t>(row)]
+                    : disasm_base + static_cast<std::uint64_t>(row) * alignment;
             if (event.x < layout.disassembly.x + 18) {
                 toggle_address_breakpoint(address);
                 return;
@@ -2183,11 +2196,14 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
                     }
                 }
             } else {
+                const TargetLayout& target = session->layout();
                 const unsigned alignment =
-                    std::max(1U, session->layout().instruction_alignment);
-                disasm_base = breakpoint.address > 8ULL * alignment
-                                  ? breakpoint.address - 8ULL * alignment
-                                  : 0;
+                    std::max(1U, target.instruction_alignment);
+                disasm_base = target.variable_instruction_length
+                                  ? breakpoint.address
+                                  : (breakpoint.address > 8ULL * alignment
+                                         ? breakpoint.address - 8ULL * alignment
+                                         : 0);
             }
         }
         return;
@@ -2384,10 +2400,12 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
             std::max(1U, session->layout().instruction_alignment);
         const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
         if (row >= 0 && row < 32) {
+            const std::uint64_t address =
+                static_cast<std::size_t>(row) < disasm_rows.size()
+                    ? disasm_rows[static_cast<std::size_t>(row)]
+                    : disasm_base + static_cast<std::uint64_t>(row) * alignment;
             InstructionView instruction;
-            if (session->disassemble(
-                    disasm_base + static_cast<std::uint64_t>(row) * alignment,
-                    instruction)) {
+            if (session->disassemble(address, instruction)) {
                 text = instruction.help.empty()
                            ? instruction.mnemonic + " " + instruction.operands
                            : instruction.help;

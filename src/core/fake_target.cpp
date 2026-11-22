@@ -506,12 +506,20 @@ bool FakeTarget::disassemble(std::uint64_t address, InstructionView& out) const 
     out = InstructionView{};
     out.address = address;
     out.length = 4;
+    const auto mapped_length = instruction_lengths_.find(address);
+    if (mapped_length != instruction_lengths_.end()) {
+        out.length = mapped_length->second;
+    }
     out.bytes[0] = static_cast<std::uint8_t>(address & 0xFFU);
     for (const FakeInstruction& instruction : kInstructions) {
         if (instruction.address == address) {
             out.mnemonic = instruction.mnemonic;
             out.operands = instruction.operands;
             out.length = instruction.length;
+            const auto override_length = instruction_lengths_.find(address);
+            if (override_length != instruction_lengths_.end()) {
+                out.length = override_length->second;
+            }
             return true;
         }
     }

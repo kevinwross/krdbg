@@ -245,6 +245,21 @@ KRDBG_TEST(surface_state_edits_a_register_value) {
     CHECK_EQ(value.bits, 0xFFU);
 }
 
+KRDBG_TEST(surface_advances_variable_length_disassembly_rows) {
+    krdbg::test::TestScene scene(true);
+    scene.fake_target->set_variable_instruction_length(true);
+    scene.fake_target->set_instruction_length(0x1000, 2);
+    (void)scene.render_hash();
+    const krdbg::Rect disassembly = scene.surface->layout().disassembly;
+    CHECK(scene.click(disassembly.x + 8, disassembly.y + 28 + 16 + 8));
+    const std::vector<krdbg::BreakpointView> breakpoints =
+        scene.session->breakpoints();
+    CHECK(breakpoints.size() == 1U);
+    if (breakpoints.size() == 1U) {
+        CHECK_EQ(breakpoints[0].address, 0x1002U);
+    }
+}
+
 KRDBG_TEST(surface_variables_expand_and_open_the_inspector) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect variables = scene.surface->layout().variables;

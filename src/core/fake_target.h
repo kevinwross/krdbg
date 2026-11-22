@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <deque>
 #include <optional>
 #include <string>
@@ -78,6 +79,12 @@ public:
     FakeComPort& com() { return com_; }
     FakeVideoSource& video_source() { return video_; }
     void set_instructions_executed(std::uint64_t count) { instructions_ = count; }
+    void set_variable_instruction_length(bool variable) {
+        layout_.variable_instruction_length = variable;
+    }
+    void set_instruction_length(std::uint64_t address, unsigned length) {
+        instruction_lengths_[address] = length;
+    }
 
     // IDebugTarget.
     const TargetLayout& layout(std::uint32_t context) const override;
@@ -142,6 +149,7 @@ private:
     std::uint64_t entry_ = 0x1000;
     std::uint64_t frame_base_ = 0x2100;
     std::vector<std::uint8_t> memory_;
+    std::map<std::uint64_t, unsigned> instruction_lengths_;
     FakeComPort com_;
     FakeVideoSource video_;
 };

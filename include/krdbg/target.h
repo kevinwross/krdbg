@@ -57,6 +57,9 @@ struct TargetLayout {
     unsigned address_bits = 32;
     unsigned pointer_bits = 32;
     unsigned instruction_alignment = 4;
+    // When true, a disassembly row advances by InstructionView::length instead
+    // of a fixed alignment (variable-length encodings such as kr216).
+    bool variable_instruction_length = false;
     bool little_endian = true;
     std::string step_unit = "instructions";
     std::vector<RegisterGroup> groups;
