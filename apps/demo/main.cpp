@@ -244,7 +244,7 @@ void print_usage() {
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
-        "[--kr32-os] [--kr16 <image.kex>] [--kr216 <image.k216>] "
+        "[--kr32-os] [--kr16 <image.kex>] [--kr216 <image.k216>] [--kr232 <image.k232>] "
         "[--load <source-or-image>] "
         "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216] "
         "[--source-root <dir>] [--kernel] [--reset] [--version] "
