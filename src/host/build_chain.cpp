@@ -77,7 +77,8 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
         result.error = "unsupported source type '" + extension + "'";
         return result;
     }
-    if (options.target != "kr32" && options.target != "kr16") {
+    if (options.target != "kr32" && options.target != "kr16" &&
+        options.target != "kr232") {
         result.error = "unsupported target '" + options.target + "'";
         return result;
     }
@@ -97,7 +98,10 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
 
     const std::string stem = source.stem().string();
     const std::filesystem::path image =
-        output_directory / (stem + (options.target == "kr16" ? ".kex" : ".k32"));
+        output_directory /
+        (stem + (options.target == "kr16" ? ".kex"
+                     : options.target == "kr232" ? ".k232"
+                                                  : ".k32"));
     const std::filesystem::path object = output_directory / (stem + ".kro");
 
     std::vector<std::string> common = {
@@ -113,6 +117,24 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
     }
 
     std::vector<std::string> runtime;
+    if (options.target == "kr232") {
+        // The startup is assembled here because the prefix ships its source, the
+        // same way the kr16 branch does.
+        const std::filesystem::path crt_object =
+            output_directory / (stem + "-crt0.kro");
+        std::vector<std::string> crt = common;
+        crt.push_back("-c");
+        crt.push_back((paths_.sysroot / "kr232" / "lib" / "crt0.s").string());
+        crt.push_back("-o");
+        crt.push_back(crt_object.string());
+        const ProcessResult crt_compiled = run_process(paths_.krc, crt);
+        append(result.log, crt_compiled.output);
+        if (crt_compiled.exit_code != 0) {
+            result.error = "krc failed to assemble the kr232 startup";
+            return result;
+        }
+        runtime.push_back(crt_object.string());
+    }
     if (options.target == "kr32") {
         runtime = {
             (paths_.sysroot / "kr32" / "lib" / "crt0.s").string(),
@@ -206,7 +228,10 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
         link.insert(link.end(), runtime.begin(), runtime.end());
         link.push_back("-o");
         link.push_back(image.string());
-        link.push_back("--base=" + options.base);
+        // A kr232 container records its base itself; a kernel image is based at 0.
+        if (options.target != "kr232") {
+            link.push_back("--base=" + options.base);
+        }
         link.push_back("--entry=" + options.entry);
         if (options.map) {
             link.push_back("--map=" + image.string() + ".map");
