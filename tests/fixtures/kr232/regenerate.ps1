@@ -5,12 +5,12 @@
 # Set KR232_SOURCE to the kr232 checkout and KRC/KRLD to the compiler's tools.
 $ErrorActionPreference = 'Stop'
 
-$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $krc = if ($env:KRC) { $env:KRC } else { Join-Path $repo '..\krcompiler\build\windows-msvc-debug\host\bin\Debug\krc.exe' }
 $krld = if ($env:KRLD) { $env:KRLD } else { Join-Path $repo '..\krcompiler\build\windows-msvc-debug\host\bin\Debug\krld.exe' }
 $kr232 = if ($env:KR232_SOURCE) { $env:KR232_SOURCE } else { Join-Path $repo '..\kr232' }
 $sources = Join-Path $repo '..\krcompiler'
-$work = Join-Path $env:TEMP 'kr232-fixtures'
+$work = Join-Path $repo 'build\kr232-fixtures'
 
 if (-not (Test-Path $krc)) { throw "krc not found at $krc; set KRC" }
 if (-not (Test-Path $krld)) { throw "krld not found at $krld; set KRLD" }
@@ -43,4 +43,17 @@ $include = Join-Path $sources 'sysroot\kr232\include'
 & $krc -c --target kr232 -I $include (Join-Path $sources 'targets\kr232\runtime\gfx.c') -o (Join-Path $work 'gfx.o')
 Build-Fixture 'session.k232' @((Join-Path $work 'session.o'), (Join-Path $work 'cons.o'), (Join-Path $work 'gfx.o'))
 
+# kernel.k232 is the kernel the adapter runs user programs under, and
+# userprint.k232 is a program that prints through it and exits 3.
+& $krc -c --target kr232 (Join-Path $kr232 'targets\kr232\kernel\kernel.s') -o (Join-Path $work 'kernel.o')
+if ($LASTEXITCODE -ne 0) { throw 'kernel failed' }
+& $krld "--source-root=$kr232" --entry=_start (Join-Path $work 'kernel.o') -o (Join-Path $PSScriptRoot 'kernel.k232')
+if ($LASTEXITCODE -ne 0) { throw 'kernel.k232 failed' }
+Write-Host 'wrote kernel.k232'
+
+& $krc -c --target kr232 (Join-Path $PSScriptRoot 'userprint.s') -o (Join-Path $work 'userprint.o')
+if ($LASTEXITCODE -ne 0) { throw 'userprint failed' }
+& $krld "--source-root=$PSScriptRoot" --base=0x08000000 --entry=_start (Join-Path $work 'userprint.o') -o (Join-Path $PSScriptRoot 'userprint.k232')
+if ($LASTEXITCODE -ne 0) { throw 'userprint.k232 failed' }
+Write-Host 'wrote userprint.k232'
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'
