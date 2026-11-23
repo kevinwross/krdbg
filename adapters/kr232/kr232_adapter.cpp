@@ -247,16 +247,20 @@ public:
         std::vector<RawFrame> frames;
         std::uint32_t efp = machine_.reg(kFramePointer);
         while (efp != 0 && frames.size() < 64) {
-            RawFrame frame;
-            frame.frame_base = efp;
+            // Read both words before publishing the frame: a frame whose return
+            // address cannot be read is not a frame, and pushing it with pc 0 is
+            // how the caller looked absent.
             std::uint32_t pc = 0;
-            if (machine_.memory().read32(efp + 4, pc) != kr232::Access::Ok) {
+            std::uint32_t next = 0;
+            if (machine_.memory().read32(efp + 4, pc) != kr232::Access::Ok ||
+                machine_.memory().read32(efp, next) != kr232::Access::Ok) {
                 break;
             }
+            RawFrame frame;
+            frame.frame_base = efp;
             frame.pc = pc;
             frames.push_back(frame);
-            std::uint32_t next = 0;
-            if (machine_.memory().read32(efp, next) != kr232::Access::Ok || next == efp) {
+            if (next == efp) {
                 break;
             }
             efp = next;

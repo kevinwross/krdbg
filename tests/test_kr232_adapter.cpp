@@ -327,4 +327,5 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[1].frame_base != 0U);
     CHECK(frames[0].frame_base != frames[1].frame_base);
 
+
 }
