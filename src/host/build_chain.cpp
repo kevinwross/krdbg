@@ -134,6 +134,26 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
             return result;
         }
         runtime.push_back(crt_object.string());
+        // The packages the prefix installs beside the startup: a program that
+        // includes <kr232/cons.h> and its neighbours needs these objects, and a
+        // chain that linked only the startup reported every such program as an
+        // undefined symbol. Every object in the directory is taken, so a package
+        // added to the prefix needs no change here.
+        const std::filesystem::path package_directory =
+            paths_.sysroot / "kr232" / "lib";
+        std::error_code ignored;
+        std::vector<std::filesystem::path> packages;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(package_directory, ignored)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".kro") {
+                continue;
+            }
+            packages.push_back(entry.path());
+        }
+        std::sort(packages.begin(), packages.end());
+        for (const std::filesystem::path& package : packages) {
+            runtime.push_back(package.string());
+        }
     }
     if (options.target == "kr32") {
         runtime = {
