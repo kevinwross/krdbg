@@ -342,6 +342,27 @@ if(KRDBG_BUILD_TESTS)
     endif()
     set_tests_properties(krdbg_unit PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+
+    # The kr232 fixtures are images the adapter tests read by name. When the
+    # compiler is available they are rebuilt and compared byte for byte, so a
+    # stale one cannot keep passing against a program nobody has.
+    set(KRDBG_KR232_KRC "" CACHE FILEPATH "kr232 compiler for the fixture drift check")
+    set(KRDBG_KR232_KRLD "" CACHE FILEPATH "kr232 linker for the fixture drift check")
+    set(KRDBG_KRCOMPILER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../krcompiler"
+        CACHE PATH "krcompiler checkout")
+    set(KRDBG_KR232_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../kr232"
+        CACHE PATH "kr232 checkout")
+    if(KRDBG_KR232_KRC AND KRDBG_KR232_KRLD)
+        add_test(NAME krdbg_kr232_fixtures_match_source
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=${KRDBG_KR232_KRC}
+                    -DKRLD=${KRDBG_KR232_KRLD}
+                    -DSOURCES=${KRDBG_KRCOMPILER_ROOT}
+                    -DKR232=${KRDBG_KR232_ROOT}
+                    -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232
+                    -DWORK=${CMAKE_BINARY_DIR}/fixture-drift
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/CheckFixtureDrift.cmake)
+    endif()
     add_test(NAME krdbg_version COMMAND krdbg_demo --version)
     set_tests_properties(krdbg_version PROPERTIES
         PASS_REGULAR_EXPRESSION "krdbg ${PROJECT_VERSION}")
