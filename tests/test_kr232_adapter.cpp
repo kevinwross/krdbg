@@ -1,8 +1,11 @@
 #include "test_framework.h"
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "kr232_adapter.h"
+#include "krdbg/session.h"
 
 namespace {
 
@@ -207,4 +210,70 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
         CHECK(view.frame_number >= 1U);
         CHECK(!view.pixels.empty());
     }
+}
+KRDBG_TEST(kr232_adapter_steps_to_a_line_breakpoint) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string session_path = std::string(KRDBG_SOURCE_ROOT) +
+                                     "/tests/fixtures/kr232/session.k232";
+    if (!krdbg::kr232adapter::load_image(session_path, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.info.has_value());
+    if (!loaded.info.has_value() || loaded.info->lines.empty()) {
+        CHECK(false);
+        return;
+    }
+
+    // Stop on the first line of main: that is what source-level stepping means.
+    std::uint64_t line_address = 0;
+    for (const krdbg::LineInfo& line : loaded.info->lines) {
+        if (line_address == 0 || line.address < line_address) {
+            line_address = line.address;
+        }
+    }
+    CHECK(line_address != 0U);
+
+    auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+    krdbg::DebugSession session(std::move(loaded.target), loaded.info, reload);
+    session.add_address_breakpoint(line_address);
+    const krdbg::StopResult stopped = session.run(1000000);
+    CHECK(stopped.kind == krdbg::StopKind::Retired ||
+          stopped.kind == krdbg::StopKind::Halted);
+    CHECK_EQ(session.pc(), line_address);
+}
+
+KRDBG_TEST(kr232_adapter_reloads_and_refuses_garbage) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string session_path = std::string(KRDBG_SOURCE_ROOT) +
+                                     "/tests/fixtures/kr232/session.k232";
+    if (!krdbg::kr232adapter::load_image(session_path, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+
+    // Reloading rebuilds the machine from the image, so the PC returns to the
+    // entry and the halt is forgotten.
+    const std::uint64_t entry = loaded.target->pc();
+    (void)loaded.target->run(1000000);
+    CHECK(loaded.target->halted());
+    CHECK(loaded.target->reset(error));
+    CHECK(!loaded.target->halted());
+    CHECK_EQ(loaded.target->pc(), entry);
+
+    // A file that is not a container is refused, with a reason.
+    const std::string garbage = std::string(KRDBG_SOURCE_ROOT) +
+                                "/tests/fixtures/kr232/garbage.k232";
+    {
+        std::ofstream throwaway(garbage, std::ios::binary);
+        throwaway << "NOTACONTAINER";
+    }
+    krdbg::kr232adapter::LoadedProgram rejected;
+    std::string reject_error;
+    CHECK(!krdbg::kr232adapter::load_image(garbage, {}, rejected, reject_error));
+    CHECK(!reject_error.empty());
+    std::filesystem::remove(garbage);
 }

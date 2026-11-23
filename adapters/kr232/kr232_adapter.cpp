@@ -262,6 +262,12 @@ public:
     }
 
     kr232::Machine& machine() { return machine_; }
+    // The image bytes, kept so `reset` can rebuild the machine from the file the
+    // debugger opened rather than from a stale copy.
+    void keep_image(std::vector<std::uint8_t> bytes, std::uint32_t base) {
+        image_ = std::move(bytes);
+        base_ = base;
+    }
 
     IComPort* com_port() override {
         if (!com_) {
@@ -409,6 +415,11 @@ bool load_image(const std::string& image_path, const Options& options,
         return false;
     }
     const bool container = bytes[0] == 'K' && bytes[1] == '2' && bytes[2] == '3' && bytes[3] == '2';
+    if (!container) {
+        // Only a container is a kr232 image; a flat image has no header to trust.
+        error = "not a .k232 container";
+        return false;
+    }
     // Load the image first: the machine's memory is what the debugger reads, and a
     // container that will not load must not appear in the target list.
     std::uint32_t base = 0;
@@ -421,6 +432,7 @@ bool load_image(const std::string& image_path, const Options& options,
     if (container && bytes.size() >= 64) {
         base = 0;  // a kernel image's container records base 0 (ADR 0058)
     }
+    target->keep_image(bytes, base);
     const kr232::LoadOutcome loaded = kr232::load_image(target->machine(), bytes, base);
     if (!loaded.ok) {
         error = loaded.error;
