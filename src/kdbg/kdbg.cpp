@@ -160,8 +160,12 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         info.name = variable.name;
         info.type = type_id(out, variable.type);
         info.size = variable.size;
+        // The payload's offset is a signed 32-bit frame displacement, and the
+        // debugger adds it to the frame base. Widening it unsigned turns -4 into
+        // 4294967292, which reads a local four gigabytes away from where it lives.
         info.location = Location{LocationKind::FrameOffset,
-                                 static_cast<std::int64_t>(variable.offset), {}, 0, 0};
+                                 static_cast<std::int64_t>(static_cast<std::int32_t>(variable.offset)),
+                                 {}, 0, 0};
         info.flags = variable.function.empty() ? VariableGlobal : VariableLocal;
         const auto metadata =
             variable_info.find(variable.function + "\n" + variable.name);

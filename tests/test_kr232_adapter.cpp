@@ -437,3 +437,31 @@ KRDBG_TEST(kr232_adapter_loads_a_container_without_debug_info) {
         CHECK(loaded.target->halted());
     }
 }
+
+KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
+                               "/tests/fixtures/kr232/nested_frames.k232";
+    if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.info.has_value());
+    if (!loaded.info.has_value()) {
+        return;
+    }
+    // One local, `x`, at -4 from the frame base: the slot the backend gave it.
+    CHECK(!loaded.info->variables.empty());
+    bool saw_local = false;
+    for (const krdbg::VariableInfo& variable : loaded.info->variables) {
+        if (variable.location.kind != krdbg::LocationKind::FrameOffset) {
+            continue;
+        }
+        saw_local = true;
+        CHECK(variable.location.frame_offset == -4);
+        CHECK(variable.size == 4U);
+        CHECK_EQ(variable.name, std::string("x"));
+    }
+    CHECK(saw_local);
+}
