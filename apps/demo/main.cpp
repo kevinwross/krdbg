@@ -244,6 +244,9 @@ struct Options {
     bool reset = false;
     bool version = false;
     int frames = -1;
+    // Instructions to execute before the first render, so a scripted screenshot
+    // can show what the guest committed without a click on RUN.
+    int run_instructions = 0;
     std::string screenshot;
     std::string kr32_image;
     bool kr32_os = false;
@@ -265,7 +268,7 @@ void print_usage() {
         "[--load <source-or-image>] "
         "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216|kr232] "
         "[--source-root <dir>] [--kernel] [--reset] [--version] "
-        "[--frames <n>]\n");
+        "[--frames <n>] [--run <instructions>]\n");
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -307,6 +310,15 @@ bool parse_options(int argc, char** argv, Options& options) {
                 return false;
             }
             options.frames = static_cast<int>(frames);
+        } else if (argument == "--run" && index + 1 < argc) {
+            char* end = nullptr;
+            const long count = std::strtol(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || count < 0 ||
+                count > 100000000) {
+                std::fprintf(stderr, "krdbg: --run needs an instruction count\n");
+                return false;
+            }
+            options.run_instructions = static_cast<int>(count);
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -847,6 +859,12 @@ int main(int argc, char** argv) {
         event.kind = krdbg::platform::Event::Kind::KeyDown;
         event.key = krdbg::platform::key::F5;
         surface.handle_event(event);
+    }
+    if (options.run_instructions > 0) {
+        // A scripted run, so a screenshot can show the committed frame or a
+        // populated stack without anyone pressing RUN.
+        (void)session->run(static_cast<std::uint64_t>(options.run_instructions));
+        options.loaded = true;
     }
     if (options.video) {
         const krdbg::Rect video = surface.layout().toolbar_video;
