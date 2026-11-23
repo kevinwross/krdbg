@@ -166,3 +166,45 @@ KRDBG_TEST(kr232_adapter_advances_by_decoded_length) {
     }
     CHECK(saw_long);
 }
+
+KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string session = std::string(KRDBG_SOURCE_ROOT) +
+                                "/tests/fixtures/kr232/session.k232";
+    if (!krdbg::kr232adapter::load_image(session, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+
+    // The fixture says one byte on the console, draws and flips, then exits 7.
+    (void)loaded.target->run(1000000);
+    CHECK(loaded.target->halted());
+    CHECK(loaded.target->instructions_executed() > 2000U);
+
+    const krdbg::TargetLayout& layout = loaded.target->layout(0);
+    CHECK(layout.has_com_port);
+    CHECK(layout.has_framebuffer);
+    krdbg::IComPort* com = loaded.target->com_port();
+    CHECK(com != nullptr);
+    if (com != nullptr) {
+        std::uint8_t byte = 0;
+        CHECK(com->read_output(byte));
+        CHECK_EQ(byte, 65U);  // 'A'
+        // The queue is drained now, so a second read finds nothing.
+        CHECK(!com->read_output(byte));
+    }
+
+    const krdbg::IVideoSource* video = loaded.target->video();
+    CHECK(video != nullptr);
+    if (video != nullptr) {
+        krdbg::FramebufferView view;
+        CHECK(video->frame(view));
+        CHECK_EQ(view.width, 800);
+        CHECK_EQ(view.height, 600);
+        CHECK_EQ(view.stride, 3200);
+        CHECK(view.frame_number >= 1U);
+        CHECK(!view.pixels.empty());
+    }
+}
