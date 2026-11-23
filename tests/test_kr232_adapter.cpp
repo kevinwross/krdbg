@@ -335,12 +335,17 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[0].frame_base != 0U);
     CHECK(frames[1].frame_base != 0U);
     CHECK(frames[0].frame_base != frames[1].frame_base);
-    // The inner frame's return address lands inside main; the outer frame is the
-    // entry stub, which is placed before main, so its pc is above the entry and
-    // below main's first instruction.
-    CHECK(frames[0].pc >= main_begin);
-    CHECK(frames[1].pc != 0U);
-    CHECK(frames[1].pc < main_begin);
+    // The innermost frame is the running function, named from its own address; the
+    // frames above it carry return addresses and so name their callers. A stack
+    // that starts at the caller mislabels the panel and shows the caller's locals.
+    CHECK_EQ(session.call_stack().front().function, std::string("inner"));
+    CHECK(!session.locals(0).empty());
+    // Frame zero is the running address, so it differs from every return address
+    // above it, and every frame names a function rather than nothing.
+    CHECK(frames[0].pc != frames[1].pc);
+    for (const krdbg::FrameView& frame : session.call_stack()) {
+        CHECK(!frame.function.empty());
+    }
 
     // The local's value, read where the payload says it lives: the debugger adds
     // the variable's frame offset to the frame base it unwound. `inner(3)` was

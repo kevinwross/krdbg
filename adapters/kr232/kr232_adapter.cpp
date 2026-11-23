@@ -267,6 +267,14 @@ public:
             }
             efp = next;
         }
+        if (!frames.empty()) {
+            // Frame zero is where the program is, not where it will return to.
+            // Each chained frame stores a return address, so publishing those
+            // alone names the caller for the innermost frame: the panel said
+            // `main` while the program was inside a function main had called, and
+            // the locals it showed were the caller's.
+            frames.front().pc = machine_.pc();
+        }
         return frames;
     }
 
