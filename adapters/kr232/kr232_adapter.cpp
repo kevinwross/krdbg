@@ -27,6 +27,58 @@ constexpr unsigned kSp = 15;
 constexpr unsigned kEfp = 12;
 constexpr unsigned kFlags = 11;
 
+// The console page as a byte port: the guest writes OUT and reads IN, and the
+// debugger side consumes and supplies the same queue one byte at a time.
+class Kr232ComPort final : public IComPort {
+public:
+    explicit Kr232ComPort(kr232::Machine& machine) : machine_(machine) {}
+
+    ComPortStatus status() const override {
+        ComPortStatus status;
+        status.rx_ready = true;
+        status.tx_ready = true;
+        return status;
+    }
+    bool read_output(std::uint8_t& byte) override {
+        return machine_.devices().console_pop_output(byte);
+    }
+    bool write_input(std::uint8_t byte) override {
+        return machine_.devices().console_push_input(byte);
+    }
+    void clear_overrun() override {}
+
+private:
+    kr232::Machine& machine_;
+};
+
+// The committed frame, which is what FLIP last presented.
+class Kr232Video final : public IVideoSource {
+public:
+    explicit Kr232Video(const kr232::Machine& machine) : machine_(machine) {}
+
+    bool frame(FramebufferView& out) const override {
+        const kr232::Devices::Frame committed = machine_.devices().committed_frame();
+        if (!committed.enabled) {
+            return false;
+        }
+        const std::uint8_t* bytes = machine_.devices().frame_bytes();
+        if (bytes == nullptr) {
+            return false;
+        }
+        out.width = static_cast<int>(committed.width);
+        out.height = static_cast<int>(committed.height);
+        out.stride = static_cast<int>(committed.stride);
+        out.frame_number = committed.number;
+        out.pixels = std::span<const std::uint8_t>(
+            bytes + committed.offset,
+            static_cast<std::size_t>(committed.stride) * committed.height);
+        return true;
+    }
+    std::uint64_t framebuffer_base() const override { return 0xFC000000ULL; }
+
+private:
+    const kr232::Machine& machine_;
+};
 class Kr232Target final : public IDebugTarget {
 public:
     Kr232Target() : layout_(make_layout()) {}
@@ -209,6 +261,19 @@ public:
 
     kr232::Machine& machine() { return machine_; }
 
+    IComPort* com_port() override {
+        if (!com_) {
+            com_ = std::make_unique<Kr232ComPort>(machine_);
+        }
+        return com_.get();
+    }
+    const IVideoSource* video() const override {
+        if (!video_) {
+            video_ = std::make_unique<Kr232Video>(machine_);
+        }
+        return video_.get();
+    }
+
 private:
     static std::string hex(std::uint8_t value) {
         static const char* digits = "0123456789abcdef";
@@ -241,8 +306,8 @@ private:
         layout.pointer_bits = 32;
         layout.instruction_alignment = 1;
         layout.variable_instruction_length = true;
-        layout.has_framebuffer = false;
-        layout.has_com_port = false;
+        layout.has_framebuffer = true;
+        layout.has_com_port = true;
 
         RegisterGroup gpr;
         gpr.id = "gpr";
@@ -309,6 +374,8 @@ private:
     }
 
     TargetLayout layout_;
+    mutable std::unique_ptr<Kr232ComPort> com_;
+    mutable std::unique_ptr<Kr232Video> video_;
     kr232::Machine machine_;
     std::vector<std::uint8_t> image_;
     std::uint32_t base_ = 0;
