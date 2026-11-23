@@ -1,5 +1,7 @@
 #include "kr232_adapter.h"
 
+#include <krdbg/kdbg.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -338,9 +340,65 @@ bool load_image(const std::string& image_path, const Options& options,
         return false;
     }
     const bool container = bytes[0] == 'K' && bytes[1] == '2' && bytes[2] == '3' && bytes[3] == '2';
-    if (!container) {
-        error = "not a .k232 container or flat kernel image";
+    // Load the image first: the machine's memory is what the debugger reads, and a
+    // container that will not load must not appear in the target list.
+    std::uint32_t base = 0;
+    const auto read32 = [&](std::size_t at) -> std::uint32_t {
+        return static_cast<std::uint32_t>(bytes[at]) |
+               (static_cast<std::uint32_t>(bytes[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(bytes[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
+    };
+    if (container && bytes.size() >= 64) {
+        base = 0;  // a kernel image's container records base 0 (ADR 0058)
+    }
+    const kr232::LoadOutcome loaded = kr232::load_image(target->machine(), bytes, base);
+    if (!loaded.ok) {
+        error = loaded.error;
         return false;
+    }
+    // A `.k232` carries its debug payload in a `.kdbg` section; decoding it is what
+    // makes source-level stepping possible.
+    if (container && bytes.size() >= 64) {
+        const std::uint16_t count = static_cast<std::uint16_t>(
+            bytes[22] | (static_cast<std::uint16_t>(bytes[23]) << 8));
+        const std::uint32_t table = read32(32);
+        const std::uint32_t strings = read32(36);
+        for (std::uint16_t i = 0; i < count; ++i) {
+            const std::size_t record = static_cast<std::size_t>(table) + i * 32u;
+            if (record + 32u > bytes.size()) {
+                break;
+            }
+            const std::uint32_t name_offset = read32(record);
+            const std::uint32_t section_offset = read32(record + 12);
+            const std::uint32_t section_size = read32(record + 16);
+            const std::size_t name_at = static_cast<std::size_t>(strings) + name_offset;
+            if (name_at >= bytes.size()) {
+                continue;
+            }
+            std::string name;
+            for (std::size_t at = name_at; at < bytes.size() && bytes[at] != 0; ++at) {
+                name.push_back(static_cast<char>(bytes[at]));
+            }
+            if (name != ".kdbg") {
+                continue;
+            }
+            if (static_cast<std::size_t>(section_offset) + section_size > bytes.size()) {
+                error = "the .kdbg section runs past the container";
+                return false;
+            }
+            DebugInfo info;
+            std::string decode_error;
+            if (!kdbg::read_payload(
+                    std::span<const std::uint8_t>(bytes.data() + section_offset, section_size),
+                    info, decode_error)) {
+                error = "the .kdbg payload: " + decode_error;
+                return false;
+            }
+            program.info = std::move(info);
+            program.debug_path = DebugPath::Kdbg;
+            break;
+        }
     }
     program.target = std::move(target);
     return true;
