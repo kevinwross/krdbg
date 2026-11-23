@@ -100,4 +100,17 @@ if find . -name 'SDL2.dll' -print -quit | grep -q .; then
 fi
 echo "no SDL2.dll in the tree"
 
+# The render goldens must not depend on the linked layout, so the suite also runs
+# with two IDebugTarget adapters built in: adding one shifts every address in the
+# binary and the surface tests compare pixels. ctest picks the right invocation,
+# which excludes the x64 golden comparison when the host is ARM64.
+echo "== two adapters"
+cmake -S . -B build/two-adapters -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+    -DKRDBG_KR216_ADAPTER=ON -DKRDBG_KR232_ADAPTER=ON
+cmake --build build/two-adapters --target krdbg_tests
+if ! ctest --test-dir build/two-adapters --output-on-failure; then
+    echo "the two-adapter suite failed" >&2
+    exit 1
+fi
+
 echo "GATE $label: PASS"
