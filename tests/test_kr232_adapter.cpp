@@ -277,3 +277,54 @@ KRDBG_TEST(kr232_adapter_reloads_and_refuses_garbage) {
     CHECK(!reject_error.empty());
     std::filesystem::remove(garbage);
 }
+KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
+                               "/tests/fixtures/kr232/nested_frames.k232";
+    if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.info.has_value());
+    if (!loaded.info.has_value()) {
+        return;
+    }
+
+    // Stop at the entry of `inner`, so the stack holds main's frame and inner's.
+    std::uint64_t inner_begin = 0;
+    std::uint64_t main_begin = 0;
+    for (const krdbg::FunctionInfo& function : loaded.info->functions) {
+        if (function.name == "inner") {
+            inner_begin = function.begin;
+        } else if (function.name == "main") {
+            main_begin = function.begin;
+        }
+    }
+    CHECK(inner_begin != 0U);
+    CHECK(main_begin != 0U);
+    if (inner_begin == 0U || main_begin == 0U) {
+        return;
+    }
+
+    auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+    std::unique_ptr<krdbg::IDebugTarget> owned = std::move(loaded.target);
+    krdbg::IDebugTarget* raw = owned.get();
+    krdbg::DebugSession session(std::move(owned), loaded.info, reload);
+    session.add_address_breakpoint(inner_begin);
+    (void)session.run(1000000);
+    CHECK_EQ(session.pc(), inner_begin);
+    // Step past ENTER so inner's frame exists on the stack.
+    (void)raw->step_instruction();
+
+    // Two frames, the inner one first, and the caller's return address inside main.
+    const std::vector<krdbg::RawFrame> frames = raw->unwind();
+    CHECK(frames.size() >= 2U);
+    if (frames.size() < 2U) {
+        return;
+    }
+    CHECK(frames[0].frame_base != 0U);
+    CHECK(frames[1].frame_base != 0U);
+    CHECK(frames[0].frame_base != frames[1].frame_base);
+
+}

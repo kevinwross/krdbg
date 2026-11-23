@@ -25,6 +25,9 @@ constexpr std::uint32_t kDeviceEnd = 0xFFFF0000u;
 constexpr unsigned kPc = 14;
 constexpr unsigned kSp = 15;
 constexpr unsigned kEfp = 12;
+// The frame chain the ABI builds with ENTER and LEAVE is the FP register; EFP
+// belongs to trap frames, not to calls.
+constexpr unsigned kFramePointer = 13;
 constexpr unsigned kFlags = 11;
 
 // The console page as a byte port: the guest writes OUT and reads IN, and the
@@ -242,7 +245,7 @@ public:
     }
     std::vector<RawFrame> unwind() const override {
         std::vector<RawFrame> frames;
-        std::uint32_t efp = machine_.reg(kEfp);
+        std::uint32_t efp = machine_.reg(kFramePointer);
         while (efp != 0 && frames.size() < 64) {
             RawFrame frame;
             frame.frame_base = efp;
