@@ -1,6 +1,8 @@
 #include "test_framework.h"
 
 #include <filesystem>
+#include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <string>
 
@@ -328,4 +330,77 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[0].frame_base != frames[1].frame_base);
 
 
+}
+namespace {
+
+std::uint64_t mix(std::uint64_t hash, std::uint64_t value) {
+    for (unsigned i = 0; i < 8; ++i) {
+        hash ^= (value >> (8 * i)) & 0xFFu;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::string format_hash(std::uint64_t hash) {
+    char buffer[24] = {};
+    std::snprintf(buffer, sizeof(buffer), "%016llX",
+                  static_cast<unsigned long long>(hash));
+    return buffer;
+}
+
+} // namespace
+
+KRDBG_TEST(kr232_adapter_loaded_state_matches_the_golden) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
+                               "/tests/fixtures/kr232/nested_frames.k232";
+    if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+
+    // What a loaded image means for this adapter: the PC, the sixteen general
+    // registers, the four FP registers, the flags, and the first page of memory
+    // (the vectors and the code the debugger will disassemble).
+    std::uint64_t hash = 14695981039346656037ULL;
+    hash = mix(hash, loaded.target->pc());
+    for (int index = 0; index < 16; ++index) {
+        krdbg::ScalarValue value;
+        if (loaded.target->read_value("gpr", index, value)) {
+            hash = mix(hash, value.bits);
+        }
+    }
+    for (int index = 0; index < 4; ++index) {
+        krdbg::ScalarValue value;
+        if (loaded.target->read_value("fpr", index, value)) {
+            hash = mix(hash, value.bits);
+        }
+    }
+    std::uint64_t flags = 0;
+    if (loaded.target->read_flags(flags)) {
+        hash = mix(hash, flags);
+    }
+    std::uint8_t page[256] = {};
+    if (loaded.target->read_memory(0, page)) {
+        for (std::uint8_t byte : page) {
+            hash = mix(hash, byte);
+        }
+    }
+    const std::string text = format_hash(hash);
+    const std::string path = std::string(KRDBG_GOLDEN_DIR) + "/kr232-loaded.hash";
+
+    // The first run records the value; later runs assert it. Recording is what
+    // makes the golden reviewable -- a later reader sees a recorded number, not a
+    // check that would accept whatever the code produced.
+    std::ifstream existing(path);
+    if (!existing) {
+        std::ofstream record(path);
+        record << text << "\n";
+        CHECK(false);  // recorded: run again to assert
+        return;
+    }
+    std::string golden;
+    std::getline(existing, golden);
+    CHECK_EQ(golden, text);
 }
