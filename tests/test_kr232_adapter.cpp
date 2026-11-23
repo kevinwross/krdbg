@@ -568,3 +568,41 @@ KRDBG_TEST(kr232_adapter_reports_kernel_support) {
     CHECK(!ok);
     CHECK(!error.empty());
 }
+
+KRDBG_TEST(kr232_adapter_steps_a_kernel_program_through_a_syscall) {
+    // The debugger loads the kernel, then the program it will enter, and steps
+    // the program: its syscall leaves user mode, the kernel serves it, and the
+    // program exits with the status the kernel returned.
+    const std::string root = std::string(KRDBG_SOURCE_ROOT) + "/tests/fixtures/kr232/";
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const bool ok = krdbg::kr232adapter::load_kernel(root + "kernel.k232",
+                                                     root + "userprint.k232",
+                                                     {}, loaded, error);
+    CHECK(ok);
+    if (!ok) {
+        return;
+    }
+    CHECK(loaded.info.has_value());
+    CHECK(loaded.target != nullptr);
+    if (loaded.target == nullptr) {
+        return;
+    }
+
+    // The kernel's entry is in kernel RAM; the program it enters is not.
+    CHECK(loaded.target->pc() < 0x08000000u);
+    auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+    std::unique_ptr<krdbg::IDebugTarget> owned = std::move(loaded.target);
+    krdbg::IDebugTarget* raw = owned.get();
+    krdbg::DebugSession session(std::move(owned), loaded.info, reload);
+    const krdbg::StopResult stopped = session.run(1000000);
+    CHECK(stopped.kind == krdbg::StopKind::Halted);
+    // The program prints through the table and exits 3; the machine halts on SYS 0.
+    krdbg::ScalarValue status;
+    CHECK(raw->read_value("gpr", 2, status));
+    CHECK_EQ(status.bits & 0xFFu, 3u);
+    // Both images are in one machine: the kernel at 0, the program in user RAM.
+    krdbg::InstructionView view;
+    CHECK(raw->disassemble(0x08000000u, view));
+    CHECK(!view.mnemonic.empty());
+}
