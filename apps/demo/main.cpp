@@ -263,7 +263,7 @@ void print_usage() {
         "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
         "[--kr32-os] [--kr16 <image.kex>] [--kr216 <image.k216>] [--kr232 <image.k232>] "
         "[--load <source-or-image>] "
-        "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216] "
+        "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216|kr232] "
         "[--source-root <dir>] [--kernel] [--reset] [--version] "
         "[--frames <n>]\n");
 }
