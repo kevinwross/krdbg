@@ -14,6 +14,10 @@
 #endif
 #include <windows.h>
 #include <windowsx.h>
+#include <commdlg.h>
+
+// The LOAD button's picker comes from comdlg32.
+#pragma comment(lib, "comdlg32.lib")
 
 #include <deque>
 #include <string>
@@ -492,8 +496,30 @@ std::unique_ptr<IVideoWindow> create_video_window() {
 }
 
 bool open_file_dialog(std::string& path) {
-    (void)path;
-    return false;
+    // The picker the LOAD button needs: a native dialog filtered to the image
+    // types this build can load. A cancelled dialog is a refusal, not an error.
+    wchar_t buffer[4096] = {};
+    OPENFILENAMEW dialog = {};
+    dialog.lStructSize = sizeof dialog;
+    dialog.lpstrFilter =
+        L"Machine images\0*.k232;*.kex;*.k32;*.k216;*.bin\0All files\0*.*\0";
+    dialog.lpstrFile = buffer;
+    dialog.nMaxFile = static_cast<DWORD>(std::size(buffer));
+    dialog.lpstrTitle = L"Load a program";
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameW(&dialog) == FALSE) {
+        return false;
+    }
+    const int length =
+        WideCharToMultiByte(CP_UTF8, 0, buffer, -1, nullptr, 0, nullptr, nullptr);
+    if (length <= 1) {
+        return false;
+    }
+    std::string text(static_cast<std::size_t>(length), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, buffer, -1, text.data(), length, nullptr, nullptr);
+    text.resize(static_cast<std::size_t>(length - 1));
+    path = std::move(text);
+    return true;
 }
 
 std::string clipboard_text() {

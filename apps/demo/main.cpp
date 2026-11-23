@@ -174,6 +174,10 @@ public:
             error = "LOAD needs a host-provided path";
             return false;
         }
+        std::string chosen;
+        if (krdbg::platform::open_file_dialog(chosen)) {
+            return load_callback(chosen, error);
+        }
         const std::string configured = environment_value("KRDBG_LOAD_PATH");
         if (configured.empty()) {
             error = "no file picker in this host; pass --load <path> or set "
