@@ -124,3 +124,45 @@ KRDBG_TEST(kr232_adapter_steps_runs_and_keeps_k_and_i) {
     CHECK(loaded.target->set_pc(entry));
     CHECK_EQ(loaded.target->pc(), entry);
 }
+
+KRDBG_TEST(kr232_adapter_advances_by_decoded_length) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, loaded, error)) {
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+
+    // Place a one-byte `ret` followed by a two-byte store in scratch kernel RAM.
+    // The disassembler must advance by the decoded length, so the byte after `ret`
+    // is the next instruction rather than the middle of a guess.
+    const std::uint64_t scratch = 0x400;
+    const std::uint8_t code[] = {0x70, 0x8F, 0x32};
+    CHECK(loaded.target->write_memory(scratch, code));
+
+    krdbg::InstructionView view;
+    CHECK(loaded.target->disassemble(scratch, view));
+    CHECK(view.mnemonic == "ret");
+    CHECK_EQ(view.length, 1U);
+
+    krdbg::InstructionView next;
+    CHECK(loaded.target->disassemble(scratch + 1, next));
+    CHECK(next.mnemonic == "st");
+    CHECK_EQ(next.length, 2U);
+
+    // And a walk from the entry advances by at least one byte at every step.
+    std::uint64_t address = scratch;
+    bool saw_long = false;
+    for (int step = 0; step < 64; ++step) {
+        krdbg::InstructionView step_view;
+        if (!loaded.target->disassemble(address, step_view)) {
+            break;
+        }
+        CHECK(step_view.length >= 1U);
+        if (step_view.length > 1U) {
+            saw_long = true;
+        }
+        address += step_view.length;
+    }
+    CHECK(saw_long);
+}
