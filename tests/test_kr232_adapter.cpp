@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "kr232_adapter.h"
 #include "krdbg/session.h"
@@ -328,6 +329,12 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[0].frame_base != 0U);
     CHECK(frames[1].frame_base != 0U);
     CHECK(frames[0].frame_base != frames[1].frame_base);
+    // The inner frame's return address lands inside main; the outer frame is the
+    // entry stub, which is placed before main, so its pc is above the entry and
+    // below main's first instruction.
+    CHECK(frames[0].pc >= main_begin);
+    CHECK(frames[1].pc != 0U);
+    CHECK(frames[1].pc < main_begin);
 
 
 }
