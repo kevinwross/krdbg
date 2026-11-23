@@ -249,6 +249,10 @@ if(KRDBG_KR216_ADAPTER)
     target_link_libraries(krdbg_demo PRIVATE krdbg_kr216)
     target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR216=1)
 endif()
+if(KRDBG_KR232_ADAPTER)
+    target_link_libraries(krdbg_demo PRIVATE krdbg_kr232)
+    target_compile_definitions(krdbg_demo PRIVATE KRDBG_HAVE_KR232=1)
+endif()
 
 # External tool contract: schema and values as JSON without the UI.
 add_executable(krdbg_settings apps/settings_cli/main.cpp)

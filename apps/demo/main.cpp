@@ -25,6 +25,9 @@
 #if defined(KRDBG_HAVE_KR216)
 #include "kr216_adapter.h"
 #endif
+#if defined(KRDBG_HAVE_KR232)
+#include "kr232_adapter.h"
+#endif
 
 #include "fake_debug_info.h"
 #include "fake_target.h"
@@ -229,6 +232,7 @@ struct Options {
     bool kr32_os = false;
     std::string kr16_image;
     std::string kr216_image;
+    std::string kr232_image;
     std::string load_path;
     std::string toolchain;
     std::string build_target = "kr32";
@@ -258,6 +262,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.kr32_image = argv[++index];
         } else if (argument == "--kr32-os") {
             options.kr32_os = true;
+        } else if (argument == "--kr232" && index + 1 < argc) {
+            options.kr232_image = argv[++index];
         } else if (argument == "--kernel") {
             options.kernel = true;
         } else if (argument == "--reset") {
