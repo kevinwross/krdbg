@@ -600,6 +600,17 @@ KRDBG_TEST(surface_memory_address_editing_commits_a_new_base) {
     CHECK(scene.render_hash() != before);
 }
 
+// The source panel's OVER button asks for a line step. It must move the program
+// counter: a button that reports nothing and changes nothing is what makes a
+// reader conclude that source stepping is broken while instruction stepping
+// works.
+KRDBG_TEST(surface_source_over_button_steps_a_line) {
+    krdbg::test::TestScene scene(true);
+    const std::uint64_t before = scene.session->pc();
+    const krdbg::Rect over = scene.surface->layout().source_over;
+    CHECK(scene.click(center_x(over), center_y(over)));
+    CHECK(scene.session->pc() != before);
+}
 KRDBG_TEST(surface_context_menu_opens_and_closes) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect source = scene.surface->layout().source;

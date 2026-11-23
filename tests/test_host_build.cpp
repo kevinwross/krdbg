@@ -145,6 +145,23 @@ KRDBG_TEST(host_build_chain_builds_c_cpp_and_s) {
             CHECK(stopped.kind == krdbg::StopKind::Retired ||
                   stopped.kind == krdbg::StopKind::Halted);
             CHECK(!session.info().functions.empty());
+            // A line step is what the UI's OVER button and F10 ask for: it must
+            // retire and move the program counter, or stepping is a no-op in the
+            // debugger however well the adapter steps.
+            const std::uint64_t before = session.pc();
+            const krdbg::StopResult stepped =
+                session.step(krdbg::StepMode::LineOver);
+            CHECK(stepped.kind == krdbg::StopKind::Retired);
+            CHECK(session.pc() != before);
+            // From the entry point, where the debugger starts and where a reader
+            // first presses OVER, the program counter is inside the start-up
+            // routine: a line step must leave it there for a later line rather
+            // than report success at the same address.
+            const std::uint64_t entry = session.pc();
+            const krdbg::StopResult first =
+                session.step(krdbg::StepMode::LineOver);
+            CHECK(first.kind == krdbg::StopKind::Retired);
+            CHECK(session.pc() != entry);
         }
     }
 #endif
@@ -208,6 +225,23 @@ KRDBG_TEST(host_build_chain_builds_c_cpp_and_s) {
             CHECK(stopped.kind == krdbg::StopKind::Retired ||
                   stopped.kind == krdbg::StopKind::Halted);
             CHECK(!session.info().functions.empty());
+            // A line step is what the UI's OVER button and F10 ask for: it must
+            // retire and move the program counter, or stepping is a no-op in the
+            // debugger however well the adapter steps.
+            const std::uint64_t before = session.pc();
+            const krdbg::StopResult stepped =
+                session.step(krdbg::StepMode::LineOver);
+            CHECK(stepped.kind == krdbg::StopKind::Retired);
+            CHECK(session.pc() != before);
+            // From the entry point, where the debugger starts and where a reader
+            // first presses OVER, the program counter is inside the start-up
+            // routine: a line step must leave it there for a later line rather
+            // than report success at the same address.
+            const std::uint64_t entry = session.pc();
+            const krdbg::StopResult first =
+                session.step(krdbg::StepMode::LineOver);
+            CHECK(first.kind == krdbg::StopKind::Retired);
+            CHECK(session.pc() != entry);
         }
     }
 #endif
