@@ -171,6 +171,23 @@ if(KRDBG_KR216_ADAPTER)
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr216")
 endif()
 
+
+# Optional kr232 adapter, by the same rule: OFF by default, and ON with a missing
+# tree stops configuration naming the expected path.
+option(KRDBG_KR232_ADAPTER "Build the optional kr232 IDebugTarget adapter" OFF)
+set(KRDBG_KR232_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../kr232" CACHE PATH
+    "kr232 source tree for KRDBG_KR232_ADAPTER=ON")
+if(KRDBG_KR232_ADAPTER)
+    if(NOT EXISTS "${KRDBG_KR232_ROOT}/CMakeLists.txt" OR
+       NOT EXISTS "${KRDBG_KR232_ROOT}/include/kr232/machine.h")
+        message(FATAL_ERROR
+            "KRDBG_KR232_ADAPTER=ON expects the kr232 source tree at "
+            "'${KRDBG_KR232_ROOT}' (CMakeLists.txt and "
+            "include/kr232/machine.h). Set KRDBG_KR232_ROOT to that tree; "
+            "krdbg never vendors or guesses kr232.")
+    endif()
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr232")
+endif()
 add_library(krdbg_ui STATIC
     src/ui/canvas.cpp
     src/ui/embedded_fonts.cpp
