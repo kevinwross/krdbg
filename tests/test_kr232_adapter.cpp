@@ -319,6 +319,7 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK_EQ(session.pc(), inner_begin);
     // Step past ENTER so inner's frame exists on the stack.
     (void)raw->step_instruction();
+    (void)raw->step_instruction();  // past the parameter store, too
 
     // Two frames, the inner one first, and the caller's return address inside main.
     const std::vector<krdbg::RawFrame> frames = raw->unwind();
@@ -335,6 +336,8 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[0].pc >= main_begin);
     CHECK(frames[1].pc != 0U);
     CHECK(frames[1].pc < main_begin);
+
+
 
 
 }
