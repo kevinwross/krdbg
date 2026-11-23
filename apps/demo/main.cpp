@@ -596,7 +596,8 @@ int main(int argc, char** argv) {
         surface.set_program_info(krdbg::ProgramInfo{path, name, entry, true});
         surface.resize(surface.width(), surface.height());
     };
-#if defined(KRDBG_HAVE_KR16) || defined(KRDBG_HAVE_KR32) || defined(KRDBG_HAVE_KR216)
+#if defined(KRDBG_HAVE_KR16) || defined(KRDBG_HAVE_KR32) || defined(KRDBG_HAVE_KR216) || \
+    defined(KRDBG_HAVE_KR232)
     const auto load_any = [&](const std::string& path, std::string& error) {
         namespace fs = std::filesystem;
         if (path.empty()) {
@@ -640,6 +641,8 @@ int main(int argc, char** argv) {
             target_name = "kr32";
         } else if (lower.ends_with(".k216")) {
             target_name = "kr216";
+        } else if (lower.ends_with(".k232")) {
+            target_name = "kr232";
         }
 
         if (target_name == "kr16") {
@@ -682,6 +685,20 @@ int main(int argc, char** argv) {
             session->replace_target(std::move(loaded.target), loaded.info);
 #else
             error = "this build has no kr216 adapter";
+            return false;
+#endif
+        } else if (target_name == "kr232") {
+#if defined(KRDBG_HAVE_KR232)
+            krdbg::kr232adapter::LoadedProgram loaded;
+            krdbg::kr232adapter::Options adapter_options;
+            adapter_options.source_roots = {options.source_root};
+            if (!krdbg::kr232adapter::load_image(image_path, adapter_options,
+                                                 loaded, error)) {
+                return false;
+            }
+            session->replace_target(std::move(loaded.target), loaded.info);
+#else
+            error = "this build has no kr232 adapter";
             return false;
 #endif
         } else {
