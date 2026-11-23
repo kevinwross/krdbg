@@ -3405,7 +3405,20 @@ void DebuggerSurface::tick() {
     if (!impl_->running || !impl_->program.loaded) {
         return;
     }
-    const StopResult result = impl_->session->run(10000);
+    // The screen updates once per frame, so this is how many instructions run
+    // between updates. Ten thousand was hard-coded and made a long-running program
+    // look stuck; the slice is a setting now, beside the instruction limit.
+    std::int64_t slice = 100000;
+    const SettingsSnapshot live = impl_->host->settings_values();
+    const auto found = live.values.find("time_slice");
+    if (found != live.values.end()) {
+        if (const auto* value = std::get_if<std::int64_t>(&found->second)) {
+            if (*value > 0) {
+                slice = *value;
+            }
+        }
+    }
+    const StopResult result = impl_->session->run(static_cast<std::uint64_t>(slice));
     if (result.kind != StopKind::Budget) {
         impl_->running = false;
     }

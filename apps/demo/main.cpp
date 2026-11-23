@@ -82,7 +82,19 @@ public:
         ram_setting.unit = "MiB";
         ram_setting.requires_restart = true;
         schema.settings.push_back(ram_setting);
-        krdbg::SettingDescriptor limit_setting;
+        krdbg::SettingDescriptor slice_setting;
+    slice_setting.id = "time_slice";
+    slice_setting.group = "run";
+    slice_setting.label = "Time slice";
+    slice_setting.description = "Instructions between screen updates while running.";
+    slice_setting.type = krdbg::SettingType::Int;
+    slice_setting.default_json = "100000";
+    slice_setting.has_range = true;
+    slice_setting.min = 1000;
+    slice_setting.max = 100000000;
+    slice_setting.step = 1000;
+    slice_setting.unit = "instructions";
+    krdbg::SettingDescriptor limit_setting;
         limit_setting.id = "limit";
         limit_setting.group = "run";
         limit_setting.label = "Instruction limit";
@@ -93,6 +105,7 @@ public:
         limit_setting.min = 1000;
         limit_setting.max = 100000000;
         schema.settings.push_back(limit_setting);
+    schema.settings.push_back(slice_setting);
         krdbg::SettingDescriptor env_setting;
         env_setting.id = "env";
         env_setting.group = "environment";
