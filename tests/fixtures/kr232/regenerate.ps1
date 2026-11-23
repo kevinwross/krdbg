@@ -23,7 +23,7 @@ if ($LASTEXITCODE -ne 0) { throw 'crt0 failed' }
 
 function Build-Fixture([string] $name, [string[]] $objects) {
     $inputs = @((Join-Path $work 'crt0.o')) + $objects
-    & $krld --entry=_start @inputs -o (Join-Path $PSScriptRoot $name)
+    & $krld "--source-root=$sources" --entry=_start @inputs -o (Join-Path $PSScriptRoot $name)
     if ($LASTEXITCODE -ne 0) { throw "$name failed" }
     Write-Host "wrote $name"
 }
