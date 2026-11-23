@@ -495,6 +495,47 @@ int main(int argc, char** argv) {
         }
     }
 #endif
+#if defined(KRDBG_HAVE_KR232)
+    if (!session && !options.kr232_image.empty()) {
+        krdbg::kr232adapter::LoadedProgram loaded;
+        krdbg::kr232adapter::Options adapter_options;
+        adapter_options.source_roots = {options.source_root};
+        std::string error;
+        if (!krdbg::kr232adapter::load_image(options.kr232_image,
+                                             adapter_options, loaded, error)) {
+            std::fprintf(stderr, "krdbg: kr232 load failed: %s\n",
+                         error.c_str());
+            return 1;
+        }
+        const std::string name =
+            std::filesystem::path(options.kr232_image).filename().string();
+        real_program = krdbg::ProgramInfo{
+            options.kr232_image, name, loaded.target->pc(), true};
+        // No reload callback: the adapter reloads from the image it loaded, so a
+        // fresh target carries the same memory and the same computed entry.
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(loaded.target), loaded.info,
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+        const krdbg::DebugInfo& info = session->info();
+        for (std::size_t index = 0; index < info.functions.size(); ++index) {
+            if (info.functions[index].name != "main") {
+                continue;
+            }
+            std::uint64_t first_line = 0;
+            for (const krdbg::LineInfo& line : info.lines) {
+                if (line.function == index &&
+                    (first_line == 0 || line.address < first_line)) {
+                    first_line = line.address;
+                }
+            }
+            if (first_line != 0) {
+                session->run_to_address(first_line);
+                real_program->entry = session->pc();
+            }
+            break;
+        }
+    }
+#endif
     if (!session) {
         auto target =
             std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
