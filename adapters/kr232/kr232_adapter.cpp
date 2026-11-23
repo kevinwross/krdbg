@@ -58,7 +58,9 @@ public:
 
     bool frame(FramebufferView& out) const override {
         const kr232::Devices::Frame committed = machine_.devices().committed_frame();
-        if (!committed.enabled) {
+        // `enabled` is the presentation bit the control register sets; a debugger
+        // shows what the guest committed, so the geometry and the pixels decide.
+        if (committed.width == 0 || committed.height == 0) {
             return false;
         }
         const std::uint8_t* bytes = machine_.devices().frame_bytes();
