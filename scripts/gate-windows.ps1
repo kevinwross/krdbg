@@ -104,4 +104,12 @@ if ($sdl) {
 }
 Write-Host "no SDL2.dll dependency and no SDL2.dll in the tree"
 
+# The render goldens must not depend on the linked layout, so the suite also
+# runs with two IDebugTarget adapters built in: adding an adapter shifts every
+# address in the binary, and the surface tests compare pixels.
+Write-Host "== two adapters"
+Invoke-Checked "two adapters" {
+    & (Join-Path $PSScriptRoot 'check-two-adapters.ps1')
+}
+
 Write-Host 'GATE WINDOWS: PASS'
