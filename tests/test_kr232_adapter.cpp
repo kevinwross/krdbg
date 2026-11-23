@@ -497,3 +497,39 @@ KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
     }
     CHECK(saw_local);
 }
+
+KRDBG_TEST(kr232_adapter_line_breakpoints_survive_a_reload) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
+                               "/tests/fixtures/kr232/nested_frames.k232";
+    if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.info.has_value());
+    if (!loaded.info.has_value() || loaded.info->lines.empty()) {
+        return;
+    }
+    const std::string source = loaded.info->sources.front().path;
+    const int line = loaded.info->lines.front().line;
+    const std::uint64_t address = loaded.info->lines.front().address;
+
+    // Reloading rebuilds the machine from the image the debugger opened; the
+    // breakpoint is a line, so it must resolve again against the new payload.
+    auto reload = [](krdbg::IDebugTarget& target, std::string& reload_error) {
+        return target.reset(reload_error);
+    };
+    krdbg::DebugSession session(std::move(loaded.target), loaded.info, reload);
+    session.add_line_breakpoint(source, line);
+    (void)session.run(1000000);
+    CHECK_EQ(session.pc(), address);
+
+    CHECK(session.restart(error));
+    CHECK_EQ(session.breakpoints().size(), 1U);
+    CHECK_EQ(session.pc(), session.info().lines.front().address);
+    const krdbg::StopResult again = session.run(1000000);
+    CHECK(again.kind == krdbg::StopKind::Retired ||
+          again.kind == krdbg::StopKind::Halted);
+    CHECK_EQ(session.pc(), address);
+}
