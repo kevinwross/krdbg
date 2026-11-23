@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 
 #include <kr232/decoder.h>
 #include <kr232/loader.h>
@@ -482,6 +484,36 @@ bool load_image(const std::string& image_path, const Options& options,
                     info, decode_error)) {
                 error = "the .kdbg payload: " + decode_error;
                 return false;
+            }
+            // A source path in the payload is usually relative to the build's
+            // source root. Resolve it against the image's own directory first,
+            // then the configured roots, and leave it alone when nothing matches
+            // -- a resolved path that does not exist is worse than an unresolved
+            // one, because the UI would open a file that is not there.
+            const std::filesystem::path image_dir =
+                std::filesystem::path(image_path).parent_path();
+            for (SourceFile& source : info.sources) {
+                if (source.path.empty()) {
+                    continue;
+                }
+                const std::filesystem::path candidate(source.path);
+                if (candidate.is_absolute()) {
+                    continue;
+                }
+                std::vector<std::filesystem::path> roots{image_dir};
+                for (const std::string& root : options.source_roots) {
+                    if (!root.empty()) {
+                        roots.emplace_back(root);
+                    }
+                }
+                for (const std::filesystem::path& root : roots) {
+                    std::error_code ec;
+                    const std::filesystem::path resolved = root / candidate;
+                    if (std::filesystem::exists(resolved, ec) && !ec) {
+                        source.path = resolved.string();
+                        break;
+                    }
+                }
             }
             program.info = std::move(info);
             program.debug_path = DebugPath::Kdbg;
