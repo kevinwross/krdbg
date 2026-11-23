@@ -302,6 +302,13 @@ if(KRDBG_BUILD_TESTS)
             KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kex"
             KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
     endif()
+    if(KRDBG_KR232_ADAPTER)
+        target_sources(krdbg_tests PRIVATE tests/test_kr232_adapter.cpp)
+        target_link_libraries(krdbg_tests PRIVATE krdbg_kr232)
+        target_compile_definitions(krdbg_tests PRIVATE
+            KRDBG_HAVE_KR232=1
+            KRDBG_KR232_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.k232")
+    endif()
     if(KRDBG_KR216_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr216_adapter.cpp)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr216)
