@@ -196,8 +196,12 @@ KRDBG_TEST(surface_source_gutter_controls_switch_and_pin) {
     CHECK(scene.click(source.x + 10, source.y + 28 + 4 * 16 + 8));
     std::vector<krdbg::BreakpointView> breakpoints = scene.session->breakpoints();
     CHECK_EQ(breakpoints.size(), 1U);
-    CHECK(breakpoints[0].has_line);
-    CHECK_EQ(breakpoints[0].line, 5);
+    // Guard the index: a failed precondition must report as a check, not crash
+    // the whole suite in the debug STL's bounds assertion.
+    if (breakpoints.size() == 1U) {
+        CHECK(breakpoints[0].has_line);
+        CHECK_EQ(breakpoints[0].line, 5);
+    }
     CHECK(scene.click(source.x + 10, source.y + 28 + 4 * 16 + 8));
     CHECK_EQ(scene.session->breakpoints().size(), 0U);
 
