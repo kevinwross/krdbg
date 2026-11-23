@@ -311,6 +311,7 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     }
 
     auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+    const krdbg::DebugInfo loaded_info = *loaded.info;
     std::unique_ptr<krdbg::IDebugTarget> owned = std::move(loaded.target);
     krdbg::IDebugTarget* raw = owned.get();
     krdbg::DebugSession session(std::move(owned), loaded.info, reload);
@@ -339,6 +340,29 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     CHECK(frames[0].pc >= main_begin);
     CHECK(frames[1].pc != 0U);
     CHECK(frames[1].pc < main_begin);
+
+    // The local's value, read where the payload says it lives: the debugger adds
+    // the variable's frame offset to the frame base it unwound. `inner(3)` was
+    // called, so the slot holds 3.
+    std::int64_t local_offset = 0;
+    for (const krdbg::VariableInfo& variable : loaded_info.variables) {
+        if (variable.location.kind == krdbg::LocationKind::FrameOffset) {
+            local_offset = variable.location.frame_offset;
+        }
+    }
+    CHECK_EQ(local_offset, -4);
+    if (local_offset != 0) {
+        const std::uint64_t address =
+            static_cast<std::uint64_t>(static_cast<std::int64_t>(frames[0].frame_base) +
+                                       local_offset);
+        std::uint8_t bytes[4] = {};
+        CHECK(raw->read_memory(address, bytes));
+        const std::uint32_t value = static_cast<std::uint32_t>(bytes[0]) |
+                                    (static_cast<std::uint32_t>(bytes[1]) << 8) |
+                                    (static_cast<std::uint32_t>(bytes[2]) << 16) |
+                                    (static_cast<std::uint32_t>(bytes[3]) << 24);
+        CHECK_EQ(value, 3U);
+    }
 
 
 
