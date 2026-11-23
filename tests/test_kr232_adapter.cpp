@@ -80,3 +80,47 @@ KRDBG_TEST(kr232_adapter_reads_registers_and_disassembles) {
     CHECK(view.length >= 1);
     CHECK(!view.mnemonic.empty());
 }
+
+KRDBG_TEST(kr232_adapter_steps_runs_and_keeps_k_and_i) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, loaded, error)) {
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+
+    const std::uint64_t entry = loaded.target->pc();
+    CHECK(entry != 0U);
+
+    // One step retires exactly one instruction.
+    const krdbg::StopResult stepped = loaded.target->step_instruction();
+    CHECK(stepped.kind == krdbg::StopKind::Retired);
+    CHECK(loaded.target->instructions_executed() >= 1U);
+
+    // Running to the end halts, and the halt is reported as such.
+    const krdbg::StopResult ran = loaded.target->run(1000000);
+    CHECK(ran.kind == krdbg::StopKind::Halted);
+    CHECK(loaded.target->halted());
+
+    // A register write is visible to a read.
+    krdbg::ScalarValue value;
+    value.bits = 0x1234;
+    value.width = 32;
+    CHECK(loaded.target->write_value("gpr", 6, value));
+    CHECK(loaded.target->read_value("gpr", 6, value));
+    CHECK_EQ(value.bits, 0x1234U);
+
+    // K and I are hardware-owned. The machine starts in kernel mode with
+    // interrupts known, and a debugger write must not change either.
+    std::uint64_t before = 0;
+    CHECK(loaded.target->read_flags(before));
+    CHECK(loaded.target->write_flags(0));
+    std::uint64_t after = 0;
+    CHECK(loaded.target->read_flags(after));
+    CHECK_EQ(after & 0x40U, before & 0x40U);  // K unchanged
+    CHECK_EQ(after & 0x10U, before & 0x10U);  // I unchanged
+
+    // Setting the PC moves it.
+    CHECK(loaded.target->set_pc(entry));
+    CHECK_EQ(loaded.target->pc(), entry);
+}
