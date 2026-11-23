@@ -118,6 +118,34 @@ KRDBG_TEST(host_build_chain_builds_c_cpp_and_s) {
         }
     }
 
+
+#if defined(KRDBG_HAVE_KR232)
+    // kr232 builds through the same chain: the prefix must be installed at the
+    // revision the log records, or this returns without proving anything.
+    const krdbg::host::BuildResult built = chain.build(
+        source_root() / "tests" / "fixtures" / "kr232" / "host_build.c",
+        build_options("kr232", root));
+    CHECK(built.ok);
+    if (built.ok) {
+        krdbg::kr232adapter::LoadedProgram loaded;
+        krdbg::kr232adapter::Options adapter_options;
+        adapter_options.source_roots = {root};
+        CHECK(krdbg::kr232adapter::load_image(built.image.string(),
+                                             adapter_options, loaded, error));
+        CHECK(loaded.info.has_value());
+        if (loaded.info.has_value() && !loaded.info->lines.empty()) {
+            const std::string source_path = loaded.info->sources.front().path;
+            auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+            krdbg::DebugSession session(std::move(loaded.target), loaded.info, reload);
+            const krdbg::StopResult stopped =
+                session.run_to_line(source_path, 3);
+            CHECK(stopped.kind == krdbg::StopKind::Retired ||
+                  stopped.kind == krdbg::StopKind::Halted);
+            CHECK(!session.info().functions.empty());
+        }
+    }
+#endif
+
     const std::filesystem::path cpp_source =
         std::filesystem::path("build") / "m5-host" / "hello.cpp";
     std::filesystem::create_directories(cpp_source.parent_path());

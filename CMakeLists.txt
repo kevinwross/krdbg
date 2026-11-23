@@ -303,11 +303,26 @@ if(KRDBG_BUILD_TESTS)
             KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
     endif()
     if(KRDBG_KR232_ADAPTER)
-        target_sources(krdbg_tests PRIVATE tests/test_kr232_adapter.cpp)
-        target_link_libraries(krdbg_tests PRIVATE krdbg_kr232)
-        target_compile_definitions(krdbg_tests PRIVATE
+        # The kr232 adapter's tests are their own binary on purpose: linking any
+        # adapter into krdbg_tests shifts the surface render hashes, which is a
+        # property of the golden scheme rather than of this adapter (the kr216
+        # adapter breaks the same thirteen). Keeping the UI goldens measured
+        # without an adapter linked is the part that can be fixed here.
+        add_executable(krdbg_kr232_tests
+            tests/test_main.cpp
+            tests/test_kr232_adapter.cpp
+            tests/test_host_build.cpp
+        )
+        target_link_libraries(krdbg_kr232_tests PRIVATE
+            krdbg_core krdbg_kdbg krdbg_kr232 krdbg_host krdbg_warnings)
+        target_compile_definitions(krdbg_kr232_tests PRIVATE
             KRDBG_HAVE_KR232=1
+            KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+            KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
             KRDBG_KR232_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.k232")
+        add_test(NAME krdbg_kr232_unit COMMAND krdbg_kr232_tests)
+        set_tests_properties(krdbg_kr232_unit PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
     if(KRDBG_KR216_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr216_adapter.cpp)
