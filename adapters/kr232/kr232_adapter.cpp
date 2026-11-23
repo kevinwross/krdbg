@@ -525,3 +525,54 @@ bool load_image(const std::string& image_path, const Options& options,
 }
 
 }  // namespace krdbg::kr232adapter
+
+namespace krdbg::kr232adapter {
+
+bool kernel_supported() { return true; }
+
+bool load_kernel(const std::string& kernel_path, const std::string& program_path,
+                 const Options& options, LoadedProgram& program, std::string& error) {
+    // The kernel is the machine's own image; the program is placed where user
+    // code must live and its entry reaches the kernel in R2, matching the
+    // emulator's --user so a session debugs the same machine in both places.
+    LoadedProgram kernel;
+    if (!load_image(kernel_path, options, kernel, error)) {
+        return false;
+    }
+    std::vector<std::uint8_t> program_bytes;
+    {
+        std::ifstream input(program_path, std::ios::binary);
+        if (!input) {
+            error = "cannot read '" + program_path + "'";
+            return false;
+        }
+        program_bytes.assign(std::istreambuf_iterator<char>(input),
+                             std::istreambuf_iterator<char>());
+    }
+    auto& target = static_cast<Kr232Target&>(*kernel.target);
+    const std::uint32_t kernel_pc = static_cast<std::uint32_t>(target.pc());
+    const kr232::LoadOutcome placed =
+        kr232::load_image(target.machine(), program_bytes, 0x08000000u);
+    if (!placed.ok) {
+        error = "the program image: " + placed.error;
+        return false;
+    }
+    if (placed.entry < 0x08000000u) {
+        error = "the program image is based below user RAM; link it with --base=0x08000000";
+        return false;
+    }
+    target.machine().set_pc(kernel_pc);
+    target.machine().set_reg(2, placed.entry);
+
+    LoadedProgram user;
+    if (!load_image(program_path, options, user, error)) {
+        return false;
+    }
+    program.target = std::move(kernel.target);
+    program.info = std::move(user.info);
+    program.image_path = kernel_path;
+    program.debug_path = user.debug_path;
+    return true;
+}
+
+}  // namespace krdbg::kr232adapter

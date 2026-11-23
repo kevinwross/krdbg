@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -532,4 +533,38 @@ KRDBG_TEST(kr232_adapter_line_breakpoints_survive_a_reload) {
     CHECK(again.kind == krdbg::StopKind::Retired ||
           again.kind == krdbg::StopKind::Halted);
     CHECK_EQ(session.pc(), address);
+}
+KRDBG_TEST(kr232_probe_environment) {
+    std::ofstream out(std::string(KRDBG_SOURCE_ROOT) + "/build/kr232_env.txt");
+#ifdef KRDBG_HAVE_KR232
+    out << "define=1\n";
+#else
+    out << "define=0\n";
+#endif
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t length = 0;
+    std::string seen;
+    if (_dupenv_s(&value, &length, "KRDBG_KRC_PREFIX") == 0 && value != nullptr) {
+        seen = value;
+        std::free(value);
+    }
+    out << "prefix=" << seen << "\n";
+#endif
+    out << "marker=" << "kr232-block-present" << "\n";
+}
+
+KRDBG_TEST(kr232_adapter_reports_kernel_support) {
+    // A caller decides before trying whether a kernel can be loaded here.
+    CHECK(krdbg::kr232adapter::kernel_supported());
+
+    // A program image based below user RAM is refused with the reason, which is
+    // the same mistake the emulator names on its command line.
+    krdbg::kr232adapter::LoadedProgram program;
+    std::string error;
+    const std::string loaded = std::string(KRDBG_SOURCE_ROOT) +
+                               "/tests/fixtures/kr232/loaded.k232";
+    const bool ok = krdbg::kr232adapter::load_kernel(loaded, loaded, {}, program, error);
+    CHECK(!ok);
+    CHECK(!error.empty());
 }
