@@ -78,9 +78,11 @@ for index in "${!presets[@]}"; do
     # preset never enables. The gate owns the configuration, so it starts clean.
     cmake --preset "$preset" --fresh
     echo "== build $preset"
-    cmake --build --preset "$preset"
+    JOBS="${FAMILY_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+[ "$JOBS" -lt 1 ] && JOBS=1
+cmake --build --preset "$preset" -j "$JOBS"
     echo "== test $preset"
-    ctest --preset "$preset"
+    ctest --preset "$preset" -j "$JOBS"
 done
 
 frame_hash() {
@@ -145,8 +147,8 @@ echo "no SDL2.dll in the tree"
 echo "== two adapters"
 cmake -S . -B build/two-adapters -G Ninja -DCMAKE_BUILD_TYPE=Debug \
     -DKRDBG_KR216_ADAPTER=ON -DKRDBG_KR232_ADAPTER=ON
-cmake --build build/two-adapters   # ctest runs the demo and the kr232 binary too
-if ! ctest --test-dir build/two-adapters --output-on-failure; then
+cmake --build build/two-adapters -j "$JOBS"   # ctest runs the demo and the kr232 binary too
+if ! ctest --test-dir build/two-adapters -j "$JOBS" --output-on-failure; then
     echo "the two-adapter suite failed" >&2
     exit 1
 fi
