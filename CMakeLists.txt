@@ -124,10 +124,11 @@ if(KRDBG_KR32_ADAPTER)
     set(KR32_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(KR32_BUILD_CXX_TOOL OFF CACHE BOOL "" FORCE)
     set(KR32_EMBED_OS ON CACHE BOOL "" FORCE)
-    set(KR32_TOOLCHAIN builtin CACHE STRING "" FORCE)
+    set(KRG_TOOLCHAIN krc CACHE STRING "" FORCE)
     set(KR32_WARNINGS_AS_ERRORS ${KRDBG_WARNINGS_AS_ERRORS} CACHE BOOL "" FORCE)
     add_subdirectory("${KRDBG_KR32_ROOT}" "${CMAKE_BINARY_DIR}/kr32"
                      EXCLUDE_FROM_ALL)
+    unset(KRG_TOOLCHAIN CACHE)
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr32")
 endif()
 
@@ -147,11 +148,15 @@ if(KRDBG_KR16_ADAPTER)
     endif()
     set(KR16_BUILD_UI OFF CACHE BOOL "" FORCE)
     set(KR16_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(KR16_TOOLCHAIN builtin CACHE STRING "" FORCE)
+    set(KRG_TOOLCHAIN builtin CACHE STRING "" FORCE)
     set(KR16_KDBG OFF CACHE BOOL "" FORCE)
     set(KR16_SANITIZE OFF CACHE BOOL "" FORCE)
     add_subdirectory("${KRDBG_KR16_ROOT}" "${CMAKE_BINARY_DIR}/kr16"
                      EXCLUDE_FROM_ALL)
+    # KRG_TOOLCHAIN is the family-wide cache entry, so a value set for kr16 leaks
+    # into every sibling added afterwards -- kr232 rejects anything but krc and
+    # failed the configure. It is restored to unset once the tree is in.
+    unset(KRG_TOOLCHAIN CACHE)
     if(MSVC)
         # kr16 sets the static CRT for its own executables. The adapter is
         # linked into krdbg's dynamic-CRT test/demo targets, so keep the library

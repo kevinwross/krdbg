@@ -5,5 +5,5 @@ target_include_directories(krdbg_kr32
 target_link_libraries(krdbg_kr32
     PUBLIC krdbg_core krdbg_kdbg
     PRIVATE krdbg_warnings
-            kr32_core kr32_container kr32_dis kr32_os_images)
+            kr32::core kr32_container kr32_dis kr32_os_images)
 target_compile_features(krdbg_kr32 PUBLIC cxx_std_20)
