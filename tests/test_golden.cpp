@@ -26,6 +26,13 @@ std::string read_golden(const char* name) {
     }
     std::string value;
     std::getline(input, value);
+    // A golden is a line of text, and a CRLF checkout must not change which value
+    // it holds: on Linux the file arrives with the carriage return still on it,
+    // and comparing it with a formatted hash then fails for a reason that has
+    // nothing to do with the render.
+    while (!value.empty() && (value.back() == '\r' || value.back() == '\n')) {
+        value.pop_back();
+    }
     return value;
 }
 

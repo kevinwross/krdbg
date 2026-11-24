@@ -447,6 +447,9 @@ KRDBG_TEST(kr232_adapter_loaded_state_matches_the_golden) {
     }
     std::string golden;
     std::getline(existing, golden);
+    while (!golden.empty() && (golden.back() == '\r' || golden.back() == '\n')) {
+        golden.pop_back();
+    }
     CHECK_EQ(golden, text);
 }
 
