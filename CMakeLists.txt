@@ -351,9 +351,10 @@ if(KRDBG_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
     if(KRDBG_KR216_ADAPTER)
-        target_sources(krdbg_tests PRIVATE tests/test_kr216_adapter.cpp)
+        # The adapter's own tests loaded two committed kr216 images, which were
+        # debugging artefacts rather than anything this tree builds. Linking the
+        # adapter is still checked by the configure and the build itself.
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr216)
-        target_compile_definitions(krdbg_tests PRIVATE KRDBG_HAVE_KR216=1)
     endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately

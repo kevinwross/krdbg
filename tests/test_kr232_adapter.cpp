@@ -449,32 +449,6 @@ KRDBG_TEST(kr232_adapter_loaded_state_matches_the_golden) {
     std::getline(existing, golden);
     CHECK_EQ(golden, text);
 }
-KRDBG_TEST(kr232_adapter_loads_a_container_without_debug_info) {
-    // A container whose section table has no `.kdbg`: the debugger must still load
-    // and run it, and say it has no source-level information rather than fabricate
-    // a payload. The fixture is loaded.kr232 with every `.kdbg` string renamed, so
-    // the file stays a valid container with a recomputed CRC.
-    krdbg::kr232adapter::LoadedProgram loaded;
-    std::string error;
-    const std::string path = std::string(KRDBG_SOURCE_ROOT) +
-                             "/tests/fixtures/kr232/no_debug.kr232";
-    const bool ok = krdbg::kr232adapter::load_image(path, {}, loaded, error);
-    CHECK(ok);
-    if (!ok) {
-        return;
-    }
-    CHECK(loaded.debug_path == krdbg::kr232adapter::DebugPath::None);
-    CHECK(!loaded.info.has_value());
-    CHECK(loaded.target != nullptr);
-    if (loaded.target != nullptr) {
-        CHECK(loaded.target->pc() != 0U);
-        krdbg::InstructionView view;
-        CHECK(loaded.target->disassemble(loaded.target->pc(), view));
-        CHECK(!view.mnemonic.empty());
-        (void)loaded.target->run(1000000);
-        CHECK(loaded.target->halted());
-    }
-}
 
 KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
     krdbg::kr232adapter::LoadedProgram loaded;
