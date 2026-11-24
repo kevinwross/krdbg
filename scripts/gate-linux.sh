@@ -20,6 +20,32 @@ fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+# I2: build in a native mirror, never on the mount. A /mnt source carries mount
+# paths in its debug data and its timestamps are too coarse for incremental
+# builds; --in-place opts out and says so.
+in_place=0
+for argument in "$@"; do
+    if [[ "$argument" == "--in-place" ]]; then in_place=1; fi
+done
+case "$root" in
+    /mnt/*)
+        if [[ "$in_place" == "1" ]]; then
+            echo "gate-linux: building on $root (--in-place): debug paths will carry the mount" >&2
+        else
+            repo="$(basename "$root")"
+            mirror_tool="${KRC_MIRROR_TOOL:-$root/../krcompiler/scripts/kr-mirror.sh}"
+            if [[ ! -f "$mirror_tool" ]]; then
+                echo "gate-linux: $root is a /mnt path and no mirror tool was found at '$mirror_tool'; set KRC_MIRROR_TOOL or pass --in-place" >&2
+                exit 2
+            fi
+            bash "$mirror_tool" "$repo" --wait 600 >&2
+            mirror="$HOME/mirrors/$repo"
+            echo "gate-linux: source was $root; building from the mirror at $mirror" >&2
+            exec bash "$mirror/scripts/gate-linux.sh" "$@" --in-place
+        fi
+        ;;
+esac
+
 if [[ "$arch" == "arm64" ]]; then
     machine="$(uname -m)"
     if [[ "$machine" != "aarch64" && "$machine" != "arm64" ]]; then
