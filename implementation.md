@@ -7,7 +7,7 @@ start; M0.1 is the next task.
 **Platforms:** Windows x64, Linux x64 (WSL), Linux ARM64 (Raspberry Pi).
 **Golden policy:** Windows and Linux x64 must match the committed frame hash;
 ARM64 runs the functional checks and may keep a separate hash.
-**CI policy:** the GitHub Actions workflow carries Windows and Ubuntu jobs.
+**CI policy:** there is no hosted CI. The gates are `scripts/gate-windows.ps1` on Windows, `scripts/gate-linux.sh` in WSL, `scripts/gate-linux-arm64.sh` on BitWhiz, and `scripts/check-two-adapters.ps1` for the two-adapter tree; packaging is `scripts/package-windows.ps1` and `scripts/package-linux-tarball.sh`, run by hand at a tag.
 ARM64 is verified by the tester session documented in `docs/arm64-tester.md`,
 which runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`;
 it is not a GitHub Actions job.
