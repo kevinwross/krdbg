@@ -168,6 +168,9 @@ if(KRDBG_KR216_ADAPTER)
             "include/kr216/machine.h). Set KRDBG_KR216_ROOT to that tree; "
             "krdbg never vendors or guesses kr216.")
     endif()
+    set(KR216_BUILD_GUEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(KR216_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${KRDBG_KR216_ROOT}" "${CMAKE_BINARY_DIR}/kr216")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr216")
 endif()
 
@@ -186,6 +189,9 @@ if(KRDBG_KR232_ADAPTER)
             "include/kr232/machine.h). Set KRDBG_KR232_ROOT to that tree; "
             "krdbg never vendors or guesses kr232.")
     endif()
+    set(KR232_BUILD_KERNEL OFF CACHE BOOL "" FORCE)
+    set(KR232_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${KRDBG_KR232_ROOT}" "${CMAKE_BINARY_DIR}/kr232")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr232")
 endif()
 add_library(krdbg_ui STATIC

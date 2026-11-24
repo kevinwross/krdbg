@@ -1,17 +1,13 @@
-add_library(krdbg_kr232 STATIC
-    kr232_adapter.cpp
-    ${KRDBG_KR232_ROOT}/src/decoder.cpp
-    ${KRDBG_KR232_ROOT}/src/devices.cpp
-    ${KRDBG_KR232_ROOT}/src/frame.cpp
-    ${KRDBG_KR232_ROOT}/src/loader.cpp
-    ${KRDBG_KR232_ROOT}/src/machine.cpp
-    ${KRDBG_KR232_ROOT}/src/memory.cpp)
+# The core is linked, not compiled: kr232 exports kr232::core and the adapter is
+# a view over one machine. Compiling the sources here as well was how the
+# debugger and the emulator could drift apart, and D4 of the build cleanup plan
+# is about that. The tree is added with the options a debugger does not want.
+add_library(krdbg_kr232 STATIC kr232_adapter.cpp)
 target_include_directories(krdbg_kr232
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
-    PUBLIC "${CMAKE_SOURCE_DIR}/include"
-    PUBLIC "${KRDBG_KR232_ROOT}/include")
+    PUBLIC "${CMAKE_SOURCE_DIR}/include")
 target_link_libraries(krdbg_kr232
-    PUBLIC krdbg_core krdbg_kdbg
+    PUBLIC krdbg_core krdbg_kdbg kr232::core
     PRIVATE krdbg_warnings)
 target_compile_features(krdbg_kr232 PUBLIC cxx_std_20)
 
