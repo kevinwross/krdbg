@@ -20,6 +20,15 @@ fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+# J5: ask the doctor first, so a missing tool fails before the first compile with
+# a sentence naming the tool and the repository.
+doctor_tool="${KRC_DOCTOR_TOOL:-$(pwd)/../krcompiler/scripts/doctor.sh}"
+if [[ -f "$doctor_tool" ]]; then
+    sh "$doctor_tool" krdbg
+else
+    echo "gate-linux: no doctor at '$doctor_tool' (set KRC_DOCTOR_TOOL); continuing without one" >&2
+fi
+
 # I2: build in a native mirror, never on the mount. A /mnt source carries mount
 # paths in its debug data and its timestamps are too coarse for incremental
 # builds; --in-place opts out and says so.
