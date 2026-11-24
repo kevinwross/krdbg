@@ -109,3 +109,17 @@ its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 - WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
 - KRCompiler `e04b3b2` exports the KDBG v1.1 `krc::debug` pair; krdbg vendors the exact `kdbg.*` files under `third_party/krc-debug/` so a bare checkout and CI build without a KRCompiler install. The vendored copy carries the commit SHA and a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).
+
+## WSL builds
+
+A WSL build runs on an ext4 mirror, never on `/mnt/c`. A build under the mount carries
+mount paths in its debug data and its file timestamps are too coarse for incremental
+work, so the mirror is refreshed with the family tool and the gate runs from there:
+
+    sh ../krcompiler/scripts/kr-mirror.sh krdbg
+    cd ~/mirrors/krdbg && bash scripts/gate-linux.sh
+
+A gate that supports it does this itself when it is started from a `/mnt/c` path: it
+prints the mirror it used and re-executes there, and `--in-place` opts out for the
+rare case where a mount build is intended. Editing happens on Windows; the mirror is
+disposable and is never committed.
