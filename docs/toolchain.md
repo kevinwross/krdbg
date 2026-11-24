@@ -30,7 +30,7 @@ krdbg_demo --headless --load source.s --target kr16 \
     --toolchain build/m5-toolchain
 
 # load an existing image directly
-krdbg_demo --headless --load tests/fixtures/kr16/m4.kex --source-root .
+krdbg_demo --headless --load tests/fixtures/kr16/m4.kr16 --source-root .
 
 # rebuild a source-origin program (RESET)
 krdbg_demo --headless --load tests/fixtures/kr16/m4.c --target kr16 \
@@ -53,7 +53,7 @@ resolution.
   --source-root=<root>`.
 - KR32 assembly: the same `krld` link with the `.s` input instead of an object.
 - KR16 C/C++: `krc --target=kr16 --sysroot=<sysroot> -O0 -c <source> -o
-  <image>.kex`.
+  <image>.kr16`.
 - KR16 assembly: `krc --target=kr16 --emit-object -c <source> -o <object>`;
   assemble the installed `crt0.s` the same way and link both KRO objects with
   `krld --base=0x100 --entry=_start`.

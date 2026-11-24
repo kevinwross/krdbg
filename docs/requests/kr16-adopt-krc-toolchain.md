@@ -9,12 +9,12 @@ before branching.
 **Proposed:** 2026-11-20T02:09:40-08:00
 **Requested by:** kevinwross
 **Depends on:** [KRCompiler plan](krcompiler-toolchain-package.md) items 4.1-4.6
-(the facade, the package, and `.kdbg` in `.kex`), 4.9 for the listing, 4.10, which
-makes a KR16 `.kex` decodable, 4.11 for kr16's assembler directives, and 4.13
+(the facade, the package, and `.kdbg` in `.kr16`), 4.9 for the listing, 4.10, which
+makes a KR16 `.kr16` decodable, 4.11 for kr16's assembler directives, and 4.13
 for the `__host_call` intrinsic its runtime needs.
 **Pinned:** `7d005d5` on `KRCompiler` `adopt-krc` — everything through 4.13, so
 the krc path can compile `resources/fileio.c`, assemble and link kr16's shipped
-`resources/libc.s`, and carry `.kdbg` in the `.kex`.
+`resources/libc.s`, and carry `.kdbg` in the `.kr16`.
 **Sibling plan:** [kr32](kr32-adopt-krc-toolchain.md). This one runs first.
 **Read at that commit:** `include/kr16/build.hpp`, `include/kr16/container.hpp`,
 `include/kr16/debug_session.hpp`, `src/debug/debug_session.cpp`,
@@ -69,13 +69,13 @@ runnable and undebuggable.
 **Out of scope**
 
 - Any KRCompiler change (owned by the sibling plan).
-- The debugger UI, the console model, the `.kex` loader, the ABI.
+- The debugger UI, the console model, the `.kr16` loader, the ABI.
 - Adding a second debug format to krc.
 
 ## 3. Design
 
 - **Build seam unchanged.** `build_program` keeps its signature and its habit of
-  writing `.s`, `.o` and `.kex` next to the input; only the producer changes.
+  writing `.s`, `.o` and `.kr16` next to the input; only the producer changes.
   The facade returns bytes, so the krc branch writes the files `BuildResult`
   already names.
 - **Two readers, one parse.** Prefer parsing `.kdbg` once in
@@ -103,7 +103,7 @@ runnable and undebuggable.
 | 2.1 | Spike, no repo change: build one `tests/fixtures/c` program for the kr16 target with `krc` and `krld` (target value from `krc --list-targets`), run it in the kr16 CLI | the program runs and its console output matches the built-in toolchain's |
 | 2.2 | `.kdbg` reader in `load_debug_info` behind `KR16_KDBG` | a krc-built image stops at a source breakpoint, steps a line, and shows a local's value |
 | 2.3 | DAP session reads the same debug model | the existing DAP session check passes on a krc-built image |
-| 2.4 | `build_program` krc branch behind `KR16_TOOLCHAIN=krc` | `kr16 build` on a `.c` fixture produces a `.kex` that loads and runs, and `-l` still writes a listing formatted from the facade rows |
+| 2.4 | `build_program` krc branch behind `KR16_TOOLCHAIN=krc` | `kr16 build` on a `.c` fixture produces a `.kr16` that loads and runs, and `-l` still writes a listing formatted from the facade rows |
 | 2.5 | Suite twice | all existing tests pass with `builtin` and with `krc` |
 | 2.6 | Stage B: default flip, delete the built-in path | suite green on a clean checkout with no built-in compiler present |
 
@@ -184,7 +184,7 @@ open questions the plan was proposed with.
    tracked; when krc's 16-bit output shrinks, that test fails and says so.
 
 Not yet decided, and needed before stage B: whether the `.kdbg` reader keeps the
-`.debug_*` branch for `.kex` files built before the swap. Dropping it makes those
+`.debug_*` branch for `.kr16` files built before the swap. Dropping it makes those
 images undebuggable; keeping it costs one branch the reader already has.
 
 ## 9. Approval

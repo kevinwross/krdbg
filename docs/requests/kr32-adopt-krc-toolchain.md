@@ -45,7 +45,7 @@ The code behind those calls is the largest duplication in the family:
 
 **The debug side is already compatible.** krc's kr32 backend emits the textual
 `.debug_info` bridge (`S/L/F/V/G/T/C/M`) that KR32's `debug::parse_info`
-consumes, and the linked `.k32` keeps both `.debug_info` and `.kdbg`
+consumes, and the linked `.kr32` keeps both `.debug_info` and `.kdbg`
 (`src/backend/kr32_backend.cpp:807-1498`, KRCompiler `src/linker/linker.cpp:306-313,698`).
 KRCompiler's own CI already runs a krc-built image through KR32's DAP session
 and asserts a local's value (`cmake/CheckDapSession.cmake`). So this swap does
@@ -121,7 +121,7 @@ not require a debugger change, unlike kr16.
 
 | ID | Change | Done when |
 |---|---|---|
-| 3.1 | Spike, no repo change: open a krc-built `.k32` from KRCompiler's test outputs in the current KR32 GUI | source lines, locals, call stack and stepping all work; this is the go/no-go for the whole plan |
+| 3.1 | Spike, no repo change: open a krc-built `.kr32` from KRCompiler's test outputs in the current KR32 GUI | source lines, locals, call stack and stepping all work; this is the go/no-go for the whole plan |
 | 3.2 | C++ corpus check: compile KR32's C++ examples with krc | every failure is a documented gap or a new, named gap with a test |
 | 3.3 | `compile_c_source` krc path behind `KR32_TOOLCHAIN=krc` | a `.c` program builds, loads, stops at a breakpoint and shows a local |
 | 3.4 | `compile_cxx_source` krc path | a C++ example builds and debugs, or the unsupported constructs are rejected with a clear diagnostic |

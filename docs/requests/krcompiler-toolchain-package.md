@@ -52,13 +52,13 @@ consumers, then a third (krdbg) for the debug reader.
    back; no filesystem, no subprocess, no process-global state; deterministic
    bytes.
 5. `krc` and `krld` rebuilt on the facade, with unchanged output.
-6. `.kdbg` embedded in `.kex` images.
+6. `.kdbg` embedded in `.kr16` images.
 7. `docs/toolchain-embedding.md`: the header, the call sequence, the ownership
    and error rules.
 8. A neutral listing model: annotated rows the host formats into its own `.lst`
    (KR32 and kr16 both expose a listing today, in their own formats).
 9. KR16 debug-info emission: the KR16 backend writes the same textual records the
-   KR32 backend writes, so `attach_kdbg` can build `.kdbg` for a `.kex`.
+   KR32 backend writes, so `attach_kdbg` can build `.kdbg` for a `.kr16`.
 10. KR16 assembler directives — `.bss`, `.space`, `.align` and `.word` — so krc can
     assemble kr16's shipped `resources/libc.s`.
 11. The target sysroot and runtime installed with the package — headers, `crt0.s`,
@@ -142,13 +142,13 @@ Rules:
 - **Static only.** `krc::toolchain` and `krc::debug` are static libraries; no
   shared build is produced or installed.
 
-`.kdbg` in `.kex`: `write_kr16_image` currently writes a fixed two-section image
+`.kdbg` in `.kr16`: `write_kr16_image` currently writes a fixed two-section image
 (`.text`, `.debug_str`) and drops everything else
 (`src/linker/kr16_image.cpp:51-105`). It gains a span of extra sections, the
-same `attach_kdbg` output that `.k32` already carries (`src/linker/linker.cpp:566-704`).
+same `attach_kdbg` output that `.kr32` already carries (`src/linker/linker.cpp:566-704`).
 
-Addresses are **absolute in the image's load space**, matching `.k32`:
-`attach_kdbg` runs after layout, and a `.kex` is mapped at the addresses in its
+Addresses are **absolute in the image's load space**, matching `.kr32`:
+`attach_kdbg` runs after layout, and a `.kr16` is mapped at the addresses in its
 section table rather than relocated at load. The image base the payload was
 built for goes in the eight reserved bytes at offset 56 of the 64-byte KDBG
 header (`docs/symbols.md:31`), so a payload loaded against a different image is
@@ -165,14 +165,14 @@ record type.
 | 4.3 | CMake package: `krc::toolchain`, install, export, `krc_core` private | a scratch consumer outside the tree does `find_package(krc-toolchain CONFIG REQUIRED)`, links it, and builds a kr32 and a kr16 image |
 | 4.4 | In-memory and determinism rules | build from strings with the CWD set to an empty temp dir leaves it empty; two sequential builds are byte-identical; no new mutable static in the facade path |
 | 4.5 | `krc` and `krld` rebuilt on the facade | CLI output and diagnostics unchanged; suite green |
-| 4.6 | `.kdbg` in `.kex` | `krc --dump-symbols --json` decodes a `.kex` with sources, lines and functions that match the source; the base is a little-endian `u64` at offset 56 and a payload built for a different base is rejected |
+| 4.6 | `.kdbg` in `.kr16` | `krc --dump-symbols --json` decodes a `.kr16` with sources, lines and functions that match the source; the base is a little-endian `u64` at offset 56 and a payload built for a different base is rejected |
 | 4.7 | Split and install `krc::debug` | a scratch consumer decodes a fixture through the package without linking the toolchain |
 | 4.8 | `docs/toolchain-embedding.md` | a reader can build an image in ten lines from the document alone |
 | 4.9 | Neutral listing model | a fixture's rows reproduce the built-in listing's statements and addresses; the host formats the file |
-| 4.10 | KR16 debug-info emission | a krc-built `.kex` decodes with sources, lines, functions and a variable; `attach_kdbg` runs for a KR16 link |
+| 4.10 | KR16 debug-info emission | a krc-built `.kr16` decodes with sources, lines, functions and a variable; `attach_kdbg` runs for a KR16 link |
 | 4.11 | KR16 assembler directives | `kr16/resources/libc.s` assembles under krc to the same linked image bytes as kr16's own assembler, and a krc-built `hello` links it and prints the same output |
-| 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.k32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
-| 4.13 | KR16 `__host_call` intrinsic | `kr16/resources/fileio.c` and the libc wrappers compile under krc, and a krc-built `.kex` links the shipped libc and passes the fileio tests |
+| 4.12 | Install the sysroot and runtime | a scratch consumer builds a `.kr32` from the installed package with no KRCompiler build tree on the path; the installed paths are documented |
+| 4.13 | KR16 `__host_call` intrinsic | `kr16/resources/fileio.c` and the libc wrappers compile under krc, and a krc-built `.kr16` links the shipped libc and passes the fileio tests |
 | 4.14 | Install `krc` and `krld` | a scratch prefix contains both executables, and a host builds a `.c` file through the installed package with no KRCompiler build tree on the path |
 | 4.15 | KR16 line-table attribution | `kr16.unit`'s line assertion passes without being relaxed; a statement on line 3 is reported on line 3 |
 | 4.16 | Function sections and GC | `krld --gc-sections` drops unreferenced functions from a kr16 image; trimming kr16's `fileio.c` is a separate kr16 decision |
@@ -199,7 +199,7 @@ ctest --preset linux-gcc-debug --output-on-failure
 ```
 
 Plus the package-consumer check, the byte-identity diff from 4.2/4.3, the listing
-comparison from 4.9, the KR16 `.kex` decode from 4.10, the `libc.s` assembly
+comparison from 4.9, the KR16 `.kr16` decode from 4.10, the `libc.s` assembly
 parity from 4.11, the installed-package consumer build from 4.12, the krc-built
 KR16 runtime from 4.13, the installed tools from 4.14, and the kr16 line-table
 row and C-for-U size from 4.15/4.16. Every check must be run and its real output
@@ -214,7 +214,7 @@ it is not re-run here.
 |---|---|---|
 | Hidden per-build state | `sema`, type canonicalisation or the backend buffer leaks between calls and a second build differs | 4.4's two-build test; audit statics before 4.2 |
 | Exceptions across the boundary | a host built without exceptions cannot link the facade | decide the error channel in 4.1; catch at the boundary only to convert to `error`, never to hide |
-| `.kex` address rule | a `.kex` is mapped at its section addresses, so absolute payload addresses are correct only while that stays true | 4.6 writes the base into the header and rejects a mismatch; revisit only if `.kex` becomes relocatable |
+| `.kr16` address rule | a `.kr16` is mapped at its section addresses, so absolute payload addresses are correct only while that stays true | 4.6 writes the base into the header and rejects a mismatch; revisit only if `.kr16` becomes relocatable |
 | Reserved header bytes | storing the image base at offset 56 reinterprets a frozen header | document it in `docs/symbols.md` and ADR 0009; readers that skip reserved bytes are unaffected |
 | `krc_core` split breaks includes | tools and tests include `src/` paths | keep internal includes working through the target's include dirs; the package exports only `include/` |
 | Package name churn | three consumers will pin it | freeze the names in 4.1: `krc::toolchain`, `krc::debug`, packages `krc-toolchain`, `krc-debug` |
@@ -241,7 +241,7 @@ open questions the plan was proposed with.
    annotated rows, and each host keeps its own `.lst` format.
 3. **Static libraries only.** `krc::toolchain` and `krc::debug` are static; no
    shared build is produced or installed.
-4. **Absolute `.kex` addresses, with the base recorded.** `attach_kdbg` runs
+4. **Absolute `.kr16` addresses, with the base recorded.** `attach_kdbg` runs
    after layout; the payload carries the image base as a little-endian `u64` in
    the eight reserved bytes at offset 56, and the reader compares it with the
    loaded image's first section address and rejects a mismatch. `docs/symbols.md`
@@ -250,7 +250,7 @@ open questions the plan was proposed with.
    2026-11-20T02:35:30-08:00.
 5. **KR16 debug-info emission joins stage A (4.10).** Decided
    2026-11-20T08:28:03-08:00. Item 4.6 cannot meet its own done-when because no
-   KR16 object carries `.debug_info`, so a `.kex` has nothing for `attach_kdbg`
+   KR16 object carries `.debug_info`, so a `.kr16` has nothing for `attach_kdbg`
    to convert. Rather than ship kr16 undebuggable or add the legacy `.debug_*`
    format as a second writer, the KR16 backend emits the records the KR32 backend
    already emits, and `attach_kdbg` runs for a KR16 link.
@@ -296,8 +296,8 @@ Approved by kevinwross on 2026-11-20T02:36:31-08:00.
 
 Approving this file authorises, in KRCompiler only: the two public headers, the
 two CMake packages, the facade including the listing rows, the CLI refactor onto
-it, `.kdbg` in `.kex` with its base field, the KR16 debug-info emission that makes
-a `.kex` decodable, the KR16 assembler directives, the installed sysroot and
+it, `.kdbg` in `.kr16` with its base field, the KR16 debug-info emission that makes
+a `.kr16` decodable, the KR16 assembler directives, the installed sysroot and
 runtime, the KR16 `__host_call` intrinsic, the installed `krc` and `krld`
 executables, the KR16 line-table fix, and function sections with GC. It does not
 authorise KDBG v1.1, removing the `.debug_info` bridge, codegen-density work

@@ -50,11 +50,11 @@ invented from nothing.
 2. KDBG encoding for those records: new tags inside existing sections and new
    sections where the shape does not fit, with minor version `1.1`.
 3. A real `target_id` from `kROTargetId` (`src/linker/kro_object.cpp:131`) for
-   `.k32`, `.kex` and future 64-bit images.
+   `.kr32`, `.kr16` and future 64-bit images.
 4. Reader and dumper support in `krc::debug`, including text and JSON output.
 5. Fixtures and tests: round-trip, parity with `krc --dump-symbols`, corrupt and
    truncated input, a v1 reader on a v1.1 payload, and KR32's parser on a
-   v1.1-built `.k32`.
+   v1.1-built `.kr32`.
 6. Documentation: `docs/symbols.md`, ADR 0009 (the minority bump and the new
    tags), ADR 0052 (live ranges), and `docs/toolchain-embedding.md` if the
    reader's fields change.
@@ -100,14 +100,14 @@ encoder does.
 
 | ID | Change | Done when |
 |---|---|---|
-| K1 | Bridge records for register locations (reuse `P`), scope and variable flags, array element/count, type refs; settle the exact spellings in `docs/symbols.md` first | a hand-built fixture with a location record decodes through `krc::debug` and prints in both dumper forms, and a v1-built `.k32` still parses in KR32's `debug` path; the producer side lands with the ADR 0052 promotion change |
+| K1 | Bridge records for register locations (reuse `P`), scope and variable flags, array element/count, type refs; settle the exact spellings in `docs/symbols.md` first | a hand-built fixture with a location record decodes through `krc::debug` and prints in both dumper forms, and a v1-built `.kr32` still parses in KR32's `debug` path; the producer side lands with the ADR 0052 promotion change |
 | K2 | KDBG encoding: `Location`, `VarInfo`, `Scope` tags and `.kdbg_loc`/`.kdbg_scope` sections; minor `1.1` | decode returns the fields; a v1 reader (a fixture built from the previous decoder) skips them without error |
 | K3 | `Base` tag: the backend emits the base type name it has, or the IR gains the field if it does not | a derived class with no own members expands through its base in `krc --dump-symbols` |
 | K4 | `ArrayType` and `TypeRef` tags: element type and count, no type-string parsing | an array decodes with its element type and count; a pointer's target is a type reference |
 | K5 | 64-bit address variants for line, function, symbol and location start/end | a `kr64` fixture decodes with `u64` addresses; `pointer width` in the header is `8` |
 | K6 | Real `target_id` from `kROTargetId` | a KR32 image says `1`, a KR16 image `2`, and the dumper prints it |
 | K7 | Reader and dumper: text and stable JSON gain the fields; unknown required records report "newer KDBG" | the JSON schema is documented and a fixture round-trips through text and JSON |
-| K8 | Fixtures and tests: round-trip, parity, corrupt/truncated/CRC, v1-reader compatibility, KR32 parser | the suite covers each failure path, and a v1.1-built `.k32` loads in KR32's `debug` command |
+| K8 | Fixtures and tests: round-trip, parity, corrupt/truncated/CRC, v1-reader compatibility, KR32 parser | the suite covers each failure path, and a v1.1-built `.kr32` loads in KR32's `debug` command |
 | K9 | Documentation: `docs/symbols.md`, ADR 0009 amendment, ADR 0052 update, embedding notes | the format document is true of the encoder that ships |
 
 ## 5. Gate
@@ -127,7 +127,7 @@ ctest --preset linux-gcc-debug --output-on-failure
 ```
 
 Plus the compatibility rows: a v1 reader fixture on a v1.1 payload, KR32's parser
-on a v1.1-built `.k32`, and `krc --dump-symbols` in both forms. Every check must
+on a v1.1-built `.kr32`, and `krc --dump-symbols` in both forms. Every check must
 be run and its real output recorded; nothing is claimed from this plan.
 
 ## 6. Risks
@@ -145,7 +145,7 @@ be run and its real output recorded; nothing is claimed from this plan.
 
 - The v1 reader test cannot be made to pass without changing a v1 record's shape:
   stop — that is a v2 decision, not v1.1.
-- KR32's parser rejects a v1.1-built `.k32` for any reason: stop and report; the
+- KR32's parser rejects a v1.1-built `.kr32` for any reason: stop and report; the
   additivity promise is broken.
 - The IR has no base-type information and adding it changes layout or ABI: stop
   and return to the approver before touching codegen.
