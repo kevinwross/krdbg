@@ -1,29 +1,33 @@
 # CI and build trees
 
-`.github/workflows/ci.yml` has two jobs:
+There is no hosted CI. Every gate runs on hardware this project owns, and each is a
+script in `scripts/`:
 
-| Job | Runner | Gate script |
+| Platform | Runner | Gate |
 |---|---|---|
-| `windows-x64` | `windows-latest` | `scripts/gate-windows.ps1` |
-| `linux-x64` | `ubuntu-latest` | `scripts/gate-linux.sh` |
+| Windows x64 | this machine | `scripts/gate-windows.ps1` |
+| Linux x64 | WSL | `scripts/gate-linux.sh` |
+| Linux ARM64 | BitWhiz (Raspberry Pi, aarch64) | `scripts/gate-linux-arm64.sh` |
+| Two adapters | this machine, both arms | `scripts/check-two-adapters.ps1` |
 
-CI calls the gate scripts only; no command string is repeated in the workflow.
-ARM64 is not a GitHub Actions job: the ARM64 tester session on BitWhiz runs
-`scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`; see
-[ci-arm64.md](ci-arm64.md) and [arm64-tester.md](arm64-tester.md).
+`gate-windows.ps1` and `gate-linux.sh` are the host matrix: each configures, builds
+and runs `ctest --preset` for Debug and Release, so the unit binaries run as ctest
+rows. `gate-linux.sh` takes `--arch x64|arm64` and, on ARM64, also records the frame
+hashes it measured. The ARM64 gate is driven from the kr232 repository, where
+`scripts/check-arm64.ps1` runs this repository's `gate-linux-arm64.sh` over SSH and
+reports `GATE LINUX ARM64`.
 
-Tag pushes (`v*`) run [release.yml](../.github/workflows/release.yml), which runs
-the same Windows/Linux gates, packages both x64 artifacts and attaches them to
-the GitHub release. It has no ARM64 job.
+Packaging is run by hand at a tag, not by a workflow:
 
-## Build trees and artifacts
+| Target | Script |
+|---|---|
+| Windows | `scripts/package-windows.ps1` |
+| Linux | `scripts/package-linux-tarball.sh` |
 
-- Build trees live under `build/` and are ignored by Git; no configure output,
-  object file, executable, PPM or test log is committed.
-- M0 uses no CI cache: a cold build on each runner keeps the toolchain and the
-  golden hash honest. A cache may be added when build time warrants it, but
-  never for `goldens/`.
-- M0 uploads no artifacts. Test logs and goldens are uploaded from M2
-  (`implementation.md` M2.9.3); secrets never enter either.
-- The only committed generated file is `src/ui/embedded_fonts.cpp`, produced by
-  `third_party/fonts/embed_fonts.py` from the committed subset fonts.
+The ARM64 verification path is described in [ci-arm64.md](ci-arm64.md): a tester
+session on BitWhiz polls `main` and runs the ARM64 gate, and its result is recorded
+in [arm64-test-log.md](arm64-test-log.md).
+
+Until 2026-11-23 this repository had a GitHub Actions workflow that re-ran the same
+steps on hosted runners. It was removed: those runners cost minutes for a pipeline
+whose toolchain nobody here chose, and the scripts above were always the gate.
