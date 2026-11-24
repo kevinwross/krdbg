@@ -41,7 +41,7 @@ case "$root" in
             bash "$mirror_tool" "$repo" --wait 600 >&2
             mirror="$HOME/mirrors/$repo"
             echo "gate-linux: source was $root; building from the mirror at $mirror" >&2
-            exec bash "$mirror/scripts/gate-linux.sh" "$@" --in-place
+            exec bash "$mirror/scripts/gate-linux.sh" "$@"
         fi
         ;;
 esac
