@@ -22,7 +22,7 @@ struct LoadedProgram {
     std::string image_path;
 };
 
-// Loads a standalone `.k32` executable and its `.kdbg` section.
+// Loads a standalone `.kr32` executable and its `.kdbg` section.
 bool load_standalone(const std::string& image_path, const Options& options,
                      LoadedProgram& program, std::string& error);
 

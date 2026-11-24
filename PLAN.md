@@ -683,7 +683,7 @@ public:
 ```
 
 `choose_and_load` and `load_path` hide the toolchain: a `.c`, `.cpp` or `.s`
-runs the host's build chain and loads the resulting `.k32`/`.kex`; a container
+runs the host's build chain and loads the resulting `.kr32`/`.kr16`; a container
 image loads directly. `load_kernel` is the forced embedded-kernel/BIOS load,
 independent of command-line flags. `reload` is RESET and Settings-Apply; it
 rebuilds when the current program came from source.
@@ -1153,7 +1153,7 @@ It is **not** enough to match KR32's current surface in these places:
 | Parameter/local/static distinction, scopes | **Missing** | Shadowed locals collide by `function + name`; params are indistinguishable. |
 | 64-bit addresses | Fields are `u32` | KR64 or any >4 GiB target cannot be represented. |
 | Target identity | `target_id` is hardcoded to `1` in the linker (`linker.cpp:588`) | Every target looks like KR32. |
-| KR16 image | `.kex` writer emits only `.text` + `.debug_str` (`kr16_image.cpp:51-105`); `attach_kdbg` is built but dropped (`krld/main.cpp:242, 278-298`) | No KDBG in KRCompiler-built KR16 images today. |
+| KR16 image | `.kr16` writer emits only `.text` + `.debug_str` (`kr16_image.cpp:51-105`); `attach_kdbg` is built but dropped (`krld/main.cpp:242, 278-298`) | No KDBG in KRCompiler-built KR16 images today. |
 
 The updated KR32 UI makes the location gap concrete: a promoted local now shows
 `register: R9` or `register: F2` instead of an address, and its members are read
@@ -1188,7 +1188,7 @@ Encoding rules:
   must report “newer KDBG” instead of guessing.
 - Set the header `target_id` from the target (`1=kr32`, `2=kr16`, `3=kr64`),
   not a constant. The existing `kROTargetId` mapping is the source of truth.
-- Embed `.kdbg` in the KR16 `.kex` writer, or write a sidecar named by build ID.
+- Embed `.kdbg` in the KR16 `.kr16` writer, or write a sidecar named by build ID.
   Today KR16 images are not debuggable through KDBG at all.
 
 ### 5.4 Surface response
@@ -1317,7 +1317,7 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
     came from source, it rebuilds first: line breakpoints are re-resolved
     against the new image and address breakpoints are cleared, because their
     addresses may no longer be valid. Image-origin programs preserve both kinds.
-  - `LOAD` opens the picker. A `.k32`/`.kex` container loads directly; `.c`,
+  - `LOAD` opens the picker. A `.kr32`/`.kr16` container loads directly; `.c`,
     `.cpp` or `.s` runs the host's build chain and then loads. Loading a new
     program clears breakpoints and leaves the VM stopped at the configured start
     point (main/entry); it does not auto-run.
@@ -1446,7 +1446,7 @@ The KR32 document now specifies behaviour that the first draft did not:
 - KR32's **Build always optimizes**; there is no `-O0` control in the window.
   The new surface has no Build button: LOAD runs the host's build chain, and
   optimizer policy stays in the host. `-O0` remains a command-line workflow.
-- `--os` loads the kernel and BIOS `.k32` images and merges their debug
+- `--os` loads the kernel and BIOS `.kr32` images and merges their debug
   sections. The new adapter does the same with `merge_debug_info`.
 
 These are reflected in §6.1, §6.2, §6.3, and §7.1.
@@ -1599,7 +1599,7 @@ populate when those providers are wired. The dialog code does not change.
 
 Wraps `kr32::core::Machine` and `kr32::container::Image`:
 
-- Load: `.k32` through KR32's container loader; `.c`/`.cpp`/`.s` through the
+- Load: `.kr32` through KR32's container loader; `.c`/`.cpp`/`.s` through the
   host build chain first. The syscall host is installed as `debug::Session`
   does.
 - State: R0–R15, PC, SP, FLAGS (Z/N/C/V/I/K), F0–F15, TSP/T0, CR3/CR6/CR10/
@@ -1625,7 +1625,7 @@ Wraps `kr32::core::Machine` and `kr32::container::Image`:
   loads the result; `RESET` rebuilds when the current program came from source.
   KR32's chain always optimizes, so an `-O0` session stays a command-line
   workflow; the surface exposes no Build button or optimizer policy.
-- Debug info: **KDBG from a KRCompiler-built `.k32`**, not the legacy
+- Debug info: **KDBG from a KRCompiler-built `.kr32`**, not the legacy
   `.debug_info`, for the first vertical slice. That proves the end-to-end
   pipeline the user actually wants. Legacy adapter can come later.
 
@@ -1638,7 +1638,7 @@ session owns those generically.
 Wraps `kr16::DebugSession` (or `Machine`/`Cpu` directly if the existing session
 is too UI-shaped):
 
-- Load: `.kex` directly; `.c`/`.s` through the host build chain first.
+- Load: `.kr16` directly; `.c`/`.s` through the host build chain first.
 - State: R0–R4, PC, SP, SR, flags C/Z/N/V/I.
 - Disassembly: KR16's disassembler; 2-byte instructions.
 - Memory: 16-bit addresses, 64 KiB; stack guard; MMIO.
@@ -1653,7 +1653,7 @@ is too UI-shaped):
   present.
 - Kernel: KR16 has no embedded kernel/BIOS pair equivalent to KR32OS, so
   `supports_kernel_load()` is false and the `KERNEL` button is hidden.
-- Debug info: KDBG from a `krc`-built `.kex`. Older images without `.kdbg` fall
+- Debug info: KDBG from a `krc`-built `.kr16`. Older images without `.kdbg` fall
   back to the legacy `.debug_line`/`.debug_vars`/`.debug_types` sections.
 
 This adapter is the real test of the abstraction: if it needs UI changes, the
@@ -1665,7 +1665,7 @@ A small `krdbg-host` executable (or a mode in `krc`) can:
 
 1. on `LOAD`, run `krc`/`krld` for a source file (or load a container directly);
    on `KERNEL`, use the host's embedded kernel/BIOS pair,
-2. load the resulting `.k32`/`.kex`,
+2. load the resulting `.kr32`/`.kr16`,
 3. locate `.kdbg` (or sidecar),
 4. construct a target adapter,
 5. run the surface.
@@ -1704,7 +1704,7 @@ link krdbg, done.
 | **M0 — Skeleton and visual baseline** | CMake project, `Canvas`, `IWindow` + SDL2 development presenter, fake target, empty/loaded surface, headless PPM + hash | Opens 1440x900; panel layout/theme visibly matches KR32 screenshots; golden hash stable | 1–2 weeks |
 | **M1 — Debug core and KDBG** | `DebugInfo`, `krc::debug` integration (vendored bootstrap allowed), `DebugSession`, line lookup, unwinding, breakpoints, variable expansion; unit tests with fake target | Session tests pass; KDBG fixture decodes to expected sources/lines/functions/variables/types; matches `krc --dump-symbols --json` | 2 weeks |
 | **M2 — Full surface and Windows presenter** | All panels, editing, menus, tooltips, schema-driven settings dialog, status bar, COM port, video preview, separate video window, memory, variables/inspector, instruction/time/IPS statistics and CLR, minimal `RUN`/`RESET`/`LOAD`/`KERNEL` toolbar; cores/threads list; Win32 GDI presenter; headless screenshots | Keyboard/mouse interaction tests; golden screenshots for empty/loaded/running/error states; settings render from the schema, validate ranges, edit environment key/value pairs, and apply transactionally; user and project layers merge with project overrides winning, and `SAVE TO` writes the selected layer; toolbar has no step, breakpoint or Build buttons; `RUN` green while running; `KERNEL` hidden when unsupported; COM port bytes flow independently of the framebuffer; video preview and window preserve aspect with no stretching; closing the video window does not unload the target; `CLR` zeroes statistics without changing PC or breakpoints; IPS is instructions divided by execution-only time; selecting a context changes inspection; no SDL2 DLL on Windows; no VM types in `krdbg/ui` | 4–5 weeks |
-| **M3 — KR32 vertical slice** | KR32 adapter; load a `krc`-built `.k32` with `.kdbg`; set source breakpoint, step line, inspect locals/struct/globals, call stack, memory, disassembly | Side-by-side with KR32 GUI on the same image; behaviour matches `docs/ui.md` | 2 weeks |
+| **M3 — KR32 vertical slice** | KR32 adapter; load a `krc`-built `.kr32` with `.kdbg`; set source breakpoint, step line, inspect locals/struct/globals, call stack, memory, disassembly | Side-by-side with KR32 GUI on the same image; behaviour matches `docs/ui.md` | 2 weeks |
 | **M4 — Second architecture** | KR16 adapter; 16-bit image; address width/registers/flags adapt | Same interactions on KR16; only adapter code changed; no `if (kr16)` in UI | 2 weeks |
 | **M5 — Compiler pipeline** | Load/build provider invoking `krc`/`krld`; `LOAD` builds source and loads it; `RESET` rebuilds from source; `KERNEL` loads the embedded pair; source roots; compiler/linker/assembler settings schemas | Load a `.c`/`.cpp`/`.s`, build, stop at `main`, step to a line, inspect a local; `KERNEL` loads the embedded OS; source resolves from a clean checkout; tool settings appear in the dialog without UI changes | 2–3 weeks |
 | **M6 — Packaging and post-v1** | Windows zip; Linux x64/ARM64 tarballs (SDL2 2.32 system requirement, no bundled SDL2), DAP front end, extra architectures | Windows and Linux x64 artifacts run from clean checkouts; the ARM64 tester log records the Pi tarball; DAP and GUI share the session | 2+ weeks |
@@ -1727,7 +1727,7 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 |---|---|---|
 | Extract and install `krc::debug` (public header, static lib, CMake package) | Chosen KDBG reader ownership; one parser | M1's canonical link (the vendored bootstrap keeps the UI buildable until then) |
 | Add the v1.1 records from §5.3 | Locations, inheritance, arrays, scopes, 64-bit, real target IDs | Full M3/M4 fidelity; M3 can use v1 fallbacks |
-| Embed `.kdbg` in the KR16 `.kex` writer, or write a build-ID sidecar | KRCompiler-built KR16 images currently carry no debug info | M4's KDBG path (legacy KR16 parser is the fallback) |
+| Embed `.kdbg` in the KR16 `.kr16` writer, or write a build-ID sidecar | KRCompiler-built KR16 images currently carry no debug info | M4's KDBG path (legacy KR16 parser is the fallback) |
 | Set `target_id` per target instead of `1` | The debugger must validate the image's target | M1's target/format check |
 
 ---
@@ -1739,7 +1739,7 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 - **Session unit tests:** line lookup clamped to functions, line stepping
   predicates, call-stack depth, breakpoint enable/disable, run-to, variable
   locations (frame/register/absolute), aggregate/array/pointer expansion.
-- **KDBG fixtures:** a small `.kdbg`/`.k32` fixture per target; assert decode and
+- **KDBG fixtures:** a small `.kdbg`/`.kr32` fixture per target; assert decode and
   canonical dump parity with `krc --dump-symbols --json`. Include corrupt/
   truncated/CRC-failure cases.
 - **Golden images:** 1440x900 PPM/hash for empty, loaded, running, error,
@@ -1792,7 +1792,7 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | KDBG v1 lacks locations/base/arrays/64-bit | Cannot match KR32 at `-O1`, C++ inheritance, or 64-bit targets | Neutral model + approved additive v1.1; legacy KR32 adapter for v1 parity |
-| KR16 `.kex` has no KDBG | KRCompiler-built KR16 images debug as assembly only | Add `.kdbg` to `write_kr16_image`; or start with legacy KR16 info |
+| KR16 `.kr16` has no KDBG | KRCompiler-built KR16 images debug as assembly only | Add `.kdbg` to `write_kr16_image`; or start with legacy KR16 info |
 | UI scope is large | Months of painting/hit-testing | Fake target + vertical slices; copy KR32 constants and interactions; don't redesign |
 | Adapter ABI coupling | Each VM needs code | Keep interface narrow; adapter lives with the VM; version it |
 | Platform dependency | SDL2 DLL on Windows or static-build cost | Win32 GDI presenter on Windows, SDL2 on Linux; abstract `IWindow` |
@@ -1816,8 +1816,8 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 
 | Decision | Answer |
 |---|---|
-| First integration | KR32 adapter loading a `krc`-built `.k32` with `.kdbg` |
-| KDBG extensions | Additive v1.1 approved (locations, inheritance, arrays, scopes, 64-bit, target IDs, `.kex` embedding) |
+| First integration | KR32 adapter loading a `krc`-built `.kr32` with `.kdbg` |
+| KDBG extensions | Additive v1.1 approved (locations, inheritance, arrays, scopes, 64-bit, target IDs, `.kr16` embedding) |
 | KDBG reader | **A.** KRCompiler exports and installs `krc::debug`; krdbg links it. A vendored exact pair is a bootstrap fallback only. |
 | KDBG v1.1 owner | KRCompiler owns format, writer, decoder changes, and dumper output; krdbg consumes |
 | Target model | Typed register groups by default; addressable values plus one optional custom state panel for exotic architectures. The custom-panel interface is reserved, not implemented, in v1. |
@@ -1840,7 +1840,7 @@ in §8.1:
 
 1. extract/install `krc::debug`;
 2. add the v1.1 records;
-3. embed `.kdbg` in the KR16 `.kex` writer (or a build-ID sidecar);
+3. embed `.kdbg` in the KR16 `.kr16` writer (or a build-ID sidecar);
 4. set the real `target_id` per target.
 
 Implementation details still to settle in the first design review: exact KDBG
@@ -1861,7 +1861,7 @@ detection for layered settings.
    and theme.
 3. **Open the KRCompiler prerequisites in parallel:** extract/install
    `krc::debug`; define the additive v1.1 records; embed `.kdbg` in the KR16
-   `.kex` writer; replace the hardcoded `target_id`.
+   `.kr16` writer; replace the hardcoded `target_id`.
 4. **Then M1:** `DebugInfo`, KDBG v1 decode, `DebugSession`, line stepping,
    unwinding, breakpoints, variable expansion and fake-target tests. M1 links
    `krc::debug`, or the vendored bootstrap until that package exists.

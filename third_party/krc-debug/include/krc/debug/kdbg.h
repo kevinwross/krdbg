@@ -168,7 +168,7 @@ struct KdbgSection {
     std::string_view container;
 };
 
-// Finds the `.kdbg` section in a KR32 `.k32` or KR16 `.kex` image.
+// Finds the `.kdbg` section in a KR32 `.kr32` or KR16 `.kr16` image.
 [[nodiscard]] bool find_kdbg_section(std::span<const std::uint8_t> container,
                                      KdbgSection& section, std::string& error);
 

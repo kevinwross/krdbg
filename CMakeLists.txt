@@ -318,15 +318,15 @@ if(KRDBG_BUILD_TESTS)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr32)
         target_compile_definitions(krdbg_tests PRIVATE
             KRDBG_HAVE_KR32=1
-            KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.k32")
+            KRDBG_KR32_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr32/m3.kr32")
     endif()
     if(KRDBG_KR16_ADAPTER)
         target_sources(krdbg_tests PRIVATE tests/test_kr16_adapter.cpp)
         target_link_libraries(krdbg_tests PRIVATE krdbg_kr16)
         target_compile_definitions(krdbg_tests PRIVATE
             KRDBG_HAVE_KR16=1
-            KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kex"
-            KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kex")
+            KRDBG_KR16_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/m4.kr16"
+            KRDBG_KR16_LEGACY_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr16/legacy.kr16")
     endif()
     if(KRDBG_KR232_ADAPTER)
         # The kr232 adapter's tests are their own binary on purpose: linking any
@@ -345,7 +345,7 @@ if(KRDBG_BUILD_TESTS)
             KRDBG_HAVE_KR232=1
             KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
             KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
-            KRDBG_KR232_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.k232")
+            KRDBG_KR232_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.kr232")
         add_test(NAME krdbg_kr232_unit COMMAND krdbg_kr232_tests)
         set_tests_properties(krdbg_kr232_unit PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

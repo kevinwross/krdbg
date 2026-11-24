@@ -101,7 +101,7 @@ public:
         surface->resize(1440, 900);
         if (loaded) {
             surface->set_program_info(
-                ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
+                ProgramInfo{"examples/fake/main.c", "fake.kr32", 0x1000, true});
         }
         if (running) {
             send_key(platform::key::F5);

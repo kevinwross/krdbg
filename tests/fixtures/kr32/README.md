@@ -1,6 +1,6 @@
 # KR32 M3 fixture
 
-`m3.k32` is a deterministic 5747-byte KR32 executable built with `krc` and
+`m3.kr32` is a deterministic 5747-byte KR32 executable built with `krc` and
 `krld` from KRCompiler at `47fa4e5` or later. It carries a `.kdbg` section used
 by the krdbg KR32 adapter tests.
 
@@ -21,5 +21,5 @@ $env:KRDBG_KR32_RUNTIME = "path/to/KRCompiler/targets/kr32/runtime"
 ./tests/fixtures/kr32/regenerate.ps1
 ```
 
-Run it from the repository root. The script writes `m3.k32` in this directory;
+Run it from the repository root. The script writes `m3.kr32` in this directory;
 a second run produces the same SHA-256.

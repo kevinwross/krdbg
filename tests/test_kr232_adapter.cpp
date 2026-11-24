@@ -178,7 +178,7 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string session = std::string(KRDBG_SOURCE_ROOT) +
-                                "/tests/fixtures/kr232/session.k232";
+                                "/tests/fixtures/kr232/session.kr232";
     if (!krdbg::kr232adapter::load_image(session, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -219,7 +219,7 @@ KRDBG_TEST(kr232_adapter_steps_to_a_line_breakpoint) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string session_path = std::string(KRDBG_SOURCE_ROOT) +
-                                     "/tests/fixtures/kr232/session.k232";
+                                     "/tests/fixtures/kr232/session.kr232";
     if (!krdbg::kr232adapter::load_image(session_path, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -252,7 +252,7 @@ KRDBG_TEST(kr232_adapter_reloads_and_refuses_garbage) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string session_path = std::string(KRDBG_SOURCE_ROOT) +
-                                     "/tests/fixtures/kr232/session.k232";
+                                     "/tests/fixtures/kr232/session.kr232";
     if (!krdbg::kr232adapter::load_image(session_path, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -270,7 +270,7 @@ KRDBG_TEST(kr232_adapter_reloads_and_refuses_garbage) {
 
     // A file that is not a container is refused, with a reason.
     const std::string garbage = std::string(KRDBG_SOURCE_ROOT) +
-                                "/tests/fixtures/kr232/garbage.k232";
+                                "/tests/fixtures/kr232/garbage.kr232";
     {
         std::ofstream throwaway(garbage, std::ios::binary);
         throwaway << "NOTACONTAINER";
@@ -285,7 +285,7 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
-                               "/tests/fixtures/kr232/nested_frames.k232";
+                               "/tests/fixtures/kr232/nested_frames.kr232";
     if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -399,7 +399,7 @@ KRDBG_TEST(kr232_adapter_loaded_state_matches_the_golden) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
-                               "/tests/fixtures/kr232/nested_frames.k232";
+                               "/tests/fixtures/kr232/nested_frames.kr232";
     if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -452,12 +452,12 @@ KRDBG_TEST(kr232_adapter_loaded_state_matches_the_golden) {
 KRDBG_TEST(kr232_adapter_loads_a_container_without_debug_info) {
     // A container whose section table has no `.kdbg`: the debugger must still load
     // and run it, and say it has no source-level information rather than fabricate
-    // a payload. The fixture is loaded.k232 with every `.kdbg` string renamed, so
+    // a payload. The fixture is loaded.kr232 with every `.kdbg` string renamed, so
     // the file stays a valid container with a recomputed CRC.
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string path = std::string(KRDBG_SOURCE_ROOT) +
-                             "/tests/fixtures/kr232/no_debug.k232";
+                             "/tests/fixtures/kr232/no_debug.kr232";
     const bool ok = krdbg::kr232adapter::load_image(path, {}, loaded, error);
     CHECK(ok);
     if (!ok) {
@@ -480,7 +480,7 @@ KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
-                               "/tests/fixtures/kr232/nested_frames.k232";
+                               "/tests/fixtures/kr232/nested_frames.kr232";
     if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -508,7 +508,7 @@ KRDBG_TEST(kr232_adapter_line_breakpoints_survive_a_reload) {
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
     const std::string nested = std::string(KRDBG_SOURCE_ROOT) +
-                               "/tests/fixtures/kr232/nested_frames.k232";
+                               "/tests/fixtures/kr232/nested_frames.kr232";
     if (!krdbg::kr232adapter::load_image(nested, {}, loaded, error)) {
         CHECK(false);
         return;
@@ -568,7 +568,7 @@ KRDBG_TEST(kr232_adapter_reports_kernel_support) {
     krdbg::kr232adapter::LoadedProgram program;
     std::string error;
     const std::string loaded = std::string(KRDBG_SOURCE_ROOT) +
-                               "/tests/fixtures/kr232/loaded.k232";
+                               "/tests/fixtures/kr232/loaded.kr232";
     const bool ok = krdbg::kr232adapter::load_kernel(loaded, loaded, {}, program, error);
     CHECK(!ok);
     CHECK(!error.empty());
@@ -581,8 +581,8 @@ KRDBG_TEST(kr232_adapter_steps_a_kernel_program_through_a_syscall) {
     const std::string root = std::string(KRDBG_SOURCE_ROOT) + "/tests/fixtures/kr232/";
     krdbg::kr232adapter::LoadedProgram loaded;
     std::string error;
-    const bool ok = krdbg::kr232adapter::load_kernel(root + "kernel.k232",
-                                                     root + "userprint.k232",
+    const bool ok = krdbg::kr232adapter::load_kernel(root + "kernel.kr232",
+                                                     root + "userprint.kr232",
                                                      {}, loaded, error);
     CHECK(ok);
     if (!ok) {

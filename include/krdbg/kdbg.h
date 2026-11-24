@@ -13,7 +13,7 @@ namespace krdbg::kdbg {
 [[nodiscard]] bool read_payload(std::span<const std::uint8_t> payload, DebugInfo& out,
                                 std::string& error);
 
-// Finds the `.kdbg` section in a KR32 `.k32` or KR16 `.kex` container, checks
+// Finds the `.kdbg` section in a KR32 `.kr32` or KR16 `.kr16` container, checks
 // that its recorded image base matches the container, and decodes it.
 [[nodiscard]] bool read_section(std::span<const std::uint8_t> container, DebugInfo& out,
                                 std::string& error);

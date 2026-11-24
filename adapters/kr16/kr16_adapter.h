@@ -29,7 +29,7 @@ struct LoadedProgram {
     DebugPath debug_path = DebugPath::None;
 };
 
-// Loads a standalone KR16 `.kex`. KDBG is preferred; an older image without
+// Loads a standalone KR16 `.kr16`. KDBG is preferred; an older image without
 // `.kdbg` is translated from `.debug_line`/`.debug_vars`/`.debug_types`.
 bool load_image(const std::string& image_path, const Options& options,
                 LoadedProgram& program, std::string& error);

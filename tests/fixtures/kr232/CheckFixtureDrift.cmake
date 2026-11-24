@@ -36,8 +36,8 @@ compile("${WORK}/userprint.o" "${FIXTURE_DIR}/userprint.s")
 set(failures "")
 
 # The four that link with crt0 and no base.
-foreach(fixture IN ITEMS "loaded.k232;min.o" "nested_frames.k232;nested.o"
-                         "session.k232;session.o;cons.o;gfx.o")
+foreach(fixture IN ITEMS "loaded.kr232;min.o" "nested_frames.kr232;nested.o"
+                         "session.kr232;session.o;cons.o;gfx.o")
     string(REPLACE ";" "|" fields "${fixture}")
     string(REPLACE "|" ";" fields "${fields}")
     list(GET fields 0 image)
@@ -63,18 +63,18 @@ endforeach()
 
 # The kernel is a flat kernel-mode image; the user program sits at user RAM.
 execute_process(COMMAND "${KRLD}" "--source-root=${KR232}" --entry=_start
-                        "${WORK}/kernel.o" -o "${WORK}/kernel.k232"
+                        "${WORK}/kernel.o" -o "${WORK}/kernel.kr232"
                 RESULT_VARIABLE kernel_state ERROR_VARIABLE kernel_error)
 if(NOT kernel_state EQUAL 0)
-    message(FATAL_ERROR "linking kernel.k232 failed:\n${kernel_error}")
+    message(FATAL_ERROR "linking kernel.kr232 failed:\n${kernel_error}")
 endif()
 execute_process(COMMAND "${KRLD}" "--source-root=${FIXTURE_DIR}" --base=0x08000000
-                        --entry=_start "${WORK}/userprint.o" -o "${WORK}/userprint.k232"
+                        --entry=_start "${WORK}/userprint.o" -o "${WORK}/userprint.kr232"
                 RESULT_VARIABLE print_state ERROR_VARIABLE print_error)
 if(NOT print_state EQUAL 0)
-    message(FATAL_ERROR "linking userprint.k232 failed:\n${print_error}")
+    message(FATAL_ERROR "linking userprint.kr232 failed:\n${print_error}")
 endif()
-foreach(image IN ITEMS "kernel.k232" "userprint.k232")
+foreach(image IN ITEMS "kernel.kr232" "userprint.kr232")
     file(SHA256 "${FIXTURE_DIR}/${image}" checked_in)
     file(SHA256 "${WORK}/${image}" rebuilt)
     if(NOT checked_in STREQUAL rebuilt)

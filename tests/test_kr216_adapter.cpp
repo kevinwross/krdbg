@@ -11,7 +11,7 @@ namespace {
 
 std::string fixture_path() {
     return std::string(KRDBG_SOURCE_ROOT) +
-           "/tests/fixtures/kr216/debug_fixture.k216";
+           "/tests/fixtures/kr216/debug_fixture.kr216";
 }
 
 const krdbg::FunctionInfo* find_function(const krdbg::DebugInfo& info,
@@ -81,7 +81,7 @@ KRDBG_TEST(kr216_adapter_loads_kdbg_and_debugs_main) {
 KRDBG_TEST(kr216_adapter_debugs_cpp_virtual_and_double) {
     const std::string path =
         std::string(KRDBG_SOURCE_ROOT) +
-        "/tests/fixtures/kr216/debug_cpp.k216";
+        "/tests/fixtures/kr216/debug_cpp.kr216";
     krdbg::kr216adapter::LoadedProgram loaded;
     std::string error;
     const bool ok = krdbg::kr216adapter::load_image(path, {}, loaded, error);

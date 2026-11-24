@@ -39,31 +39,31 @@ function Build-Fixture([string] $name, [string[]] $objects) {
     Write-Host "wrote $name"
 }
 
-# loaded.k232: the two-instruction program the layout and memory tests use.
+# loaded.kr232: the two-instruction program the layout and memory tests use.
 & $krc -c --target kr232 "$sourcesText/tests/fixtures/c/kr232_min.c" -o "$workText/min.o"
-Build-Fixture 'loaded.k232' @("$workText/min.o")
+Build-Fixture 'loaded.kr232' @("$workText/min.o")
 
-# nested_frames.k232: two frames on the stack for the unwind test.
+# nested_frames.kr232: two frames on the stack for the unwind test.
 & $krc -c --target kr232 "$sourcesText/tests/fixtures/c/kr232_nested_frames.c" -o "$workText/nested.o"
-Build-Fixture 'nested_frames.k232' @("$workText/nested.o")
+Build-Fixture 'nested_frames.kr232' @("$workText/nested.o")
 
-# session.k232: a console byte and a committed frame for the device tests.
+# session.kr232: a console byte and a committed frame for the device tests.
 & $krc -c --target kr232 -I $includeText "$sourcesText/tests/fixtures/c/kr232_session.c" -o "$workText/session.o"
 & $krc -c --target kr232 -I $includeText "$sourcesText/targets/kr232/runtime/cons.c" -o "$workText/cons.o"
 & $krc -c --target kr232 -I $includeText "$sourcesText/targets/kr232/runtime/gfx.c" -o "$workText/gfx.o"
-Build-Fixture 'session.k232' @("$workText/session.o", "$workText/cons.o", "$workText/gfx.o")
+Build-Fixture 'session.kr232' @("$workText/session.o", "$workText/cons.o", "$workText/gfx.o")
 
-# kernel.k232 is the kernel the adapter runs user programs under, and
-# userprint.k232 is a program that prints through it and exits 3.
+# kernel.kr232 is the kernel the adapter runs user programs under, and
+# userprint.kr232 is a program that prints through it and exits 3.
 & $krc -c --target kr232 "$kr232Text/targets/kr232/kernel/kernel.s" -o "$workText/kernel.o"
 if ($LASTEXITCODE -ne 0) { throw 'kernel failed' }
-& $krld "--source-root=$kr232Text" --entry=_start "$workText/kernel.o" -o "$fixtureText/kernel.k232"
-if ($LASTEXITCODE -ne 0) { throw 'kernel.k232 failed' }
-Write-Host 'wrote kernel.k232'
+& $krld "--source-root=$kr232Text" --entry=_start "$workText/kernel.o" -o "$fixtureText/kernel.kr232"
+if ($LASTEXITCODE -ne 0) { throw 'kernel.kr232 failed' }
+Write-Host 'wrote kernel.kr232'
 
 & $krc -c --target kr232 "$fixtureText/userprint.s" -o "$workText/userprint.o"
 if ($LASTEXITCODE -ne 0) { throw 'userprint failed' }
-& $krld "--source-root=$fixtureText" --base=0x08000000 --entry=_start "$workText/userprint.o" -o "$fixtureText/userprint.k232"
-if ($LASTEXITCODE -ne 0) { throw 'userprint.k232 failed' }
-Write-Host 'wrote userprint.k232'
+& $krld "--source-root=$fixtureText" --base=0x08000000 --entry=_start "$workText/userprint.o" -o "$fixtureText/userprint.kr232"
+if ($LASTEXITCODE -ne 0) { throw 'userprint.kr232 failed' }
+Write-Host 'wrote userprint.kr232'
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'

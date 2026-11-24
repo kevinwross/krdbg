@@ -264,8 +264,8 @@ void print_usage() {
     std::printf(
         "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
         "[--state empty|loaded|running|video|video16|error|settings|context|"
-        "tooltip|variables|com|no-com|no-video] [--kr32 <image.k32>] "
-        "[--kr32-os] [--kr16 <image.kex>] [--kr216 <image.k216>] [--kr232 <image.k232>] "
+        "tooltip|variables|com|no-com|no-video] [--kr32 <image.kr32>] "
+        "[--kr32-os] [--kr16 <image.kr16>] [--kr216 <image.kr216>] [--kr232 <image.kr232>] "
         "[--load <source-or-image>] "
         "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216|kr232] "
         "[--source-root <dir>] [--kernel] [--reset] [--version] "
@@ -811,10 +811,10 @@ int main(int argc, char** argv) {
         surface.set_program_info(*real_program);
     } else if (options.loaded) {
         surface.set_program_info(
-            krdbg::ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
+            krdbg::ProgramInfo{"examples/fake/main.c", "fake.kr32", 0x1000, true});
     }
     if (options.error) {
-        surface.set_error("could not load examples/fake/fake.k32");
+        surface.set_error("could not load examples/fake/fake.kr32");
     }
     if (options.com && fake_target != nullptr) {
         fake_target->com().reset();

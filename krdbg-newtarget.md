@@ -220,7 +220,7 @@ KDBG v1.1 is the debug format of record. The reader is in
 Two entry points exist:
 
 - `krdbg::kdbg::read_section(container, out, error)` finds `.kdbg` inside a
-  KR32 `.k32` or KR16 `.kex` container and checks that the payload's image base
+  KR32 `.kr32` or KR16 `.kr16` container and checks that the payload's image base
   matches the container's load base.
 - `krdbg::kdbg::read_payload(payload, out, error)` decodes a raw `.kdbg` payload
   when the adapter has already located it in its own container or sidecar.
@@ -284,7 +284,7 @@ A target may load an image with no KDBG. Set `LoadedProgram::info` to
 `std::nullopt` (or an empty `DebugInfo`) and let the surface run at
 assembly-level: registers, memory, disassembly, address breakpoints and
 instruction stepping still work. KR16 and KR216 do this; KR32 currently rejects a
-`.k32` without KDBG, so do not copy that behavior unless your target requires
+`.kr32` without KDBG, so do not copy that behavior unless your target requires
 KDBG to be useful.
 
 ### 4.6 Source paths

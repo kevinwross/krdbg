@@ -2,7 +2,7 @@
 
 `fake.c` is compiled and linked with KRCompiler to produce:
 
-- `fake.k32` — a KR32 image containing the `.kdbg` section;
+- `fake.kr32` — a KR32 image containing the `.kdbg` section;
 - `fake.kdbg` — the raw `.kdbg` payload extracted from the image;
 - `fake.krc.json` — `krc --dump-symbols --json` output, the parity golden.
 
@@ -19,7 +19,7 @@ python tests/fixtures/kdbg/regenerate.py \
     --krc /path/to/krc --krld /path/to/krld
 ```
 
-The script compiles `fake.c`, links `fake.k32` with `--source-root=<repo>`,
+The script compiles `fake.c`, links `fake.kr32` with `--source-root=<repo>`,
 writes the JSON dump, and extracts `fake.kdbg` from the KDBG magic to the end of
 the image. Re-running it on the same compiler must produce byte-identical
 fixtures; `tests/test_kdbg.cpp` decodes both forms and compares the translated

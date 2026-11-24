@@ -434,7 +434,7 @@ bool load_image(const std::string& image_path, const Options& options,
     const bool container = bytes[0] == 'K' && bytes[1] == '2' && bytes[2] == '3' && bytes[3] == '2';
     if (!container) {
         // Only a container is a kr232 image; a flat image has no header to trust.
-        error = "not a .k232 container";
+        error = "not a .kr232 container";
         return false;
     }
     // Load the image first: the machine's memory is what the debugger reads, and a
@@ -455,7 +455,7 @@ bool load_image(const std::string& image_path, const Options& options,
         error = loaded.error;
         return false;
     }
-    // A `.k232` carries its debug payload in a `.kdbg` section; decoding it is what
+    // A `.kr232` carries its debug payload in a `.kdbg` section; decoding it is what
     // makes source-level stepping possible.
     if (container && bytes.size() >= 64) {
         const std::uint16_t count = static_cast<std::uint16_t>(

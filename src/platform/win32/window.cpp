@@ -502,7 +502,7 @@ bool open_file_dialog(std::string& path) {
     OPENFILENAMEW dialog = {};
     dialog.lStructSize = sizeof dialog;
     dialog.lpstrFilter =
-        L"Machine images\0*.k232;*.kex;*.k32;*.k216;*.bin\0All files\0*.*\0";
+        L"Machine images\0*.kr232;*.kr16;*.kr32;*.kr216;*.bin\0All files\0*.*\0";
     dialog.lpstrFile = buffer;
     dialog.nMaxFile = static_cast<DWORD>(std::size(buffer));
     dialog.lpstrTitle = L"Load a program";

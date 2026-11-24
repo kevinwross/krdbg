@@ -86,7 +86,7 @@ M0 ──► M1 ──► M2 ──► M3 ──► M4 ──► M5 ──► M6
 ```
 
 M1 needs `krc::debug` or the vendored bootstrap. M3 needs the KR32 adapter.
-M4 needs the KR16 adapter and the `.kex` debug decision. M5 needs the build
+M4 needs the KR16 adapter and the `.kr16` debug decision. M5 needs the build
 chain. M6 needs an ARM64 tester-log entry for the release revision.
 
 ---
@@ -343,7 +343,7 @@ dependence on VM types.
 - [x] **M1.2.1** Integrate `krc::debug`; or the vendored `kdbg.*` bootstrap with
       a pinned commit and provenance note.
   Evidence: `third_party/krc-debug/` holds the exact KRCompiler `kdbg.h`/`kdbg.cpp` from `797dfacf7bbbc3e7744a40e627e7777a1c63b9c9`, with the MIT licence and README provenance. `KRDBG_KDBG_VENDORED=OFF` with `CMAKE_PREFIX_PATH` at the KRCompiler install tree configures, builds and passes the tests against `krc::debug`.
-- [x] **M1.2.2** Decode `.kdbg` from a `.k32` section; clear errors for
+- [x] **M1.2.2** Decode `.kdbg` from a `.kr32` section; clear errors for
       truncated, bad-CRC, missing-section and wrong-version input.
   Evidence: `read_section` uses `decode_kdbg_image` (section lookup plus image-base check); `read_payload` decodes a raw payload. Tests cover truncated header, bad magic, wrong major version, header CRC, section-table bounds, record length and a missing section, each returning a distinct error.
 - [x] **M1.2.3** Translate `KdbgImage` to `DebugInfo`; no `KdbgImage` outside
@@ -393,8 +393,8 @@ dependence on VM types.
 
 ### M1.5 Fixtures
 
-- [x] **M1.5.1** A small `.k32` fixture with `.kdbg` from `krc`/`krld`.
-  Evidence: `tests/fixtures/kdbg/fake.k32` (5086 bytes) was linked by KRCompiler
+- [x] **M1.5.1** A small `.kr32` fixture with `.kdbg` from `krc`/`krld`.
+  Evidence: `tests/fixtures/kdbg/fake.kr32` (5086 bytes) was linked by KRCompiler
   `krld` 0.1.0 from `fake.c` at `e04b3b2` (KDBG v1.1);
   `kdbg_section_translates_the_k32_fixture` decodes it.
 - [x] **M1.5.2** A `.kdbg` binary fixture for decode tests.
@@ -608,7 +608,7 @@ presenter, golden coverage and the full CI matrix.
 
 ## 5. M3 — KR32 vertical slice
 
-**Goal:** the new surface runs a `krc`-built `.k32` with `.kdbg` through a real
+**Goal:** the new surface runs a `krc`-built `.kr32` with `.kdbg` through a real
 KR32 adapter, and the session works end to end.
 
 ### M3.1 Adapter
@@ -631,7 +631,7 @@ registers, a 16x16 tile matrix, RAM/ROM/framebuffer/MMIO regions.
 
 ### M3.2 Loading
 
-- [x] **M3.2.1** Load a `.k32` executable through KR32's container loader.
+- [x] **M3.2.1** Load a `.kr32` executable through KR32's container loader.
 - [x] **M3.2.2** Load the `.kdbg` section into `DebugInfo`; source paths resolve.
 - [x] **M3.2.3** Restart/reload preserving the correct breakpoints.
 - [x] **M3.2.4** OS mode: embedded kernel/BIOS, merged debug info, video.
@@ -656,7 +656,7 @@ OS pair is an external KRCompiler/KR32OS prerequisite.
 - [x] **M3.3.7** Video preview/window for an OS image.
 - [x] **M3.3.8** Side-by-side visual review against the KR32 GUI.
 
-`tests/fixtures/kr32/m3.k32` is a deterministic 5,747-byte krc/krld image with
+`tests/fixtures/kr32/m3.kr32` is a deterministic 5,747-byte krc/krld image with
 `.kdbg`; `tests/test_kr32_adapter.cpp` exercises every row above against it and
 the embedded OS pair. The side-by-side captures are `shots/g3-kr32.png` (krdbg)
 and `shots/g3-kr32-reference.png` (KR32 GUI), both stopped at `main` line 21.
@@ -666,7 +666,7 @@ and `shots/g3-kr32-reference.png` (KR32 GUI), both stopped at `main` line 21.
 - [x] **G3.1** Windows x64 and WSL x64 build/test/integration pass.
 - [x] **G3.2** ARM64 evidence recorded (non-blocking).
 - [x] **G3.3** Breakpoint, step, locals/struct/globals, stack, memory,
-      disassembly and COM all verified on a real `.k32`.
+      disassembly and COM all verified on a real `.kr32`.
 - [x] **G3.4** The adapter is the only KR32-specific code; no `if (kr32)` in UI.
 - [x] **G3.5** Source paths resolve from a clean checkout.
 - [x] **G3.6** Goldens updated for the real target.
@@ -707,7 +707,7 @@ port only.
 
 ### M4.2 Debug info
 
-- [x] **M4.2.1** KDBG path if `.kex` carries it; otherwise the legacy KR16
+- [x] **M4.2.1** KDBG path if `.kr16` carries it; otherwise the legacy KR16
       `.debug_line`/`.debug_vars` adapter.
 - [x] **M4.2.2** Source/line/function/variable mapping and source paths.
 - [x] **M4.2.3** Unsupported records degrade cleanly.
@@ -729,8 +729,8 @@ path resolves on Linux.
       no UI changes.
 - [x] **M4.3.5** Goldens for the 16-bit profile.
 
-`tests/fixtures/kr16/m4.kex` is the deterministic krc-built KDBG fixture;
-`legacy.kex` exercises the fallback. `tests/test_kr16_adapter.cpp` covers
+`tests/fixtures/kr16/m4.kr16` is the deterministic krc-built KDBG fixture;
+`legacy.kr16` exercises the fallback. `tests/test_kr16_adapter.cpp` covers
 breakpoint line 18, line-in/over/out across `add`, point members, caller-frame
 locals, globals, memory, 2/4-byte disassembly, COM `KR16\n` and input `A`, the
 legacy path, and the 16-bit UI. The UI screenshot is `shots/m4-kr16.png`.
@@ -741,7 +741,7 @@ legacy path, and the 16-bit UI. The UI screenshot is `shots/m4-kr16.png`.
 - [x] **G4.2** ARM64 evidence recorded (non-blocking).
 - [x] **G4.3** Same interactions work on KR16; only adapter code changed.
 - [x] **G4.4** No `if (kr16)` or 16-bit special case in `src/ui`.
-- [x] **G4.5** `.kex` debug path is documented or the legacy adapter is used.
+- [x] **G4.5** `.kr16` debug path is documented or the legacy adapter is used.
 - [x] **G4.6** Goldens updated.
 
 G4 is closed. The ARM64 gate at `dee054e` (adapter OFF) passed 99 checks; the
@@ -764,7 +764,7 @@ the same schema dialog.
 
 - [x] **M5.1.1** `IHostServices::choose_and_load` and `load_path` build `.c`,
       `.cpp`, `.s` and load the result.
-- [x] **M5.1.2** Direct `.k32`/`.kex` load path.
+- [x] **M5.1.2** Direct `.kr32`/`.kr16` load path.
 - [x] **M5.1.3** Build errors surface through `show_error`; no silent fallback.
 - [x] **M5.1.4** `RESET` rebuilds source-origin programs; address/line
       breakpoint rules.
@@ -774,7 +774,7 @@ The host runs the installed KRCompiler package at `402cfaf` (item 4.14):
 `bin/krc`, `bin/krld` and `share/krc/sysroot`. `--toolchain <prefix>` or
 `KRDBG_KRC_PREFIX` selects it; `krdbg_host` validates the layout and never
 inspects a build tree. `--load` builds `.c`, `.cpp` and `.s` and loads the
-result; direct `.k32`/`.kex` paths skip the build. Errors include the tool log
+result; direct `.kr32`/`.kr16` paths skip the build. Errors include the tool log
 and reach `show_error`. `--reset` rebuilds source-origin programs and preserves
 line breakpoints. `--kernel` loads the embedded KR32OS pair; KR16 reports
 `supports_kernel_load() == false`. The headless demo has no native file picker;
@@ -1015,7 +1015,7 @@ Recorded 2026-11-20T11:42:43-08:00.
   `KRDBG_KR32_ADAPTER=ON expects the KR32 source tree at
   'C:/Users/kevin/source/repos/does-not-exist' (CMakeLists.txt and
   include/kr32/core/machine.h).`
-- Fixture: `tests/fixtures/kr32/m3.k32` is 5,747 bytes, built from `m3.c` with
+- Fixture: `tests/fixtures/kr32/m3.kr32` is 5,747 bytes, built from `m3.c` with
   `krc -O0 -c` plus `krld` and KRCompiler's `crt0.s`; `krc --dump-symbols`
   reports KDBG `functions=2 symbols=1 variables=5`; SHA-256
   `84CC57C417A2C4BD3931DC0E996A8CD518057545794F13869E79CC0F52E73AF0`
@@ -1083,10 +1083,10 @@ Recorded 2026-11-20T12:51:17-08:00.
   `KRDBG_KR16_ADAPTER=ON expects the KR16 source tree at
   'C:/Users/kevin/source/repos/does-not-exist' (CMakeLists.txt and
   include/kr16/machine.hpp).`
-- Fixtures: `tests/fixtures/kr16/m4.kex` is 2,620 bytes from
+- Fixtures: `tests/fixtures/kr16/m4.kr16` is 2,620 bytes from
   `krc --target=kr16 -O0 -c`; SHA-256
   `D2709C451D4736CBEEFE42D50D2CE65A2EEF45351473AD78AA50CA9008938D58`,
-  deterministic. `legacy.kex` is 1,954 bytes from `kr16 cc -g -O0` + `kr16 ld`;
+  deterministic. `legacy.kr16` is 1,954 bytes from `kr16 cc -g -O0` + `kr16 ld`;
   SHA-256 `DE35D84DB99BA95012F05F32206ED312B35A24CF86D650B890E832FCE1B132D0`,
   deterministic, and has no `.kdbg`.
 - Integration: `tests/test_kr16_adapter.cpp` covers entry PC `0x100`, source
@@ -1148,7 +1148,7 @@ Recorded 2026-11-20T13:49:40-08:00.
   layout and only runs the executables. No KRCompiler build tree is referenced.
 - `krdbg_demo --headless --load tests/fixtures/kr16/m4.c --target kr16
   --toolchain build/m5-toolchain` exits 0 and renders the built KDBG source;
-  the same path works for `.cpp` and `.s` and for KR32. Direct `.kex`/`.k32`
+  the same path works for `.cpp` and `.s` and for KR32. Direct `.kr16`/`.kr32`
   loads bypass the build chain.
 - `host_build_chain_builds_c_cpp_and_s` builds KR16 C/C++/assembly and KR32 C;
   `host_rebuild_preserves_line_breakpoints` rebuilds and retains the line
@@ -1199,9 +1199,9 @@ Recorded 2026-11-20T22:14:07-08:00.
   `02846961...39AA` and `F700474A...60A3`; `third_party/krc-debug/README.md`
   records the commit and version, and `docs/licenses.md` records the MIT copy.
 - Built the isolated `krc`/`krld` from that KRCompiler commit and regenerated
-  `tests/fixtures/kdbg/fake.k32`, `fake.kdbg` and `fake.krc.json` with
+  `tests/fixtures/kdbg/fake.kr32`, `fake.kdbg` and `fake.krc.json` with
   `tests/fixtures/kdbg/regenerate.py`. The v1.1 `krc --dump-symbols
-  build/fixtures-gen/fake.k32 --json` output matches `fake.krc.json` except for
+  build/fixtures-gen/fake.kr32 --json` output matches `fake.krc.json` except for
   the script's final newline. `tests/test_kdbg.cpp` checks the v1.1 `minor`,
   pointer width, `variableInfo` scope and parameter/local/static flags as well
   as the carried v1 fields; the KDBG tests pass.
@@ -1245,7 +1245,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | ARM64 tester session on `BitWhiz` (Raspberry Pi on the local network; polls `main`) | G0 / G6 | kevinwross | `[x]` The tester path is `docs/arm64-tester.md`; it runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`. There is no GitHub Actions runner and none is planned. The entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` records `krdbg_unit` 105 checks, 0 failures, plus the adapter-on 115-check extra run. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout and CI never depend on a local KRCompiler install. |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
-| `.kdbg` in the KR16 `.kex` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
+| `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
 | `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[ ]` |
 
 If a prerequisite is unavailable, use the documented fallback (vendored KDBG,

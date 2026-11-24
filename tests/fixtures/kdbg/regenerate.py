@@ -34,7 +34,7 @@ def main() -> None:
     WORK.mkdir(parents=True, exist_ok=True)
     source = "tests/fixtures/kdbg/fake.c"
     object_path = WORK / "fake.kro"
-    image_path = WORK / "fake.k32"
+    image_path = WORK / "fake.kr32"
     json_path = WORK / "fake.krc.json"
 
     run([args.krc, "--target=kr32", "-c", "-o", str(object_path), source])
@@ -52,9 +52,9 @@ def main() -> None:
         raise SystemExit("no KDBG payload in the linked image")
     (HERE / "fake.kdbg").write_bytes(image[magic:])
 
-    shutil.copyfile(image_path, HERE / "fake.k32")
+    shutil.copyfile(image_path, HERE / "fake.kr32")
     shutil.copyfile(json_path, HERE / "fake.krc.json")
-    print(f"wrote {HERE / 'fake.k32'}, {HERE / 'fake.kdbg'}, {HERE / 'fake.krc.json'}")
+    print(f"wrote {HERE / 'fake.kr32'}, {HERE / 'fake.kdbg'}, {HERE / 'fake.krc.json'}")
 
 
 if __name__ == "__main__":

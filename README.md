@@ -34,7 +34,7 @@ Linux:
 
 The debugger opens the fake target by default. `--load <source-or-image>`
 builds a `.c`, `.cpp` or `.s` through the installed `krc`/`krld` package (set
-`KRDBG_KRC_PREFIX` or pass `--toolchain <prefix>`), or opens a `.k32`/`.kex`
+`KRDBG_KRC_PREFIX` or pass `--toolchain <prefix>`), or opens a `.kr32`/`.kr16`
 image directly. `--kernel` loads the embedded KR32OS pair.
 
 The Windows artifact is a single executable and contains no `SDL2.dll`. The

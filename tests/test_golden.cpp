@@ -121,7 +121,7 @@ KRDBG_TEST(golden_video_16_9_matches_the_committed_hash) {
 
 KRDBG_TEST(golden_error_state_matches_the_committed_hash) {
     krdbg::test::TestScene scene(true);
-    scene.surface->set_error("could not load examples/fake/fake.k32");
+    scene.surface->set_error("could not load examples/fake/fake.kr32");
     const std::string expected = read_golden("error.hash");
     CHECK_EQ(format_hash(scene.render_hash()), expected);
 }

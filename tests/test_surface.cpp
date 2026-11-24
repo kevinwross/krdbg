@@ -40,7 +40,7 @@ KRDBG_TEST(surface_renders_empty_and_loaded_states_differently) {
     krdbg::test::TestScene loaded(true);
     CHECK(!empty.surface->program_info().loaded);
     CHECK(loaded.surface->program_info().loaded);
-    CHECK_EQ(loaded.surface->program_info().name, "fake.k32");
+    CHECK_EQ(loaded.surface->program_info().name, "fake.kr32");
     CHECK(empty.render_hash() != loaded.render_hash());
     CHECK(empty.render_hash() != 0U);
 }

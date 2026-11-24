@@ -309,7 +309,7 @@ KRDBG_TEST(settings_tool_fields_render_in_the_existing_dialog) {
     DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
     surface.set_program_info(
-        ProgramInfo{"examples/fake/main.c", "fake.k32", 0x1000, true});
+        ProgramInfo{"examples/fake/main.c", "fake.kr32", 0x1000, true});
     const Rect gear = surface.layout().toolbar_gear;
     platform::Event open;
     open.kind = platform::Event::Kind::MouseDown;

@@ -108,7 +108,7 @@ const krdbg::VariableInfo* find_variable(const krdbg::DebugInfo& info,
 } // namespace
 
 KRDBG_TEST(kdbg_section_translates_the_k32_fixture) {
-    const std::vector<std::uint8_t> container = read_binary("fake.k32");
+    const std::vector<std::uint8_t> container = read_binary("fake.kr32");
     CHECK(!container.empty());
     krdbg::DebugInfo info;
     std::string error;
@@ -153,7 +153,7 @@ KRDBG_TEST(kdbg_section_translates_the_k32_fixture) {
 
 KRDBG_TEST(kdbg_payload_and_section_translate_identically) {
     const std::vector<std::uint8_t> payload = read_binary("fake.kdbg");
-    const std::vector<std::uint8_t> container = read_binary("fake.k32");
+    const std::vector<std::uint8_t> container = read_binary("fake.kr32");
     CHECK(!payload.empty());
     CHECK(!container.empty());
 
@@ -172,7 +172,7 @@ KRDBG_TEST(kdbg_payload_and_section_translate_identically) {
 }
 
 KRDBG_TEST(kdbg_translation_matches_krc_json_for_every_carried_field) {
-    const std::vector<std::uint8_t> container = read_binary("fake.k32");
+    const std::vector<std::uint8_t> container = read_binary("fake.kr32");
     krdbg::DebugInfo info;
     std::string error;
     CHECK(krdbg::kdbg::read_section(container, info, error));
@@ -340,7 +340,7 @@ KRDBG_TEST(kdbg_rejects_a_bad_section_table_and_a_missing_section) {
     CHECK(!error.empty());
 
     // Rename the container section so find_kdbg_section cannot find it.
-    std::vector<std::uint8_t> renamed = read_binary("fake.k32");
+    std::vector<std::uint8_t> renamed = read_binary("fake.kr32");
     const std::array<std::uint8_t, 6> name{'.', 'k', 'd', 'b', 'g', '\0'};
     const auto found = std::search(renamed.begin(), renamed.end(), name.begin(), name.end());
     CHECK(found != renamed.end());

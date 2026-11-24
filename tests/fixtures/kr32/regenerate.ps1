@@ -1,4 +1,4 @@
-# Rebuild tests/fixtures/kr32/m3.k32. Run from the repository root.
+# Rebuild tests/fixtures/kr32/m3.kr32. Run from the repository root.
 $ErrorActionPreference = 'Stop'
 $krc = $env:KRDBG_KRC
 $krld = $env:KRDBG_KRLD
@@ -12,6 +12,6 @@ New-Item -ItemType Directory -Force build\m3 | Out-Null
     -o build\m3\m3.kro
 if ($LASTEXITCODE -ne 0) { throw "krc failed: $LASTEXITCODE" }
 & $krld build\m3\m3.kro "$runtime\crt0.s" tests\fixtures\kr32\getchar.s `
-    -o tests\fixtures\kr32\m3.k32 --base=0x10000 --entry=_start --source-root=.
+    -o tests\fixtures\kr32\m3.kr32 --base=0x10000 --entry=_start --source-root=.
 if ($LASTEXITCODE -ne 0) { throw "krld failed: $LASTEXITCODE" }
-Get-FileHash tests\fixtures\kr32\m3.k32 -Algorithm SHA256 | Format-List
+Get-FileHash tests\fixtures\kr32\m3.kr32 -Algorithm SHA256 | Format-List
