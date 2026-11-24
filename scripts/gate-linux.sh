@@ -73,7 +73,10 @@ fi
 for index in "${!presets[@]}"; do
     preset="${presets[$index]}"
     echo "== configure $preset"
-    cmake --preset "$preset"
+    # --fresh: a directory reused between runs keeps whatever setting a previous
+    # run left in its cache, and an adapter switched on there asks for a core the
+    # preset never enables. The gate owns the configuration, so it starts clean.
+    cmake --preset "$preset" --fresh
     echo "== build $preset"
     cmake --build --preset "$preset"
     echo "== test $preset"
