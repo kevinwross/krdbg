@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "krc/target/target.h"
 #include "process.h"
 
 namespace krdbg::host {
@@ -97,11 +98,14 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
     }
 
     const std::string stem = source.stem().string();
-    const std::filesystem::path image =
-        output_directory /
-        (stem + (options.target == "kr16" ? ".kex"
-                     : options.target == "kr232" ? ".k232"
-                                                  : ".k32"));
+    // The image suffix comes from the compiler's one table, so a target added
+    // there produces the right file name here without another branch.
+    const auto target_id = krc::target::parse_target(options.target);
+    const std::string image_suffix =
+        target_id.has_value()
+            ? std::string(krc::target::image_extension(*target_id))
+            : std::string(".bin");
+    const std::filesystem::path image = output_directory / (stem + image_suffix);
     const std::filesystem::path object = output_directory / (stem + ".kro");
 
     std::vector<std::string> common = {

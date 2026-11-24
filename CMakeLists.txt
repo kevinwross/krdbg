@@ -31,6 +31,13 @@ if(KRDBG_PLATFORM STREQUAL "sdl2" AND NOT UNIX)
 endif()
 message(STATUS "krdbg presenter: ${KRDBG_PLATFORM}")
 
+
+# The compiler package provides both public targets; krdbg reads the target
+# table from it and links the machine cores, so the dependency is declared here
+# rather than satisfied by an include path that happens to be on the line.
+find_package(krc-debug CONFIG REQUIRED)
+find_package(krc-toolchain CONFIG REQUIRED)
+
 add_library(krdbg_warnings INTERFACE)
 if(MSVC)
     target_compile_options(krdbg_warnings INTERFACE /W4 /permissive- /Zc:__cplusplus)
@@ -64,6 +71,9 @@ target_include_directories(krdbg_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
 )
 target_link_libraries(krdbg_core PRIVATE krdbg_warnings)
+# The adapter table lives in the compiler's headers, and every part of krdbg that
+# names a target should read that table rather than carry its own copy.
+target_link_libraries(krdbg_core PUBLIC krc::toolchain)
 
 # Host-side process and build chain. It runs installed krc/krld; no compiler
 # code is linked into krdbg.
@@ -75,7 +85,7 @@ target_include_directories(krdbg_host
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src/host"
 )
-target_link_libraries(krdbg_host PUBLIC krdbg_core PRIVATE krdbg_warnings)
+target_link_libraries(krdbg_host PUBLIC krdbg_core krc::toolchain PRIVATE krdbg_warnings)
 
 # KDBG translation. The decoder is the exact KRCompiler pair vendored under
 # third_party/krc-debug; only src/kdbg includes krc/debug/kdbg.h and only this
@@ -90,7 +100,6 @@ if(KRDBG_KDBG_VENDORED)
     target_include_directories(krdbg_kdbg
         PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/krc-debug/include")
 else()
-    find_package(krc-debug CONFIG REQUIRED)
     target_link_libraries(krdbg_kdbg PRIVATE krc::debug)
 endif()
 target_link_libraries(krdbg_kdbg
@@ -241,6 +250,8 @@ else()
 endif()
 
 add_executable(krdbg_demo apps/demo/main.cpp)
+# The adapter table is the compiler's; the demo reads it rather than its own list.
+target_link_libraries(krdbg_demo PRIVATE krc::toolchain)
 target_link_libraries(krdbg_demo PRIVATE
     krdbg_ui krdbg_host ${KRDBG_PLATFORM_TARGET} krdbg_warnings)
 if(KRDBG_KR32_ADAPTER)

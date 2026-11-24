@@ -2,6 +2,7 @@
 #include "krdbg/surface.h"
 #include "krdbg/version.h"
 #include "krdbg/window.h"
+#include "krc/target/target.h"
 
 #include <chrono>
 #include <cstdio>
@@ -670,14 +671,12 @@ int main(int argc, char** argv) {
                 return false;
             }
             image_path = built.image.string();
-        } else if (lower.ends_with(".kex")) {
-            target_name = "kr16";
-        } else if (lower.ends_with(".k32")) {
-            target_name = "kr32";
-        } else if (lower.ends_with(".k216")) {
-            target_name = "kr216";
-        } else if (lower.ends_with(".k232")) {
-            target_name = "kr232";
+        } else if (const auto named = krc::target::target_for_extension(
+                       std::filesystem::path(lower).extension().string());
+                   named.has_value()) {
+            // One table, owned by the compiler: a new VM needs no row here, and
+            // an unknown suffix leaves target_name alone rather than guessing.
+            target_name = std::string(krc::target::get_target(*named).name);
         }
 
         if (target_name == "kr16") {
