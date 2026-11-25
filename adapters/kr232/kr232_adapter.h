@@ -38,7 +38,7 @@ bool load_image(const std::string& image_path, const Options& options,
 bool kernel_supported();
 
 // Loads `kernel_path` as the machine's image and `program_path` at 0x08000000,
-// handing the program's entry to the kernel in R2 the way `kr232-emu --user`
+// handing the program's entry to the kernel in R2 the way `kr232 --user`
 // does. The returned program's debug information is the user image's, because
 // that is what a debugger steps through.
 bool load_kernel(const std::string& kernel_path, const std::string& program_path,
