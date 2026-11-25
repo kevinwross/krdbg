@@ -244,6 +244,7 @@ struct Options {
     bool kernel = false;
     bool reset = false;
     bool version = false;
+    bool help = false;
     int frames = -1;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
@@ -262,14 +263,38 @@ struct Options {
 
 void print_usage() {
     std::printf(
-        "usage: krdbg_demo [--headless] [--screenshot <out.ppm>] "
-        "[--state empty|loaded|running|video|video16|error|settings|context|"
-        "tooltip|variables|com|no-com|no-video] [--kr32 <image.kr32>] "
-        "[--kr32-os] [--kr16 <image.kr16>] [--kr216 <image.kr216>] [--kr232 <image.kr232>] "
-        "[--load <source-or-image>] "
-        "[--toolchain <krc-install-prefix>] [--target kr32|kr16|kr216|kr232] "
-        "[--source-root <dir>] [--kernel] [--reset] [--version] "
-        "[--frames <n>] [--run <instructions>]\n");
+        "krdbg %s — KR virtual-machine debugger\n"
+        "\n"
+        "Usage: krdbg_demo [options]\n"
+        "\n"
+        "Options:\n"
+        "  --headless             Render one frame, print its hash, and exit\n"
+        "  --screenshot FILE      With --headless, write the frame as a PPM\n"
+        "  --state NAME           Initial demo state: empty, loaded, running,\n"
+        "                         video, video16, error, settings, context,\n"
+        "                         tooltip, variables, com, no-com, or no-video\n"
+        "  --kr32 FILE            Load a KR32 image\n"
+        "  --kr32-os              Load the embedded KR32 OS image\n"
+        "  --kr16 FILE            Load a KR16 image\n"
+        "  --kr216 FILE           Load a KR216 image\n"
+        "  --kr232 FILE           Load a KR232 image\n"
+        "  --load PATH            Load a source or image at startup; a source\n"
+        "                         needs --toolchain\n"
+        "  --toolchain DIR        krc installation prefix for building sources\n"
+        "                         (default: KRDBG_KRC_PREFIX)\n"
+        "  --target NAME          Build target for a source loaded with --load:\n"
+        "                         kr32, kr16, kr216, or kr232 (default kr32)\n"
+        "  --source-root DIR      Root for source paths in debug information\n"
+        "  --kernel               Load the embedded KR32 OS kernel\n"
+        "  --reset                Reset the loaded program after it is loaded\n"
+        "  --run N                Execute N instructions before the first render\n"
+        "  --frames N             Exit after rendering N frames (windowed mode)\n"
+        "  --version              Print the version\n"
+        "  --help, -h             Print this help\n"
+        "\n"
+        "If no program is loaded, the demo uses a synthetic target for the\n"
+        "named --state.\n",
+        krdbg::kVersionString);
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -368,8 +393,8 @@ bool parse_options(int argc, char** argv, Options& options) {
                 return false;
             }
         } else if (argument == "--help" || argument == "-h") {
-            print_usage();
-            return false;
+            options.help = true;
+            return true;
         } else {
             std::fprintf(stderr, "krdbg: unknown argument '%.*s'\n",
                          static_cast<int>(argument.size()), argument.data());
@@ -385,6 +410,10 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse_options(argc, argv, options)) {
         return 2;
+    }
+    if (options.help) {
+        print_usage();
+        return 0;
     }
     if (options.version) {
         std::printf("krdbg %s\n", krdbg::kVersionString);
