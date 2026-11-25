@@ -66,9 +66,24 @@ function Assert-Hash {
 
 Initialize-Msvc
 
+# The package prefix: this tree links krc::debug from the compiler's install, so a
+# configure without one fails at find_package with a message about a missing config
+# file rather than about the prefix nobody passed. KRG_PREFIX overrides, then the
+# compiler path if the caller named one, then the family prefix beside the trees.
+$prefix = $env:KRG_PREFIX
+if (-not $prefix -and $env:KRG_KRC) { $prefix = Split-Path -Parent (Split-Path -Parent $env:KRG_KRC) }
+if (-not $prefix) {
+    $familyPrefix = Join-Path (Split-Path -Parent $repo) 'build/family-prefix'
+    if (Test-Path $familyPrefix) { $prefix = $familyPrefix }
+}
+if (-not $prefix) {
+    throw 'no compiler package prefix: set KRG_PREFIX or KRG_KRC, or install the compiler into ../build/family-prefix'
+}
+Write-Host "prefix: $prefix"
+
 foreach ($preset in @('windows-msvc', 'windows-msvc-release')) {
     Write-Host "== configure $preset"
-    Invoke-Checked "configure $preset" { cmake --preset $preset }
+    Invoke-Checked "configure $preset" { cmake --preset $preset "-DCMAKE_PREFIX_PATH=$prefix" }
     Write-Host "== build $preset"
     Invoke-Checked "build $preset" { cmake --build --preset $preset }
     Write-Host "== test $preset"
