@@ -1,10 +1,20 @@
+// The file picker runs zenity and kdialog with popen(), which POSIX declares in
+// <stdio.h>. The tree builds with CMAKE_CXX_EXTENSIONS OFF (-std=c++20), whose
+// __STRICT_ANSI__ hides the POSIX declarations unless a feature test macro asks
+// for them; this file is Linux-only, so declaring the level is safe.
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "krdbg/window.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #define SDL_MAIN_HANDLED
@@ -52,12 +62,50 @@ int first_codepoint(const char* text) {
     if (lead < 0x80U) {
         return lead;
     }
-    // The M0 surface does not edit text; report the first UTF-8 code point so a
+    // The surface does not edit text; report the first UTF-8 code point so a
     // later COM panel receives the right value for Latin-1 input.
     if ((lead & 0xE0U) == 0xC0U && text[1] != '\0') {
         return ((lead & 0x1FU) << 6) | (static_cast<unsigned char>(text[1]) & 0x3FU);
     }
     return lead;
+}
+
+// The surface needs a letter's code point because it matches letter shortcuts
+// (R, Ctrl-V) against the character, not the virtual key. SDL delivers plain
+// letters through SDL_TEXTINPUT, but a Ctrl or Alt combination produces no text
+// input, so recover the ASCII letter from the keycode for those events.
+int modified_letter(SDL_Keycode keycode, Uint16 modifiers) {
+    const bool chord = (modifiers & (KMOD_CTRL | KMOD_ALT)) != 0;
+    if (!chord || keycode < 0x20 || keycode >= 0x7F) {
+        return 0;
+    }
+    return static_cast<int>(keycode);
+}
+
+// Runs one fixed picker command and reads the single path line it prints. An
+// empty line, a cancellation and a missing program all report "no path" so the
+// caller can fall back to the next picker.
+bool run_picker(const char* command, std::string& path) {
+    FILE* pipe = ::popen(command, "r");
+    if (pipe == nullptr) {
+        return false;
+    }
+    std::string line;
+    int character = 0;
+    while ((character = std::fgetc(pipe)) != EOF && character != '\n') {
+        line.push_back(static_cast<char>(character));
+    }
+    while (std::fgetc(pipe) != EOF) {
+    }
+    const bool exited_cleanly = ::pclose(pipe) == 0;
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
+        line.pop_back();
+    }
+    if (!exited_cleanly || line.empty()) {
+        return false;
+    }
+    path = std::move(line);
+    return true;
 }
 
 class SdlWindow final : public IWindow {
@@ -174,7 +222,11 @@ void SdlWindow::map(const SDL_Event& source, Event& event) const {
         event.control = (source.key.keysym.mod & KMOD_CTRL) != 0;
         event.alt = (source.key.keysym.mod & KMOD_ALT) != 0;
         if (event.key == 0) {
-            event.kind = Event::Kind::None;
+            event.character = modified_letter(source.key.keysym.sym,
+                                              source.key.keysym.mod);
+            if (event.character == 0) {
+                event.kind = Event::Kind::None;
+            }
         }
         break;
     case SDL_KEYUP:
@@ -283,19 +335,46 @@ public:
         SDL_Event raw{};
         while (SDL_PollEvent(&raw) != 0) {
             if (raw.type == SDL_QUIT) {
+                event = Event{};
                 event.kind = Event::Kind::Quit;
                 return true;
             }
             if (raw.type == SDL_WINDOWEVENT &&
                 raw.window.windowID == window_id_ &&
                 raw.window.event == SDL_WINDOWEVENT_CLOSE) {
+                event = Event{};
                 event.kind = Event::Kind::Quit;
                 return true;
             }
-            if (raw.type == SDL_KEYDOWN && window_ != nullptr &&
-                SDL_GetKeyboardFocus() == window_) {
+            if (window_ == nullptr || SDL_GetKeyboardFocus() != window_) {
+                continue;
+            }
+            if (raw.type == SDL_TEXTINPUT) {
+                // Letters reach the guest/shortcut path as code points; see
+                // modified_letter() for the chorded keys that produce no text.
+                const int character = first_codepoint(raw.text.text);
+                if (character == 0) {
+                    continue;
+                }
+                event = Event{};
+                event.kind = Event::Kind::KeyDown;
+                event.character = character;
+                return true;
+            }
+            if (raw.type == SDL_KEYDOWN) {
+                event = Event{};
                 event.kind = Event::Kind::KeyDown;
                 event.key = map_key(raw.key.keysym.sym);
+                event.shift = (raw.key.keysym.mod & KMOD_SHIFT) != 0;
+                event.control = (raw.key.keysym.mod & KMOD_CTRL) != 0;
+                event.alt = (raw.key.keysym.mod & KMOD_ALT) != 0;
+                if (event.key == 0) {
+                    event.character = modified_letter(raw.key.keysym.sym,
+                                                      raw.key.keysym.mod);
+                    if (event.character == 0) {
+                        continue;
+                    }
+                }
                 return true;
             }
         }
@@ -366,12 +445,22 @@ std::unique_ptr<IVideoWindow> create_video_window() {
 }
 
 bool open_file_dialog(std::string& path) {
-    (void)path;
-    return false;
+    // LOAD's picker on Linux. The commands are fixed literals: no user data
+    // reaches the shell, and each picker runs only if the previous one produced
+    // no path. A cancelled dialog and a missing program are the same answer,
+    // "the user chose nothing", so the caller keeps the current image.
+    return run_picker("zenity --file-selection 2>/dev/null", path) ||
+           run_picker("kdialog --getopenfilename 2>/dev/null", path);
 }
 
 std::string clipboard_text() {
-    return {};
+    char* text = SDL_GetClipboardText();
+    if (text == nullptr) {
+        return {};
+    }
+    std::string result(text);
+    SDL_free(text);
+    return result;
 }
 
 } // namespace krdbg::platform

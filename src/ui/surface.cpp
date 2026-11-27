@@ -87,6 +87,26 @@ std::string clip(std::string_view text, int pixel_width, FontRole role) {
     return result;
 }
 
+// The presenters deliver a letter as Event{key = 0, character = code point}
+// (WM_CHAR and SDL_TEXTINPUT); function keys keep a namespace key value. A
+// shortcut reads the character first and falls back to the key so both shapes
+// work, including the test driver that sends raw keys.
+int event_character(const platform::Event& event) {
+    if (event.character != 0) {
+        return event.character;
+    }
+    if (event.key > 0 && event.key < 0x80) {
+        return event.key;
+    }
+    return 0;
+}
+
+bool is_letter(int character, char letter) {
+    return character != 0 &&
+           std::toupper(static_cast<unsigned char>(character)) ==
+               static_cast<unsigned char>(letter);
+}
+
 void draw_button(Canvas& canvas, Rect rect, std::string_view label, Color text_color,
                  Color border_color) {
     if (rect.empty()) {
@@ -250,6 +270,8 @@ struct DebuggerSurface::Impl {
                                             const ScalarValue& value) const;
     void toggle_line_breakpoint(std::string_view file, int line);
     void toggle_address_breakpoint(std::uint64_t address);
+    void toggle_current_line_breakpoint();
+    void forward_video_key(const platform::Event& event);
 
     DebugSession* session = nullptr;
     IHostServices* host = nullptr;
@@ -728,6 +750,36 @@ void DebuggerSurface::Impl::toggle_address_breakpoint(std::uint64_t address) {
         }
     }
     session->add_address_breakpoint(address);
+}
+
+// F9: the PC's current source line. An existing line breakpoint changes its
+// enabled state, because "toggle" means a breakpoint stays set but inactive
+// rather than disappearing; with none set, F9 sets one. A PC with no line
+// mapping has nothing to attach a breakpoint to, so the key is a no-op there
+// rather than an error.
+void DebuggerSurface::Impl::toggle_current_line_breakpoint() {
+    const LineInfo* line = session->line_at(session->pc());
+    if (line == nullptr) {
+        return;
+    }
+    const SourceFile* source = nullptr;
+    for (const SourceFile& candidate : session->info().sources) {
+        if (candidate.id == line->source) {
+            source = &candidate;
+            break;
+        }
+    }
+    if (source == nullptr) {
+        return;
+    }
+    for (const BreakpointView& breakpoint : session->breakpoints()) {
+        if (breakpoint.has_line && breakpoint.file == source->path &&
+            breakpoint.line == static_cast<int>(line->line)) {
+            session->set_breakpoint_enabled(breakpoint.id, !breakpoint.enabled);
+            return;
+        }
+    }
+    session->add_line_breakpoint(source->path, static_cast<int>(line->line));
 }
 
 std::vector<std::string> DebuggerSurface::Impl::source_lines() const {
@@ -3262,19 +3314,30 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         running = false;
         session->pause();
         return true;
+    case platform::key::F9:
+        toggle_current_line_breakpoint();
+        return true;
     case platform::key::F10:
         session->step(StepMode::InstructionOver);
         running = false;
         return true;
     case platform::key::F11:
-        session->step(StepMode::Instruction);
+        // Shift+F11 steps out by instruction; plain F11 steps in. Both reach the
+        // session through the same key, so the shift flag selects the mode.
+        session->step(event.shift ? StepMode::InstructionOut : StepMode::Instruction);
         running = false;
         return true;
     default:
         break;
     }
-    if (focus == SurfacePanel::Com && session->com_port() != nullptr && !(video_tab && video_guest_focus)) {
-        if (event.control && (event.key == 'V' || event.key == 'v')) {
+    const int character = event_character(event);
+    // Ctrl-V paste: the presenters set `control` when they can (SDL2 and the
+    // test driver); WM_CHAR for Ctrl+V arrives as the SYN control character with
+    // no modifier flags, so that code is the Windows fallback.
+    const bool paste = is_letter(character, 'V') && event.control;
+    if (focus == SurfacePanel::Com && session->com_port() != nullptr &&
+        !(video_tab && video_guest_focus)) {
+        if (paste || character == 0x16) {
             const std::string text = host->clipboard_text();
             for (std::size_t index = 0; index < text.size(); ++index) {
                 const char ch = text[index];
@@ -3289,14 +3352,17 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
             }
             return true;
         }
-        const int character =
-            event.character != 0 ? event.character : event.key;
         if (character >= 32 && character < 127) {
             enqueue_com_input(static_cast<std::uint8_t>(character));
             return true;
         }
     }
-    if (event.key == 'R') {
+    // The video preview owns the keyboard while it has guest focus: a character
+    // typed there is guest input, never one of the debugger's letter shortcuts.
+    if (video_tab && video_guest_focus && character != 0) {
+        return true;
+    }
+    if (is_letter(character, 'R')) {
         running = false;
         std::string error;
         if (!session->restart(error) && !error.empty()) {
@@ -3305,6 +3371,33 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         return true;
     }
     return true;
+}
+
+// A key typed into the popped-out video window. The debugger function keys keep
+// working there and are passed through unchanged so Shift and Ctrl reach the
+// same handlers as in the main window (PLAN.md §6.2). A character is guest
+// input: IDebugTarget exposes no screen keyboard, so it goes to the guest's one
+// input channel, the COM input queue, and only while the video tab has guest
+// focus; otherwise it is consumed so it can never become a debugger shortcut.
+void DebuggerSurface::Impl::forward_video_key(const platform::Event& event) {
+    switch (event.key) {
+    case platform::key::F5:
+    case platform::key::F6:
+    case platform::key::F9:
+    case platform::key::F10:
+    case platform::key::F11:
+        key_down(event);
+        return;
+    default:
+        break;
+    }
+    if (event.key != 0 || !video_guest_focus || session->com_port() == nullptr) {
+        return;
+    }
+    const int character = event_character(event);
+    if (character >= 32 && character < 127) {
+        enqueue_com_input(static_cast<std::uint8_t>(character));
+    }
 }
 
 DebuggerSurface::DebuggerSurface(DebugSession& session, IHostServices& host)
@@ -3398,7 +3491,7 @@ void DebuggerSurface::tick() {
                 impl_->video_window->destroy();
                 impl_->video_popped = false;
             } else if (event.kind == platform::Event::Kind::KeyDown) {
-                impl_->key_down(event);
+                impl_->forward_video_key(event);
             }
         }
     }

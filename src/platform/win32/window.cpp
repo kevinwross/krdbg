@@ -430,6 +430,23 @@ private:
             Event event;
             event.kind = Event::Kind::KeyDown;
             event.key = map_key(wparam);
+            event.shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            event.control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            event.alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            // Letters are delivered through WM_CHAR so the surface receives the
+            // code point; the debugger never sees the raw virtual key.
+            if (event.key != 0) {
+                self->events_.push_back(event);
+            }
+            return 0;
+        }
+        case WM_CHAR: {
+            // The video window forwards keys to the surface from tick(); it has
+            // to deliver letters the same way the debugger window does.
+            Event event;
+            event.kind = Event::Kind::KeyDown;
+            event.key = 0;
+            event.character = static_cast<int>(wparam);
             self->events_.push_back(event);
             return 0;
         }
@@ -523,7 +540,30 @@ bool open_file_dialog(std::string& path) {
 }
 
 std::string clipboard_text() {
-    return {};
+    // The COM panel's Ctrl-V route. A clipboard another process holds open is
+    // not an error to the debugger: the paste simply delivers nothing.
+    if (OpenClipboard(nullptr) == FALSE) {
+        return {};
+    }
+    std::string text;
+    HANDLE data = GetClipboardData(CF_UNICODETEXT);
+    if (data != nullptr) {
+        const auto* wide = static_cast<const wchar_t*>(GlobalLock(data));
+        if (wide != nullptr) {
+            const int length = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0,
+                                                   nullptr, nullptr);
+            if (length > 1) {
+                std::string converted(static_cast<std::size_t>(length), '\0');
+                WideCharToMultiByte(CP_UTF8, 0, wide, -1, converted.data(), length,
+                                    nullptr, nullptr);
+                converted.resize(static_cast<std::size_t>(length - 1));
+                text = std::move(converted);
+            }
+            GlobalUnlock(data);
+        }
+    }
+    CloseClipboard();
+    return text;
 }
 
 } // namespace krdbg::platform

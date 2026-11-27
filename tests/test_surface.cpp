@@ -652,3 +652,129 @@ KRDBG_TEST(surface_memory_scrolls_by_wheel_track_and_drag) {
     CHECK(scene.surface->scroll_offset(SurfacePanel::Memory) > before_drag);
     CHECK(scene.mouse_up(track_x, track_top + 28));
 }
+
+// The presenters deliver letters as Event{key = 0, character = code point}, so a
+// letter shortcut must read the character. R restarts whichever shape arrives;
+// a case-insensitive r does too.
+KRDBG_TEST(surface_r_restarts_through_the_character) {
+    krdbg::test::TestScene scene(true);
+    CHECK(scene.session->step(krdbg::StepMode::Instruction).kind ==
+          krdbg::StopKind::Retired);
+    CHECK_EQ(scene.session->pc(), 0x1004U);
+    CHECK(scene.send_key(0, 'R'));
+    CHECK_EQ(scene.session->pc(), 0x1000U);
+    CHECK_EQ(scene.session->stats().instructions, 0U);
+
+    CHECK(scene.session->step(krdbg::StepMode::Instruction).kind ==
+          krdbg::StopKind::Retired);
+    CHECK(scene.send_key(0, 'r'));
+    CHECK_EQ(scene.session->pc(), 0x1000U);
+}
+
+// A letter that is guest input must not be reinterpreted as a shortcut now that
+// shortcuts read the character: COM focus claims it, and the video preview
+// claims it while the video has guest focus.
+KRDBG_TEST(surface_guest_letters_do_not_trigger_a_shortcut) {
+    krdbg::test::TestScene com_scene(true);
+    com_scene.fake_target->com().reset();
+    const krdbg::Rect com = com_scene.surface->layout().com;
+    CHECK(com_scene.click(center_x(com), center_y(com)));
+    CHECK(com_scene.session->step(krdbg::StepMode::Instruction).kind ==
+          krdbg::StopKind::Retired);
+    const std::uint64_t com_pc = com_scene.session->pc();
+    CHECK(com_scene.send_key(0, 'r'));
+    CHECK_EQ(com_scene.session->pc(), com_pc);
+    CHECK_EQ(com_scene.surface->com_queued(), 1);
+
+    krdbg::test::TestScene video_scene(true);
+    video_scene.fake_target->com().reset();
+    const krdbg::Rect video = video_scene.surface->layout().toolbar_video;
+    CHECK(video_scene.click(center_x(video), center_y(video)));
+    const krdbg::Rect preview = video_scene.surface->layout().video_preview;
+    CHECK(video_scene.click(center_x(preview), center_y(preview)));
+    CHECK(video_scene.session->step(krdbg::StepMode::Instruction).kind ==
+          krdbg::StopKind::Retired);
+    const std::uint64_t video_pc = video_scene.session->pc();
+    CHECK(video_scene.send_key(0, 'r'));
+    CHECK_EQ(video_scene.session->pc(), video_pc);
+    CHECK_EQ(video_scene.surface->com_queued(), 0);
+}
+
+// F9 acts on the breakpoint for the PC's current source line: it sets one when
+// none exists, then toggles the enabled state instead of removing it.
+KRDBG_TEST(surface_f9_toggles_the_current_line_breakpoint) {
+    krdbg::test::TestScene scene(true);
+    CHECK_EQ(scene.session->pc(), 0x1000U);
+    CHECK(scene.send_key(krdbg::platform::key::F9));
+    std::vector<krdbg::BreakpointView> breakpoints = scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    if (breakpoints.size() == 1U) {
+        CHECK(breakpoints[0].has_line);
+        CHECK_EQ(breakpoints[0].file, std::string("examples/fake/main.c"));
+        CHECK_EQ(breakpoints[0].line, 4);
+        CHECK(breakpoints[0].enabled);
+    }
+
+    CHECK(scene.send_key(krdbg::platform::key::F9));
+    breakpoints = scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    if (breakpoints.size() == 1U) {
+        CHECK(!breakpoints[0].enabled);
+    }
+    CHECK(scene.send_key(krdbg::platform::key::F9));
+    breakpoints = scene.session->breakpoints();
+    CHECK_EQ(breakpoints.size(), 1U);
+    if (breakpoints.size() == 1U) {
+        CHECK(breakpoints[0].enabled);
+    }
+
+    // A PC with no line mapping leaves the breakpoints alone and does not crash.
+    scene.fake_target->set_pc(0x800);
+    CHECK(scene.send_key(krdbg::platform::key::F9));
+    CHECK_EQ(scene.session->breakpoints().size(), 1U);
+}
+
+// F10 is instruction over, plain F11 is instruction in, and Shift+F11 is
+// instruction out. Stepping out is observable: it runs the callee out and drops
+// one frame instead of retiring exactly one instruction.
+KRDBG_TEST(surface_f11_steps_in_and_shift_f11_steps_out) {
+    krdbg::test::TestScene step_in_scene(true);
+    for (int step = 0; step < 3; ++step) {
+        step_in_scene.session->step(krdbg::StepMode::Instruction);
+    }
+    CHECK_EQ(step_in_scene.session->call_stack().size(), 2U);
+    const std::uint64_t in_before =
+        step_in_scene.session->stats().instructions;
+    CHECK(step_in_scene.send_key(krdbg::platform::key::F11));
+    CHECK_EQ(step_in_scene.session->stats().instructions, in_before + 1);
+    CHECK_EQ(step_in_scene.session->call_stack().size(), 2U);
+
+    krdbg::test::TestScene step_out_scene(true);
+    for (int step = 0; step < 3; ++step) {
+        step_out_scene.session->step(krdbg::StepMode::Instruction);
+    }
+    const std::size_t depth_before =
+        step_out_scene.session->call_stack().size();
+    CHECK_EQ(depth_before, 2U);
+    const std::uint64_t out_before =
+        step_out_scene.session->stats().instructions;
+    Event shift_f11;
+    shift_f11.kind = Event::Kind::KeyDown;
+    shift_f11.key = krdbg::platform::key::F11;
+    shift_f11.shift = true;
+    CHECK(step_out_scene.surface->handle_event(shift_f11));
+    CHECK(step_out_scene.session->call_stack().size() < depth_before);
+    CHECK(step_out_scene.session->stats().instructions > out_before + 1);
+}
+
+// Ctrl-V reaches the clipboard through the character too; the event carries no
+// letter key when a presenter reports the chord as its text.
+KRDBG_TEST(surface_ctrl_v_pastes_through_the_character) {
+    krdbg::test::TestScene scene(true);
+    scene.fake_target->com().reset();
+    scene.host.clipboard = "a\r\nb\r";
+    const krdbg::Rect com = scene.surface->layout().com;
+    CHECK(scene.click(center_x(com), center_y(com)));
+    CHECK(scene.send_key(0, 'v', true));
+    CHECK_EQ(scene.surface->com_queued(), 4);
+}
