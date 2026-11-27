@@ -373,6 +373,41 @@ if(KRDBG_BUILD_TESTS)
                 --reset)
         set_tests_properties(krdbg_kr232_kernel_pair PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # Headless surface rows for A2/A3/A12/A14: a scripted run reaches a halt
+        # through the surface tick path, RESET keeps the image loadable, and a
+        # line breakpoint renders without a window.
+        add_test(NAME krdbg_kr232_running_row
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/session.kr232"
+                --state running --ticks 3)
+        add_test(NAME krdbg_kr232_reset_row
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.kr232"
+                --reset)
+        add_test(NAME krdbg_kr232_breakpoint_row
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/session.kr232"
+                --break-line 5)
+        set_tests_properties(
+            krdbg_kr232_running_row krdbg_kr232_reset_row
+            krdbg_kr232_breakpoint_row PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # M7.25: the multi-file startrekng scenario. The image is built by
+        # scripts/build-startrekng-kr232.ps1 into the transient build tree; when
+        # it is absent (a clean checkout that has not run the script) the row is
+        # not registered rather than failing on a missing fixture.
+        set(KRDBG_STARTREKNG_IMAGE
+            "${CMAKE_CURRENT_SOURCE_DIR}/build/startrekng-kr232/startrekng_script.kr232")
+        if(EXISTS "${KRDBG_STARTREKNG_IMAGE}")
+            add_test(NAME krdbg_kr232_startrekng_golden
+                COMMAND krdbg_demo --headless
+                    --kr232 "${KRDBG_STARTREKNG_IMAGE}"
+                    --source-root "${CMAKE_CURRENT_SOURCE_DIR}/../krcompiler"
+                    --no-stop-at-main)
+            set_tests_properties(krdbg_kr232_startrekng_golden PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                PASS_REGULAR_EXPRESSION "frame hash EAB8F6EEC580D84F")
+        endif()
     endif()
     if(KRDBG_KR216_ADAPTER)
         # The adapter's own tests loaded two committed kr216 images, which were

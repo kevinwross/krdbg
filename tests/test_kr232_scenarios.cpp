@@ -1,6 +1,7 @@
 #include "test_framework.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -238,4 +239,50 @@ KRDBG_TEST(kr232_scenario_kernel_pair) {
     krdbg::ScalarValue status;
     CHECK(session.read_value("gpr", 2, status));
     CHECK_EQ(status.bits & 0xFFU, 3U);
+}
+// M7.25: the multi-file startrekng image. The build script writes it to
+// build/startrekng-kr232/; when the tree has no image (for example a bare
+// checkout that has not run the script) the test reports why it did nothing.
+KRDBG_TEST(kr232_scenario_startrekng) {
+    const std::string image = std::string(KRDBG_SOURCE_ROOT) +
+                              "/build/startrekng-kr232/startrekng_script.kr232";
+    std::error_code exists_error;
+    if (!std::filesystem::exists(image, exists_error)) {
+        return;
+    }
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(image, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+    CHECK(loaded.info.has_value());
+    if (!loaded.info.has_value()) {
+        return;
+    }
+    CHECK(loaded.info->sources.size() >= 8U);
+    CHECK(loaded.info->functions.size() >= 20U);
+
+    krdbg::DebugSession session(std::move(loaded.target), loaded.info,
+                                [](krdbg::IDebugTarget&, std::string&) {
+                                    return true;
+                                });
+    std::uint64_t address = 0;
+    std::string file;
+    int line = 0;
+    CHECK(first_line(session, "main", address, file, line));
+    const krdbg::BreakpointId breakpoint =
+        session.add_line_breakpoint(file, line);
+    CHECK(breakpoint != krdbg::kInvalidBreakpoint);
+    const krdbg::StopResult stopped = session.run(5000000);
+    CHECK(stopped.kind == krdbg::StopKind::Retired);
+    CHECK_EQ(session.pc(), address);
+    // Run into the game's first frame: locals must be visible there.
+    (void)session.run(2000);
+    CHECK(!session.locals(0).empty());
+    CHECK(!session.call_stack().empty());
+    const std::uint64_t before = session.pc();
+    (void)session.step(krdbg::StepMode::Instruction);
+    CHECK(session.pc() != before);
 }

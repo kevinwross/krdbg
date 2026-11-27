@@ -285,6 +285,10 @@ struct Options {
     // Scripted line breakpoint in the first source file, for interaction
     // screenshots (a line with no code shows the unresolved marker).
     int break_line = 0;
+    // Golden captures skip the deferred main stop: a run makes the header's
+    // instructions-per-second reading time-dependent, so the frame would not be
+    // reproducible.
+    bool no_stop_at_main = false;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -336,6 +340,7 @@ void print_usage() {
         "  --frames N             Exit after rendering N frames (windowed mode)\n"
         "  --ticks N              Headless: run N surface ticks before rendering\n"
         "  --break-line N         Add a line breakpoint in the first source\n"
+        "  --no-stop-at-main      Do not run to main on the first frame\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -416,6 +421,8 @@ bool parse_options(int argc, char** argv, Options& options) {
                 return false;
             }
             options.break_line = static_cast<int>(line);
+        } else if (argument == "--no-stop-at-main") {
+            options.no_stop_at_main = true;
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -1004,6 +1011,9 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "krdbg: reset failed: %s\n", error.c_str());
             return 1;
         }
+    }
+    if (options.no_stop_at_main) {
+        pending_initial_stop = 0;
     }
 
     if (real_program.has_value()) {
