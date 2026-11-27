@@ -298,6 +298,8 @@ struct DebuggerSurface::Impl {
     void toggle_line_breakpoint(std::string_view file, int line);
     void toggle_address_breakpoint(std::uint64_t address);
     void toggle_current_line_breakpoint();
+    [[nodiscard]] bool line_breakpoint_resolved(
+        const BreakpointView& breakpoint) const;
     void begin_run();
     void note_stop(const StopResult& result);
     void step_and_note(StepMode mode);
@@ -852,6 +854,32 @@ void DebuggerSurface::Impl::toggle_current_line_breakpoint() {
     session->add_line_breakpoint(source->path, static_cast<int>(line->line));
 }
 
+bool DebuggerSurface::Impl::line_breakpoint_resolved(
+    const BreakpointView& breakpoint) const {
+    if (!breakpoint.has_line) {
+        return true;
+    }
+    std::uint32_t source_id = 0;
+    bool found = false;
+    for (const SourceFile& candidate : session->info().sources) {
+        if (candidate.path == breakpoint.file) {
+            source_id = candidate.id;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    for (const LineInfo& line : session->info().lines) {
+        if (line.source == source_id &&
+            static_cast<int>(line.line) == breakpoint.line) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void DebuggerSurface::Impl::begin_run() {
     last_stop_known = false;
     run_limit_remaining = 0;
@@ -875,6 +903,8 @@ void DebuggerSurface::Impl::note_stop(const StopResult& result) {
     last_stop_kind = result.kind;
     last_stop_message = result.message;
     last_stop_known = true;
+    // A step or run resumes source following after a manual scroll.
+    scroll_state(SurfacePanel::Source).autoscroll = true;
 }
 
 void DebuggerSurface::Impl::step_and_note(StepMode mode) {
@@ -1589,7 +1619,23 @@ void DebuggerSurface::Impl::draw_source_panel(Canvas& canvas) {
         return;
     }
     update_scroll(SurfacePanel::Source);
-    const ScrollState& state = scroll_state(SurfacePanel::Source);
+    const LineInfo* current_line = session->line_at(session->pc());
+    const SourceFile* source = current_source();
+    ScrollState& state = scroll_state(SurfacePanel::Source);
+    // Follow the PC while the pane is not pinned and the user has not scrolled
+    // it; a manual scroll suspends this until the next step or run (M7.22).
+    if (!source_state.pinned && current_line != nullptr && source != nullptr &&
+        current_line->source == source->id && state.autoscroll) {
+        const int visible_rows = std::max(
+            1, (rect.height - ui::theme::kPanelHeaderHeight - 4) / kRowHeight);
+        const int line_index = static_cast<int>(current_line->line) - 1;
+        if (line_index < state.offset) {
+            state.offset = line_index;
+        } else if (line_index >= state.offset + visible_rows) {
+            state.offset = line_index - visible_rows + 1;
+        }
+        state.offset = ui::clamp_scroll(state.offset, state.content, state.visible);
+    }
     canvas.fill(rect, ui::theme::kPanel);
     canvas.frame(rect,
                  focus == SurfacePanel::Source ? ui::theme::kAccent
@@ -1618,8 +1664,6 @@ void DebuggerSurface::Impl::draw_source_panel(Canvas& canvas) {
     draw_small_button(canvas, layout.source_out, "OUT", ui::theme::kText,
                       ui::theme::kBorder);
 
-    const SourceFile* source = current_source();
-    const LineInfo* current_line = session->line_at(session->pc());
     const bool scrollbar = state.content > state.visible;
     const int text_width = rect.width - 60 - (scrollbar ? 8 : 0);
     int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
@@ -1636,18 +1680,26 @@ void DebuggerSurface::Impl::draw_source_panel(Canvas& canvas) {
             canvas.fill(Rect{rect.x + 1, y, 2, kRowHeight}, ui::theme::kAccent);
         }
         bool has_breakpoint = false;
+        bool unresolved = false;
         if (source != nullptr) {
             for (const BreakpointView& breakpoint : session->breakpoints()) {
                 if (breakpoint.has_line && breakpoint.file == source->path &&
                     breakpoint.line == line_number) {
                     has_breakpoint = true;
+                    unresolved = !line_breakpoint_resolved(breakpoint);
                     break;
                 }
             }
         }
         const Rect square{rect.x + 4, y + 4, 8, 8};
         if (has_breakpoint) {
-            canvas.fill(square, ui::theme::kBad);
+            if (unresolved) {
+                // A line with no executable address is marked, not lit: the
+                // breakpoint exists but can never fire (M7.23).
+                canvas.frame(square, ui::theme::kDim);
+            } else {
+                canvas.fill(square, ui::theme::kBad);
+            }
         } else {
             canvas.frame(square, ui::theme::kBorder);
         }
@@ -1927,14 +1979,19 @@ void DebuggerSurface::Impl::draw_breakpoints_panel(Canvas& canvas) {
             canvas.text(rect.x + 8, y, breakpoint.enabled ? "[x]" : "[ ]",
                         breakpoint.enabled ? ui::theme::kAccent : ui::theme::kDim,
                         FontRole::MonoSmall);
-            const std::string text =
+            std::string text =
                 breakpoint.has_line
                     ? breakpoint.file + ":" + std::to_string(breakpoint.line)
                     : hex_value(breakpoint.address,
                                 session->layout().address_bits);
+            Color color = ui::theme::kDim;
+            if (breakpoint.has_line && !line_breakpoint_resolved(breakpoint)) {
+                text += "  (unresolved)";
+                color = ui::theme::kBad;
+            }
             canvas.text(rect.x + 34, y,
                         clip(text, rect.width - 42, FontRole::MonoSmall),
-                        ui::theme::kDim, FontRole::MonoSmall);
+                        color, FontRole::MonoSmall);
         }
     }
     if (state.content > state.visible) {
