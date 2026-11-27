@@ -152,8 +152,17 @@ echo "no SDL2.dll in the tree"
 # binary and the surface tests compare pixels. ctest picks the right invocation,
 # which excludes the x64 golden comparison when the host is ARM64.
 echo "== two adapters"
+# The kr232 subproject builds its own fixtures and kernel, which are guest code
+# built by krc and krld; without them its rows have nothing to read.
+krc_bin="${KRG_KRC:-$(command -v krc 2>/dev/null || true)}"
+krld_bin="${KRG_KRLD:-$(command -v krld 2>/dev/null || true)}"
+if [ -z "$krc_bin" ] || [ -z "$krld_bin" ]; then
+    echo "gate-linux: krc and krld are required for the two-adapter suite" >&2
+    exit 2
+fi
 cmake -S . -B build/two-adapters -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-    -DKRDBG_KR216_ADAPTER=ON -DKRDBG_KR232_ADAPTER=ON
+    -DKRDBG_KR216_ADAPTER=ON -DKRDBG_KR232_ADAPTER=ON \
+    -DKR232_BUILD_KERNEL=ON "-DKR232_KRC=$krc_bin" "-DKR232_KRLD=$krld_bin"
 cmake --build build/two-adapters -j "$JOBS"   # ctest runs the demo and the kr232 binary too
 if ! ctest --test-dir build/two-adapters -j "$JOBS" --output-on-failure; then
     echo "the two-adapter suite failed" >&2

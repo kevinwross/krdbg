@@ -1273,6 +1273,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-26T16:29:41-08:00** — Parallel jobs follow the processor count. `gate-linux.sh` keeps the x86_64 rows at two jobs because GCC 15 in this WSL image intermittently segfaults while garbage-collecting, and takes every processor on ARM64; `gate-windows.ps1` passes the count to `ctest`.
 
+- **2026-11-26T23:10:15-08:00** — **The two-adapter suite runs on Linux and the kr232 golden is re-recorded.** The kr232 subproject's kernel and fixtures are guest code built by krc and krld, and `KR232_BUILD_KERNEL` was forced off before `add_subdirectory`, so the nested suite had no images to read. The force is now conditional: a caller that asks for the kernel build and names the toolchain gets it, and a compiler-less krdbg build still configures with it off. The Linux gate passes `-DKR232_BUILD_KERNEL=ON` with the `krc`/`krld` it finds on PATH. That left one failure, `kr232_adapter_loaded_state_matches_the_golden`: it hashes the PC, all sixteen registers, the FP registers and the flags of a loaded image, and kr232's `807c691` made R0 and R1 read as their constants (R1 previously read 0), which moves that hash. The machine's reset is otherwise unchanged and the null page is unreadable on every host, so the value is host-independent: `99707B647AAD39BD` becomes `D994DEA43900F620`, recorded after the fix rather than against the old model.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.

@@ -203,7 +203,13 @@ if(KRDBG_KR232_ADAPTER)
             "include/kr232/machine.h). Set KRDBG_KR232_ROOT to that tree; "
             "krdbg never vendors or guesses kr232.")
     endif()
-    set(KR232_BUILD_KERNEL OFF CACHE BOOL "" FORCE)
+    # kr232's kernel and test fixtures are guest code built by krc and krld, so
+    # they are only built when the caller asks for them and names the toolchain.
+    # Forcing the option off would leave the nested suite without the images it
+    # reads; forcing it on would make a compiler-less krdbg build fail.
+    if(NOT KR232_BUILD_KERNEL)
+        set(KR232_BUILD_KERNEL OFF CACHE BOOL "" FORCE)
+    endif()
     set(KR232_INSTALL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${KRDBG_KR232_ROOT}" "${CMAKE_BINARY_DIR}/kr232")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/adapters/kr232")
