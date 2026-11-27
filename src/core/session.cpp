@@ -739,6 +739,9 @@ std::vector<MemberView> DebugSession::members(const VariableView& variable) cons
                                            .subspan(offset, element_size);
             if (is_aggregate(element)) {
                 member.value = aggregate_value(element);
+                // The bytes are what members(MemberView) expands; without them an
+                // array of structs shows childless elements.
+                member.storage.assign(element_bytes.begin(), element_bytes.end());
                 member.has_children = true;
             } else {
                 member.value =

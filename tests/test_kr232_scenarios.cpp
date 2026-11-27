@@ -286,3 +286,44 @@ KRDBG_TEST(kr232_scenario_startrekng) {
     (void)session.step(krdbg::StepMode::Instruction);
     CHECK(session.pc() != before);
 }
+// A6: globals and aggregate expansion. The fixture has `struct Point
+// points[2]` and `int total`; krc emits the type records and sized G records, so
+// the array expands to two structs and each struct to x/y.
+KRDBG_TEST(kr232_scenario_globals_and_members) {
+    Loaded loaded = load("aggregate.kr232");
+    CHECK(loaded.ok);
+    if (!loaded.ok) {
+        return;
+    }
+    krdbg::DebugSession session = make_session(loaded);
+    const std::vector<krdbg::VariableView> globals = session.globals();
+    const krdbg::VariableView* points = nullptr;
+    const krdbg::VariableView* total = nullptr;
+    for (const krdbg::VariableView& variable : globals) {
+        if (variable.name == "points") {
+            points = &variable;
+        } else if (variable.name == "total") {
+            total = &variable;
+        }
+    }
+    CHECK(points != nullptr);
+    CHECK(total != nullptr);
+    if (points == nullptr || total == nullptr) {
+        return;
+    }
+    CHECK_EQ(points->size, 16U);
+    CHECK_EQ(total->size, 4U);
+    CHECK(points->value == "[2]");
+
+    const std::vector<krdbg::MemberView> elements = session.members(*points);
+    CHECK_EQ(elements.size(), 2U);
+    if (elements.size() == 2U) {
+        CHECK(elements[0].has_children);
+        const std::vector<krdbg::MemberView> fields = session.members(elements[0]);
+        CHECK_EQ(fields.size(), 2U);
+        if (fields.size() == 2U) {
+            CHECK(fields[0].name == "x");
+            CHECK(fields[1].name == "y");
+        }
+    }
+}

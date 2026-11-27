@@ -10,7 +10,7 @@ Six checked-in containers exercise the kr232 adapter. They are built by
 | `session.kr232` | COM output and a committed framebuffer |
 | `kernel.kr232` | the kernel the adapter runs a user program under |
 | `userprint.kr232` | a user program that prints through the kernel and exits 3 |
-| `aggregate.kr232` | an array of structs and a scalar global; member expansion waits on KDBG type records (`implementation.md` §10) |
+| `aggregate.kr232` | an array of structs and a scalar global for member expansion |
 
 `host_build.c` is a source file compiled at test time by
 `tests/test_host_build.cpp`; it is not a fixture container.
