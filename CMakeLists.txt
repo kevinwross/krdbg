@@ -343,6 +343,7 @@ if(KRDBG_BUILD_TESTS)
         add_executable(krdbg_kr232_tests
             tests/test_main.cpp
             tests/test_kr232_adapter.cpp
+            tests/test_kr232_scenarios.cpp
             tests/test_host_build.cpp
             tests/test_app_smoke.cpp
         )

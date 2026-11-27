@@ -11,6 +11,7 @@
 #include <deque>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 #include <span>
@@ -389,6 +390,9 @@ struct DebuggerSurface::Impl {
     bool quit_requested = false;
     int chooser_hover = -1;
     std::vector<std::string> recent_files;
+    // Per-source text, so switching between files does not re-read the disk and
+    // a source dropped from view keeps its scroll-independent text (M7.16).
+    std::map<std::uint32_t, std::vector<std::string>> source_cache;
     std::string error_text;
     mutable std::array<ScrollState, kPanelCount> scrolls{};
 };
@@ -720,6 +724,11 @@ void DebuggerSurface::Impl::load_source(int index) {
     }
     const SourceFile& source = sources[static_cast<std::size_t>(index)];
     source_state.loaded_id = source.id;
+    if (const auto cached = source_cache.find(source.id);
+        cached != source_cache.end()) {
+        source_state.text = cached->second;
+        return;
+    }
     std::ifstream input(source.path);
     if (!input) {
         source_state.text.push_back("(source not found: " + source.path + ")");
@@ -732,6 +741,7 @@ void DebuggerSurface::Impl::load_source(int index) {
     if (source_state.text.empty()) {
         source_state.text.push_back("(empty source)");
     }
+    source_cache[source.id] = source_state.text;
 }
 
 void DebuggerSurface::Impl::sync_source() {
@@ -3803,6 +3813,7 @@ const SurfaceLayout& DebuggerSurface::layout() const {
 void DebuggerSurface::set_program_info(ProgramInfo program) {
     const bool changed = impl_->program.loaded != program.loaded;
     impl_->program = std::move(program);
+    impl_->source_cache.clear();
     if (impl_->program.loaded && !impl_->program.path.empty() &&
         impl_->program.path.front() != '<') {
         // The host reports a successful load here; an embedded program uses a

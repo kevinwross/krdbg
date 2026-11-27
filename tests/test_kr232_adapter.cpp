@@ -816,3 +816,76 @@ KRDBG_TEST(kr232_session_step_out_without_a_caller_stops) {
     CHECK(result.message == "no caller frame");
     CHECK_EQ(session.pc(), before);
 }
+KRDBG_TEST(kr232_line_breakpoints_survive_restart_and_replace) {
+    // M7.15: a line breakpoint and its enabled state must survive RESET (the
+    // target's reset) and a rebuilt image (replace_target), with the line
+    // re-resolved against the new debug payload.
+    krdbg::kr232adapter::LoadedProgram first;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, first, error)) {
+        return;
+    }
+    CHECK(first.target != nullptr);
+    CHECK(first.info.has_value());
+    if (!first.info.has_value()) {
+        return;
+    }
+    const krdbg::LineInfo* chosen = nullptr;
+    const krdbg::SourceFile* source = nullptr;
+    for (const krdbg::LineInfo& line : first.info->lines) {
+        for (const krdbg::SourceFile& candidate : first.info->sources) {
+            if (candidate.id == line.source) {
+                chosen = &line;
+                source = &candidate;
+                break;
+            }
+        }
+        if (chosen != nullptr) {
+            break;
+        }
+    }
+    if (chosen == nullptr || source == nullptr) {
+        return;
+    }
+    auto reload = [](krdbg::IDebugTarget& target, std::string& why) {
+        return target.reset(why);
+    };
+    krdbg::DebugSession session(std::move(first.target), first.info, reload);
+    const krdbg::BreakpointId id = session.add_line_breakpoint(
+        source->path, static_cast<int>(chosen->line));
+    CHECK(id != krdbg::kInvalidBreakpoint);
+    session.set_breakpoint_enabled(id, false);
+
+    CHECK(session.restart(error));
+    std::vector<krdbg::BreakpointView> after = session.breakpoints();
+    CHECK_EQ(after.size(), 1U);
+    bool matched = false;
+    for (const krdbg::BreakpointView& breakpoint : after) {
+        if (breakpoint.id == id) {
+            matched = true;
+            CHECK(!breakpoint.enabled);
+            CHECK(breakpoint.has_line);
+            CHECK_EQ(breakpoint.line, static_cast<int>(chosen->line));
+            CHECK(breakpoint.file == source->path);
+        }
+    }
+    CHECK(matched);
+
+    // A rebuilt image replaces the target and debug payload; the breakpoint
+    // list and its disabled state must carry over and re-resolve.
+    krdbg::kr232adapter::LoadedProgram second;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, second, error)) {
+        return;
+    }
+    session.replace_target(std::move(second.target), second.info);
+    after = session.breakpoints();
+    CHECK_EQ(after.size(), 1U);
+    if (!after.empty()) {
+        CHECK(!after.front().enabled);
+    }
+    session.set_breakpoint_enabled(id, true);
+    after = session.breakpoints();
+    if (!after.empty()) {
+        CHECK(after.front().enabled);
+    }
+}
