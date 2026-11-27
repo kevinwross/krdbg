@@ -34,7 +34,8 @@ Linux:
 ./krdbg_demo --headless --state loaded --screenshot loaded.ppm
 ```
 
-The debugger opens the fake target by default. `--load <source-or-image>`
+With no arguments the debugger opens a startup chooser (OPEN IMAGE, OPEN
+SOURCE, QUIT, and recent files from the session). `--load <source-or-image>`
 builds a `.c`, `.cpp` or `.s` through the installed `krc`/`krld` package (set
 `KRDBG_KRC_PREFIX` or pass `--toolchain <prefix>`), or opens a `.kr32`, `.kr16`,
 `.kr216` or `.kr232` image directly. Source builds currently cover kr32, kr16 and
@@ -47,19 +48,32 @@ bundles no SDL2. The ARM64 artifact is built by the tester on the Pi.
 
 ## Build
 
-```sh
-# Windows, from a Visual Studio developer shell:
-cmake --preset windows-msvc-release
-cmake --build --preset windows-msvc-release
+Configuring needs the pinned KRCompiler package on CMake's search path; the
+presets do not add it themselves. Set `KRG_PREFIX` to the prefix that contains
+`bin/krc` and pass it, or run `scripts/gate-windows.ps1`, which resolves the
+prefix from `KRG_PREFIX`, `KRG_KRC`, or `../build/family-prefix`. The vendored
+KDBG decoder does not remove the package requirement; see
+[docs/toolchain.md](docs/toolchain.md).
 
+```powershell
+# Windows, from Developer PowerShell for VS 18:
+cmake --preset windows-msvc-release "-DCMAKE_PREFIX_PATH=$env:KRG_PREFIX"
+cmake --build --preset windows-msvc-release
+```
+
+```sh
 # Linux x64 (WSL or Ubuntu):
-cmake --preset linux-wsl-release
+cmake --preset linux-wsl-release "-DCMAKE_PREFIX_PATH=$KRG_PREFIX"
 cmake --build --preset linux-wsl-release
 ```
 
 The presets build with every VM adapter off. Configure an adapter with
 `-DKRDBG_<VM>_ADAPTER=ON` and the matching `KRDBG_<VM>_ROOT`; see
 [krdbg-newtarget.md](krdbg-newtarget.md).
+
+For a working kr232 debugger use [docs/debugging-kr232.md](docs/debugging-kr232.md):
+`scripts/build-debugger.ps1` (or `.sh`) builds the adapter-enabled binary, and
+the page covers the fixtures, the kernel+user pair and the startrekng example.
 
 The gate scripts in `scripts/` configure, build and test Debug and Release.
 Release packaging is described in [docs/release.md](docs/release.md).
