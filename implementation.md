@@ -1026,6 +1026,11 @@ P1 — kr232 end to end:
 - [ ] **M7.17** Inspection on all fixtures: locals/globals at frame N,
       aggregates, two-frame unwind, kernel/user memory, variable-length
       disassembly.
+      BLOCKED: krc 0.2.0 emits no KDBG type records for kr232, and krdbg's
+      globals list is empty for `aggregate.kr232`, so aggregates and data
+      globals cannot be expanded. The fixture is committed and the other
+      inspection paths are covered by the scenario suite; this needs KRCompiler
+      to emit C/M type records and sized data symbols.
 - [x] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
       rule when both exist, screen focus and function-key forwarding.
       `kr232_scenario_devices` reads the console byte and the committed 800x600
@@ -1406,6 +1411,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:13:28-08:00** — **Deferred main stop and stop reasons.** `d3095b0` records main's first line at load and runs it on the first frame when `dbg.stop_at_main` is on (an owned temporary breakpoint), then names the stop reason from `StopResult` in the status bar and applies `dbg.instruction_limit` at run start. Verification: CTest 8/8, 117 unit tests at 0 failures; startrekng stops at `main_script.cpp`/`0x000080DC`; `loaded.kr232` run through surface ticks renders `halted: halted with status 0`.
 - **2026-11-27T10:17:19-08:00** — **Step semantics, source follow and unresolved breakpoints.** `63c8d4b` fixes kr232 step-over across ENTER-built frames, publishes a synthetic frame before ENTER, and makes step-out report `no caller frame`; `7421ee9` follows the PC in the source pane and marks unresolved line breakpoints; `5e473bc` makes the panel name short and adds `--break-line` for scripted screenshots. Verification: CTest 8/8, 117 and 21 unit tests at 0 failures; screenshots show `galaxy.cpp` lines 221–250 and `crt0.s:1 (unresolved)`.
 - **2026-11-27T10:20:35-08:00** — **Scenario suite, breakpoint persistence and source cache.** `tests/test_kr232_scenarios.cpp` adds five session scenarios (breakpoint/step, frames/locals, registers/memory/disassembly, COM/video, kernel+user) to `krdbg_kr232_tests`; a persistence test covers restart and `replace_target`; `load_source` caches per source id. Verification: 27 kr232 tests, 0 failures; CTest 8/8.
+- **2026-11-27T10:22:41-08:00** — **Aggregate fixture; M7.17 blocked on KDBG types.** `tests/fixtures/kr232/aggregate.kr232` (6,858 B, crt0-only) carries `struct Point points[2]` and `int total`. `krc --dump-symbols --json` reports zero type records for every kr232 fixture, and krdbg's globals list is empty for the aggregate, so M7.17 is BLOCKED on KRCompiler emitting C/M type records and sized data symbols; §10 records the prerequisite. The documentation review, the M7 plan and the startrekng scripts were committed in the same pass. Tests: 27 kr232, 117 unit.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
@@ -1416,6 +1422,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | ARM64 gate on `BitWhiz` (Raspberry Pi on the local network) | G0 / G6 | kevinwross | `[x]` BitWhiz is driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS`. There is no in-repository test log. There is no GitHub Actions runner and none is planned. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `e04b3b2` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair and still requires the installed package to configure (`PLAN.md` §4.9). |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
+| KDBG type records and sized data symbols for kr232 | M7.17 / A6 aggregate and global expansion | KRCompiler | `[ ]` `krc --dump-symbols --json` reports zero types for the kr232 fixtures; `kr232_scenario` sees no globals for `aggregate.kr232` |
 | `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[x]` `write_kr16_image` carries `.kdbg` as an unallocated debug section; older images use the legacy parser. |
 | `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[x]` The installed `402cfaf` package provides `bin/krc`, `bin/krld` and the target sysroots; the 0.2.0 build and the host-build tests use it. |
 
