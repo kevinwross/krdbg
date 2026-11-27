@@ -282,6 +282,9 @@ struct Options {
     // Headless ticks to run before the frame is rendered: exercises the surface
     // tick path (run slices, stop reasons) without a window.
     int ticks = 0;
+    // Scripted line breakpoint in the first source file, for interaction
+    // screenshots (a line with no code shows the unresolved marker).
+    int break_line = 0;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -332,6 +335,7 @@ void print_usage() {
         "  --run N                Execute N instructions before the first render\n"
         "  --frames N             Exit after rendering N frames (windowed mode)\n"
         "  --ticks N              Headless: run N surface ticks before rendering\n"
+        "  --break-line N         Add a line breakpoint in the first source\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -403,6 +407,15 @@ bool parse_options(int argc, char** argv, Options& options) {
                 return false;
             }
             options.run_instructions = static_cast<int>(count);
+        } else if (argument == "--break-line" && index + 1 < argc) {
+            char* end = nullptr;
+            const long line = std::strtol(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || line <= 0 ||
+                line > 100000) {
+                std::fprintf(stderr, "krdbg: --break-line needs a line\n");
+                return false;
+            }
+            options.break_line = static_cast<int>(line);
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -647,6 +660,24 @@ int main(int argc, char** argv) {
             std::optional<krdbg::DebugInfo>{krdbg::make_fake_debug_info()},
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
     }
+    if (options.break_line > 0 && session != nullptr) {
+        const krdbg::DebugInfo& info = session->info();
+        const krdbg::SourceFile* source =
+            info.sources.empty() ? nullptr : &info.sources.front();
+        if (const krdbg::LineInfo* line = session->line_at(session->pc());
+            line != nullptr) {
+            for (const krdbg::SourceFile& candidate : info.sources) {
+                if (candidate.id == line->source) {
+                    source = &candidate;
+                    break;
+                }
+            }
+        }
+        if (source != nullptr) {
+            session->add_line_breakpoint(source->path, options.break_line);
+        }
+    }
+
     DemoHost host;
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);

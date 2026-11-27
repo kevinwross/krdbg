@@ -1979,11 +1979,18 @@ void DebuggerSurface::Impl::draw_breakpoints_panel(Canvas& canvas) {
             canvas.text(rect.x + 8, y, breakpoint.enabled ? "[x]" : "[ ]",
                         breakpoint.enabled ? ui::theme::kAccent : ui::theme::kDim,
                         FontRole::MonoSmall);
-            std::string text =
-                breakpoint.has_line
-                    ? breakpoint.file + ":" + std::to_string(breakpoint.line)
-                    : hex_value(breakpoint.address,
-                                session->layout().address_bits);
+            std::string text;
+            if (breakpoint.has_line) {
+                std::string name = breakpoint.file;
+                const std::size_t slash = name.find_last_of("/\\");
+                if (slash != std::string::npos) {
+                    name = name.substr(slash + 1);
+                }
+                text = name + ":" + std::to_string(breakpoint.line);
+            } else {
+                text = hex_value(breakpoint.address,
+                                 session->layout().address_bits);
+            }
             Color color = ui::theme::kDim;
             if (breakpoint.has_line && !line_breakpoint_resolved(breakpoint)) {
                 text += "  (unresolved)";
