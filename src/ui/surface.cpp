@@ -218,6 +218,7 @@ struct DebuggerSurface::Impl {
     void render(Canvas& canvas);
     void draw_toolbar(Canvas& canvas);
     void draw_status_bar(Canvas& canvas);
+    [[nodiscard]] std::string status_line() const;
     void draw_panel(Canvas& canvas, Rect rect, std::string_view title,
                     std::string_view right_label,
                     const std::vector<std::string>& lines, SurfacePanel panel);
@@ -1356,7 +1357,16 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
     const Rect bar = layout.status;
     canvas.fill(bar, ui::theme::kPanel);
     canvas.fill(Rect{bar.x, bar.y, bar.width, 1}, ui::theme::kBorder);
+    const std::string left = status_line();
+    canvas.text(10, bar.y + 4, left,
+                error_text.empty() ? ui::theme::kDim : ui::theme::kBad,
+                FontRole::MonoSmall);
+    const std::string right = running ? "F5 PAUSE" : "F5 RUN";
+    canvas.text(bar.x + bar.width - Canvas::text_width(right, FontRole::MonoSmall) - 10,
+                bar.y + 4, right, ui::theme::kDim, FontRole::MonoSmall);
+}
 
+std::string DebuggerSurface::Impl::status_line() const {
     std::string left = "no program loaded";
     if (!error_text.empty()) {
         left = error_text;
@@ -1404,12 +1414,7 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
             }
         }
     }
-    canvas.text(10, bar.y + 4, left,
-                error_text.empty() ? ui::theme::kDim : ui::theme::kBad,
-                FontRole::MonoSmall);
-    const std::string right = running ? "F5 PAUSE" : "F5 RUN";
-    canvas.text(bar.x + bar.width - Canvas::text_width(right, FontRole::MonoSmall) - 10,
-                bar.y + 4, right, ui::theme::kDim, FontRole::MonoSmall);
+    return left;
 }
 
 bool DebuggerSurface::Impl::chooser_shown() const {
@@ -3858,6 +3863,10 @@ const ProgramInfo& DebuggerSurface::program_info() const {
 
 bool DebuggerSurface::chooser_visible() const {
     return impl_->chooser_shown();
+}
+
+std::string DebuggerSurface::status_text() const {
+    return impl_->status_line();
 }
 
 void DebuggerSurface::set_error(std::string message) {

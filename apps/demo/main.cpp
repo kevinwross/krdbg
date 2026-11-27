@@ -289,6 +289,9 @@ struct Options {
     // instructions-per-second reading time-dependent, so the frame would not be
     // reproducible.
     bool no_stop_at_main = false;
+    // Headless: print the surface status text, so a CTest row can assert the
+    // stop reason without reading pixels.
+    bool print_status = false;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -341,6 +344,7 @@ void print_usage() {
         "  --ticks N              Headless: run N surface ticks before rendering\n"
         "  --break-line N         Add a line breakpoint in the first source\n"
         "  --no-stop-at-main      Do not run to main on the first frame\n"
+        "  --print-status         Headless: print the status-bar text\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -423,6 +427,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.break_line = static_cast<int>(line);
         } else if (argument == "--no-stop-at-main") {
             options.no_stop_at_main = true;
+        } else if (argument == "--print-status") {
+            options.print_status = true;
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -1088,6 +1094,9 @@ int main(int argc, char** argv) {
         apply_pending_stop();
         for (int index = 0; index < options.ticks; ++index) {
             surface.tick();
+        }
+        if (options.print_status) {
+            std::printf("status: %s\n", surface.status_text().c_str());
         }
         krdbg::Canvas canvas(surface.width(), surface.height());
         surface.render(canvas);

@@ -153,6 +153,11 @@ public:
     // layout while the windowed application starts on the chooser.
     [[nodiscard]] bool chooser_visible() const;
 
+    // The status bar's left-hand text: the stop reason when one is known, the PC
+    // while paused, or the error. Read-only; hosts and headless scenario tests
+    // assert on it without reading pixels.
+    [[nodiscard]] std::string status_text() const;
+
     // Shows a host error in the status bar until the next successful action.
     void set_error(std::string message);
 

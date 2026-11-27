@@ -704,6 +704,12 @@ own command line or menu without adding a toolbar button.
 `DebuggerSurface` owns layout, panel state, editing, hit-testing and painting.
 It takes a `DebugSession&` and `IHostServices&`. It is usable headlessly.
 
+The surface also exposes read-only queries used by the demo and by headless
+scenario tests: `chooser_visible()` / `chooser_recent_count()` report the
+startup chooser, and `status_text()` returns the status bar's left-hand text
+(the stop reason, the paused PC, or the error). They report state; they do not
+change behaviour.
+
 Proposed file split (this is the main body of work):
 
 ```

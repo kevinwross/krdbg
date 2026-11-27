@@ -382,6 +382,21 @@ KRDBG_TEST(surface_run_tick_advances_until_the_target_stops) {
     CHECK(scene.session->stats().instructions > 0U);
 }
 
+KRDBG_TEST(surface_status_text_names_the_stop) {
+    krdbg::test::TestScene scene(true);
+    CHECK(scene.surface->status_text().find("paused at") != std::string::npos);
+    const krdbg::Rect run = scene.surface->layout().toolbar_run;
+    CHECK(scene.click(center_x(run), center_y(run)));
+    for (int tick = 0; tick < 20 && scene.surface->running(); ++tick) {
+        scene.surface->tick();
+    }
+    CHECK(!scene.surface->running());
+    const std::string text = scene.surface->status_text();
+    CHECK(text.find("halted") != std::string::npos ||
+          text.find("fault") != std::string::npos ||
+          text.find("breakpoint") != std::string::npos);
+}
+
 KRDBG_TEST(surface_reset_preserves_breakpoints_and_clears_stats) {
     krdbg::test::TestScene scene(true);
     scene.session->add_line_breakpoint("examples/fake/main.c", 5);

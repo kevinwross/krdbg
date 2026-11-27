@@ -388,6 +388,16 @@ if(KRDBG_BUILD_TESTS)
             COMMAND krdbg_demo --headless
                 --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/session.kr232"
                 --break-line 5)
+        # A17: the status bar names the stop reason. `session.kr232` exits 7, so
+        # the halted text is fixed even though the frame header's instruction
+        # rate varies.
+        add_test(NAME krdbg_kr232_status_row
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/session.kr232"
+                --state running --ticks 3 --print-status)
+        set_tests_properties(krdbg_kr232_status_row PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            PASS_REGULAR_EXPRESSION "status: halted: halted with status 7")
         set_tests_properties(
             krdbg_kr232_running_row krdbg_kr232_reset_row
             krdbg_kr232_breakpoint_row PROPERTIES
