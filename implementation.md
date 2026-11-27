@@ -993,7 +993,7 @@ P0 — the debugger runs:
       path instead of an empty pane.
 - [x] **M7.8** Ship the D1 artifact (kr232 linked); the adapter-free artifact
       remains the UI-golden baseline.
-- [ ] **M7.9** `docs/debugging-kr232.md` and README: prerequisites, the one
+- [x] **M7.9** `docs/debugging-kr232.md` and README: prerequisites, the one
       command, the fixtures, the startrekng images and the source root.
 - [x] **M7.10** CTest smoke: configure with kr232, load `loaded.kr232` headless,
       assert target, PC/line and one step.
@@ -1002,10 +1002,10 @@ P0 — the debugger runs:
 
 P1 — kr232 end to end:
 
-- [ ] **M7.12** kr232 kernel+user (D3): CLI pair, host `supports_kernel_load()`,
-      KERNEL button, and a RESET that restores both images. The adapter half is
-      done (reset preserves the pair, tested); the CLI, the host capability and
-      the KERNEL button remain.
+- [x] **M7.12** kr232 kernel+user (D3): CLI pair, host `supports_kernel_load()`,
+      KERNEL button, and a RESET that restores both images.
+      `--kr232-kernel` + `--kr232-program` load the pair; the
+      `krdbg_kr232_kernel_pair` CTest row runs to the user entry and resets it.
 - [ ] **M7.13** Stop-at-main as a setting, implemented as an owned temporary
       breakpoint on the first tick with a bounded run.
 - [ ] **M7.14** Run limits and distinct stop reasons (budget, halted, fault);
@@ -1034,12 +1034,15 @@ P1 — kr232 end to end:
 
 Evidence (2026-11-27): the kr232 presets configure from a clean tree;
 `scripts/build-debugger.ps1 -Clean` reports `BUILD DEBUGGER: PASS`; CTest is
-7/7 and the unit binary is 117 tests, 0 failures; the headless goldens are
+8/8 and the unit binary is 117 tests, 0 failures; the headless goldens are
 unchanged; the chooser launches with `--frames 3`; `--kr232 … --reset` and
 `--load kr232_min.c --target kr232` both exit 0. M7.7 resolves roots on the next
 load; an image reload does not re-resolve them until M7.16. M7.21/M7.24:
 `kr232_adapter_flags_are_per_bit`, `kr232_com_status_tracks_the_console` and
 `kr232_adapter_reset_restores_the_kernel_and_user_pair` pass (20 kr232 tests).
+M7.12: `krdbg_kr232_kernel_pair` passes, and the rendered pair shows
+`userprint.s` at PC `0x08000008` with per-bit FLAGS. M7.9:
+`docs/debugging-kr232.md` and the README entry landed.
 
 Gate G7:
 
@@ -1375,6 +1378,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-27T10:05:00-08:00** — **M7 P0 executed and the first P1 slice landed.** Commits: `c14d31d` (kr232 flags, COM status, reset pair), `1d95ef7` (letter shortcuts, clipboard, Linux picker), `7a255bd` (kr232 presets, build-debugger, package-debugger, app smoke), `3aef7cb` (target and source settings, RESET path), `0cec45e` (startup chooser). Verification: `scripts/build-debugger.ps1 -Clean` PASS; CTest 7/7; 117 unit tests 0 failures; headless goldens unchanged; chooser launches; `--kr232 startrekng_script.kr232 --reset` and `--load kr232_min.c --target kr232` exit 0. P1 remains open: kernel+user CLI, stop-at-main setting, limits and stop reasons, breakpoint persistence, source model, devices, A1–A17 scenarios, step/unwind, status/autoscroll, unresolved breakpoints, and the startrekng golden.
 
+- **2026-11-27T10:09:10-08:00** — **Kernel+user and the kr232 page.** `eb608bb` adds `--kr232-kernel`/`--kr232-program`, a pair-preserving RESET, the adapter's reported entry, and a CTest row that loads the pair, runs to the user entry and resets. The documentation commit adds `docs/debugging-kr232.md` and the README pointer. Verification: CTest 8/8, 117 and 20 unit tests at 0 failures, the pair renders `userprint.s` at PC `0x08000008`.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
