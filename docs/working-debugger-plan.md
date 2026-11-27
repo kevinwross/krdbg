@@ -1,8 +1,10 @@
 # krdbg — a working debugger, kr232 first
 
-**Status:** approved for G7 and folded in, 2026-11-27. `PLAN.md` §8.2 defines
-M7/G7 and `implementation.md` §8.2 carries the tasks; decisions D1–D6 are settled
-(§11). This file remains the detailed plan and the decision record.
+**Status:** P1/G7 complete, 2026-11-27. `PLAN.md` §8.2 defines M7/G7 and
+`implementation.md` §8.2 carries the tasks; decisions D1–D6 are settled (§11).
+G7 passed on Windows and WSL with the kr232 adapter linked and the D1 artifact;
+P2 (G8) and P3 (G9–G10) remain as described below. This file remains the
+detailed plan and the decision record.
 **Author:** lead, at the maintainer's request.
 **Scope:** make the krdbg surface debug a real kr232 program end to end, at the
 functional level of the KR32 GUI debugger, then surpass it and scale to every VM.

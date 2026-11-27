@@ -78,7 +78,7 @@ recorded but does not block a milestone unless the gate says it does.
 | M4 — KR16 second architecture | G4 | 2 weeks | `[x] done` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[x] done` |
 | M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[x] done` |
-| M7 — Working kr232 debugger | G7 | 6–7 weeks | `[ ] in progress` |
+| M7 — Working kr232 debugger | G7 | 6–7 weeks | `[x] complete` |
 
 M6's release gate is closed. The post-v1 items in M6.6 remain open and do not
 block 0.2.0. M7 is the post-0.2.0 milestone that turns the M0–M6 surface into a
@@ -1085,12 +1085,12 @@ emits kr232 type records and sized globals; the fixtures were regenerated
 
 Gate G7:
 
-- [ ] **G7.1** The kr232 presets configure and build on Windows and Linux.
-- [ ] **G7.2** A1–A20 pass headless in CTest on both platforms.
-- [ ] **G7.3** startrekng builds from a clean `build/` and its scenario passes.
-- [ ] **G7.4** The D1 artifact loads a kr232 image; the UI-golden artifact is
+- [x] **G7.1** The kr232 presets configure and build on Windows and Linux.
+- [x] **G7.2** A1–A20 pass headless in CTest on both platforms.
+- [x] **G7.3** startrekng builds from a clean `build/` and its scenario passes.
+- [x] **G7.4** The D1 artifact loads a kr232 image; the UI-golden artifact is
       unchanged.
-- [ ] **G7.5** No open BLOCKS or FIX-BEFORE finding remains.
+- [x] **G7.5** No open BLOCKS or FIX-BEFORE finding remains.
 
 ---
 
@@ -1127,6 +1127,18 @@ workflows were removed on 2026-11-23; the scripts are the current gate.
 | G6 | ARM64 | tester log entry + `--arch arm64` tarball | PASS — entry 2026-11-20T22:48:28-08:00 @ `68e56c6`: 105 checks, 0 failures; `krdbg-0.2.0-linux-arm64.tar.gz` 371,240 B, SHA-256 `2AC4D44ACF8CF681A707CE6498894E64922AAFF58B24F1E236B2CE2CC0439A1C`; extracted aarch64 smoke exit 0 | `68e56c6` |
 | G6 | CI | release workflow on tag | PASS — run `44877925433` on `v0.2.0` (`228fd03`): `windows-x64`, `linux-x64` and `release` all success; both assets attached to the GitHub release | `228fd03` |
 
+| G7 | Windows x64 | `scripts/build-debugger.ps1 -Clean`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-windows.ps1`; `scripts/build-startrekng-kr232.ps1 -Clean`; `scripts/package-debugger.ps1` | PASS — `BUILD DEBUGGER: PASS`; CTest **13/13** (A1–A20 rows and the startrekng golden `EAB8F6EEC580D84F`); `GATE WINDOWS: PASS` with empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` and no `SDL2.dll`; the staged D1 artifact reports `krdbg 0.2.0` and loads a kr232 image; startrekng rebuilds from a clean `build/` and its scenario passes | `902fa43` |
+| G7 | WSL x64 | mirror + `KRG_PREFIX=/home/kevinro/.local bash scripts/build-debugger.sh`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-linux.sh` | PASS — `BUILD DEBUGGER: PASS`; CTest **13/13** (Linux startrekng golden `2AC8CBA5C069DE87`); `GATE LINUX X64: PASS`, 35/35 unit checks, empty/loaded hashes match | `902fa43` |
+
+### G7 evidence
+
+Recorded 2026-11-27T10:55:00-08:00 on `902fa43`.
+
+- The kr232 presets configure and build from clean trees on Windows (`scripts/build-debugger.ps1 -Clean`) and in the WSL mirror (`scripts/build-debugger.sh`); both report `BUILD DEBUGGER: PASS`.
+- `krdbg_kr232_unit` has 29 tests including the five fixture scenarios, `kr232_scenario_globals_and_members`, `kr232_scenario_startrekng` (Galaxy.cpp breakpoint, `Console::line` with `this`, scripted run to halt with console bytes) and the breakpoint-persistence test.
+- CTest rows: `krdbg_kr232_kernel_pair`, `running_row`, `reset_row`, `breakpoint_row`, `status_row` (`halted: halted with status 7`) and `startrekng_golden`; the per-platform golden hash is recorded in CMake because the compiler-built startrekng image differs by host toolchain.
+- A1–A20 map to: A1/A2 `krdbg_kr232_app_smoke` + status row; A3 `surface_run_tick_advances_until_the_target_stops`; A4 `surface_breakpoints_panel_toggles_and_opens_menu` + scenario breakpoint; A5/F10–F11 and line stepping in the scenario and surface tests; A6 aggregate scenario; A7 `kr232_adapter_unwinds_two_frames`; A8 `kr232_scenario_registers_memory_and_disassembly`; A9 same scenario; A10/A11 `kr232_scenario_devices`; A12 reset/breakpoint persistence; A13 kernel pair; A14 the CTest rows above; A15 `kr232_adapter_flags_are_per_bit`; A16 step-over/step-out tests; A17 `surface_status_text_names_the_stop` + status row; A18 `build-info.txt` from the clean script and unmodified KRCompiler sources; A19/A20 `kr232_scenario_startrekng`.
+- The D1 artifact is staged at `build/release-kr232/krdbg-0.2.0-windows-x64-kr232` (version and headless kr232 load verified); the adapter-free gate still renders `56BCC5339740DCA6` / `3DAD6F9400E135E2`.
 ### G0.4 window captures
 
 - Windows: `shots/g0-4-windows.png` — 1456x939 including the frame (1440x900 client), PrintWindow, non-blank.
