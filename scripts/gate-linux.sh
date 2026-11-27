@@ -79,10 +79,10 @@ for index in "${!presets[@]}"; do
     cmake --preset "$preset" --fresh
     echo "== build $preset"
     # GCC 15 in this WSL image intermittently segfaults while garbage-collecting, so
-# the x86_64 rows stay at two jobs; the ARM64 host uses every processor.
+# the x86_64 rows stay at eight jobs; the ARM64 host uses every processor.
 if [ "$(uname -m 2>/dev/null || echo unknown)" = "x86_64" ]; then
-    JOBS="${FAMILY_JOBS:-2}"
-    [ "$JOBS" -gt 2 ] && JOBS=2
+    JOBS="${FAMILY_JOBS:-8}"
+    [ "$JOBS" -gt 8 ] && JOBS=8
 else
     JOBS="${FAMILY_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 fi
