@@ -1032,11 +1032,12 @@ P1 — kr232 end to end:
       rule when both exist, screen focus and function-key forwarding.
       `kr232_scenario_devices` reads the console byte and the committed 800x600
       frame through the session.
-- [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
+- [x] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
       Session rows cover A1/A4–A11/A13; `krdbg_kr232_running_row`,
       `krdbg_kr232_reset_row`, `krdbg_kr232_breakpoint_row` and the startrekng
-      golden add A2/A3/A12/A14 surface rows. A6 passes through M7.17. A17's
-      status text has screenshot evidence but no assertion yet.
+      golden add A2/A3/A12/A14 surface rows; A6 is covered by the aggregate
+      scenario and A17 by `surface_status_text_names_the_stop` and
+      `krdbg_kr232_status_row` (`halted: halted with status 7`).
 - [x] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
       across the `ENTER`-updated chain, step-out guard as an explicit stop.
       `unwind()` publishes the current position as frame zero; `InstructionOver`
@@ -1078,7 +1079,9 @@ scenario passes and its loaded-state frame hash is
 `EAB8F6EEC580D84F`; CTest is 12/12. M7.17: KRCompiler `ff72fce`/`a9e22a0`
 emits kr232 type records and sized globals; the fixtures were regenerated
 (29 kr232 tests) and a rendered `aggregate.kr232` shows `GLOBALS (2)` with
-`points = [2]`; expanding it returns `x`/`y`.
+`points = [2]`; expanding it returns `x`/`y`. M7.19: CTest is 13/13, including
+`krdbg_kr232_status_row` (`halted: halted with status 7`), and `krdbg_tests` is
+118; all M7 tasks are checked.
 
 Gate G7:
 
@@ -1421,6 +1424,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:22:41-08:00** — **Aggregate fixture; M7.17 blocked on KDBG types.** `tests/fixtures/kr232/aggregate.kr232` (6,858 B, crt0-only) carries `struct Point points[2]` and `int total`. `krc --dump-symbols --json` reports zero type records for every kr232 fixture, and krdbg's globals list is empty for the aggregate, so M7.17 is BLOCKED on KRCompiler emitting C/M type records and sized data symbols; §10 records the prerequisite. The documentation review, the M7 plan and the startrekng scripts were committed in the same pass. Tests: 27 kr232, 117 unit.
 - **2026-11-27T10:27:58-08:00** — **startrekng scenario and golden; headless surface rows.** `819d0ae` adds `--no-stop-at-main` (a run makes the header's instruction rate time-dependent, so the loaded frame is the reproducible one), `kr232_scenario_startrekng`, the startrekng golden row and headless run/RESET/breakpoint rows. Verification: CTest 12/12 including `krdbg_kr232_startrekng_golden` (`EAB8F6EEC580D84F`); 28 kr232 tests, 0 failures. M7.25 is checked; M7.19 remains partial because A6 needs the KDBG type records tracked in §10.
 - **2026-11-27T10:40:00-08:00** — **KR232 KDBG types and globals.** KRCompiler `ff72fce` emits `.debug_type` T/C/M/A/R records and typed `.debug_var` names from the kr232 backend; the assembler forwards them, emits F only for text functions and G for data symbols with type/size. `a9e22a0` deduplicates merged members. The six fixtures were regenerated (`46ada06`), `members()` now stores array-element bytes, and `kr232_scenario_globals_and_members` passes. Verification: `krc_tests` 313/313; krdbg CTest 12/12, 117 and 29 unit tests, 0 failures; a rendered `aggregate.kr232` shows `GLOBALS (2)` with `points = [2]` and expands to `x`/`y`.
+- **2026-11-27T10:47:00-08:00** — **Status text and the last M7 task.** `cd303e4` adds `DebuggerSurface::status_text()` (read-only, documented in PLAN.md), a `--print-status` headless flag and the `krdbg_kr232_status_row` CTest row, plus `surface_status_text_names_the_stop`. Verification: CTest 13/13, `krdbg_tests` 118/0, `krdbg_kr232_tests` 29/0. M7.19 is checked; every M7 task M7.1–M7.25 is now checked. The G7 gate run itself (A1–A20 on Windows and Linux with the D1 artifact) is next.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
