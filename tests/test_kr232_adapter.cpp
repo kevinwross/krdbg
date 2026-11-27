@@ -11,6 +11,8 @@
 #include "kr232_adapter.h"
 #include "krdbg/session.h"
 
+#include <kr232/devices.h>
+
 namespace {
 
 std::string fixture_path() {
@@ -56,6 +58,30 @@ KRDBG_TEST(kr232_adapter_loads_container_and_layout) {
     CHECK(saw_k);
     CHECK(saw_i);
 
+    // The seven flags render from a Flags group whose entries map one to one to
+    // the layout's FlagDefs, so the panel rows and the FLAGS word cannot disagree.
+    const krdbg::RegisterGroup* flags_group = nullptr;
+    for (const krdbg::RegisterGroup& group : layout.groups) {
+        if (group.kind == krdbg::GroupKind::Flags) {
+            flags_group = &group;
+        }
+    }
+    CHECK(flags_group != nullptr);
+    if (flags_group != nullptr) {
+        CHECK_EQ(flags_group->id, std::string("flags"));
+        CHECK_EQ(flags_group->registers.size(), 7U);
+        CHECK_EQ(flags_group->registers.size(), layout.flags.size());
+        for (std::size_t index = 0; index < flags_group->registers.size(); ++index) {
+            const krdbg::RegisterDef& def = flags_group->registers[index];
+            CHECK_EQ(def.id, layout.flags[index].id);
+            CHECK_EQ(def.label, layout.flags[index].label);
+            CHECK_EQ(def.bits, 1U);
+            CHECK(def.format == krdbg::ValueFormat::Bool);
+            CHECK(def.role == krdbg::RegisterRole::Flags);
+            CHECK_EQ(def.writable, layout.flags[index].writable);
+        }
+    }
+
     // Both unbacked gaps are neither readable nor writable.
     int read_only_gaps = 0;
     for (const krdbg::MemoryRegion& region : layout.memory) {
@@ -65,6 +91,68 @@ KRDBG_TEST(kr232_adapter_loads_container_and_layout) {
         }
     }
     CHECK_EQ(read_only_gaps, 2);
+}
+
+KRDBG_TEST(kr232_adapter_flags_are_per_bit) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+    if (loaded.target == nullptr) {
+        return;
+    }
+
+    // Writing Z sets only Z, and clearing it clears only Z: the index selects
+    // the bit the Flags group's RegisterDef names.
+    std::uint64_t before = 0;
+    CHECK(loaded.target->read_flags(before));
+    krdbg::ScalarValue one;
+    one.bits = 1;
+    one.width = 1;
+    CHECK(loaded.target->write_value("flags", 0, one));
+    std::uint64_t after = 0;
+    CHECK(loaded.target->read_flags(after));
+    CHECK_EQ(after ^ before, std::uint64_t{1} << 0);
+
+    one.bits = 0;
+    CHECK(loaded.target->write_value("flags", 0, one));
+    CHECK(loaded.target->read_flags(after));
+    CHECK_EQ(after, before);
+
+    // K and I are hardware-owned. A write through either is accepted and leaves
+    // the machine's value alone, exactly as a whole-word write to R11 does.
+    for (const int index : {4, 6}) {
+        std::uint64_t flags_before = 0;
+        CHECK(loaded.target->read_flags(flags_before));
+        krdbg::ScalarValue toggled;
+        toggled.bits =
+            ((flags_before >> static_cast<unsigned>(index)) & 1u) ^ 1u;
+        toggled.width = 1;
+        CHECK(loaded.target->write_value("flags", index, toggled));
+        std::uint64_t flags_after = 0;
+        CHECK(loaded.target->read_flags(flags_after));
+        CHECK_EQ(flags_after, flags_before);
+    }
+
+    // Every flag row reads the same bit the word holds, so the panel and the
+    // FLAGS word agree.
+    std::uint64_t word = 0;
+    CHECK(loaded.target->read_flags(word));
+    for (int index = 0; index < 7; ++index) {
+        krdbg::ScalarValue value;
+        CHECK(loaded.target->read_value("flags", index, value));
+        CHECK_EQ(value.width, 1U);
+        CHECK_EQ(value.bits, (word >> static_cast<unsigned>(index)) & 1u);
+    }
+
+    // An index outside the seven flags is not a register.
+    krdbg::ScalarValue value;
+    CHECK(!loaded.target->read_value("flags", 7, value));
+    CHECK(!loaded.target->read_value("flags", -1, value));
+    CHECK(!loaded.target->write_value("flags", 7, value));
 }
 
 KRDBG_TEST(kr232_adapter_reads_registers_and_disassembles) {
@@ -214,6 +302,68 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
         CHECK(view.frame_number >= 1U);
         CHECK(!view.pixels.empty());
     }
+}
+
+KRDBG_TEST(kr232_com_status_tracks_the_console) {
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const std::string session = std::string(KRDBG_SOURCE_ROOT) +
+                                "/tests/fixtures/kr232/session.kr232";
+    if (!krdbg::kr232adapter::load_image(session, {}, loaded, error)) {
+        CHECK(false);
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+    if (loaded.target == nullptr) {
+        return;
+    }
+    krdbg::IComPort* com = loaded.target->com_port();
+    CHECK(com != nullptr);
+    if (com == nullptr) {
+        return;
+    }
+
+    // Nothing is queued for the guest, so RX is empty; TX is always ready
+    // because the console never refuses a guest write.
+    krdbg::ComPortStatus status = com->status();
+    CHECK(!status.rx_ready);
+    CHECK(status.tx_ready);
+    CHECK(!status.overrun);
+
+    // The guest writes 'A' and halts. The console page has no output-side status
+    // bit (TX_READY is constant), so the output evidence is read_output; the
+    // status word still reports TX ready and no debugger-supplied RX.
+    const krdbg::StopResult ran = loaded.target->run(1000000);
+    CHECK(ran.kind == krdbg::StopKind::Halted);
+    std::uint8_t byte = 0;
+    CHECK(com->read_output(byte));
+    CHECK_EQ(byte, 65U);
+    status = com->status();
+    CHECK(status.tx_ready);
+    CHECK(!status.rx_ready);
+    CHECK(!status.overrun);
+
+    // A debugger byte goes into the same queue the guest's IN reads, and the
+    // machine's own status word reports it.
+    CHECK(com->write_input(static_cast<std::uint8_t>('X')));
+    status = com->status();
+    CHECK(status.rx_ready);
+    CHECK(status.tx_ready);
+
+    // The queue holds kConsoleQueue bytes; an arrival that does not fit is
+    // dropped and sets the sticky OVERRUN bit, which write_input itself cannot
+    // report per byte and clear_overrun clears through the W1C register.
+    for (std::size_t i = 1; i < kr232::Devices::kConsoleQueue; ++i) {
+        CHECK(com->write_input(static_cast<std::uint8_t>('a' + i)));
+    }
+    CHECK(!com->write_input(static_cast<std::uint8_t>('!')));
+    status = com->status();
+    CHECK(status.overrun);
+    CHECK(status.rx_ready);  // the bytes already queued are still readable
+    com->clear_overrun();
+    status = com->status();
+    CHECK(!status.overrun);
+    CHECK(status.rx_ready);
 }
 KRDBG_TEST(kr232_adapter_steps_to_a_line_breakpoint) {
     krdbg::kr232adapter::LoadedProgram loaded;
@@ -587,4 +737,61 @@ KRDBG_TEST(kr232_adapter_steps_a_kernel_program_through_a_syscall) {
     krdbg::InstructionView view;
     CHECK(raw->disassemble(0x08000000u, view));
     CHECK(!view.mnemonic.empty());
+}
+
+KRDBG_TEST(kr232_adapter_reset_restores_the_kernel_and_user_pair) {
+    const std::string root = std::string(KRDBG_SOURCE_ROOT) + "/tests/fixtures/kr232/";
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    const bool ok = krdbg::kr232adapter::load_kernel(root + "kernel.kr232",
+                                                     root + "userprint.kr232",
+                                                     {}, loaded, error);
+    CHECK(ok);
+    if (!ok || loaded.target == nullptr) {
+        return;
+    }
+
+    // At load the PC is the kernel's entry and R2 carries the entry of the
+    // program load_kernel placed at the user image's base.
+    krdbg::ScalarValue entry_value;
+    CHECK(loaded.target->read_value("gpr", 2, entry_value));
+    const std::uint64_t user_entry = entry_value.bits;
+    const std::uint64_t kernel_entry = loaded.target->pc();
+    CHECK(kernel_entry < 0x08000000u);
+    CHECK(user_entry >= 0x08000000u);
+
+    const auto step_until = [](krdbg::IDebugTarget& target, std::uint64_t address) {
+        for (std::uint64_t step = 0; step < 1000000u; ++step) {
+            if (target.pc() == address) {
+                return true;
+            }
+            const krdbg::StopResult stopped = target.step_instruction();
+            if (stopped.kind == krdbg::StopKind::Halted ||
+                stopped.kind == krdbg::StopKind::Fault) {
+                return false;
+            }
+        }
+        return target.pc() == address;
+    };
+    CHECK(step_until(*loaded.target, user_entry));
+
+    // RESET must rebuild the whole machine: the kernel, then the user program.
+    // Restoring only the kernel image would leave the PC in kernel RAM with no
+    // user image behind R2.
+    CHECK(loaded.target->reset(error));
+    CHECK_EQ(loaded.target->pc(), kernel_entry);
+    CHECK(loaded.target->read_value("gpr", 2, entry_value));
+    CHECK_EQ(entry_value.bits, user_entry);
+    krdbg::InstructionView restored;
+    CHECK(loaded.target->disassemble(0x08000000u, restored));
+    CHECK(!restored.mnemonic.empty());
+
+    // Stepping from the restored kernel reaches the user program again, and the
+    // restored pair still runs the program to its exit status.
+    CHECK(step_until(*loaded.target, user_entry));
+    const krdbg::StopResult rerun = loaded.target->run(1000000);
+    CHECK(rerun.kind == krdbg::StopKind::Halted);
+    krdbg::ScalarValue exit_status;
+    CHECK(loaded.target->read_value("gpr", 2, exit_status));
+    CHECK_EQ(exit_status.bits & 0xFFu, 3u);
 }

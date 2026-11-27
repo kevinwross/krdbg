@@ -32,6 +32,20 @@ constexpr unsigned kEfp = 12;
 constexpr unsigned kFramePointer = 13;
 constexpr unsigned kFlags = 11;
 
+// R11's flag bits (kr232 machine.h): Z=0, N=1, C=2, V=3, I=4, T=5, K=6.
+constexpr unsigned kFlagCount = 7;
+
+// Page 2 of the device window is the console (kr232-devices.md §4). Its STATUS
+// word at +0x08 carries RX_READY in bit 0, TX_READY in bit 1 (always set) and
+// the sticky OVERRUN bit 2, which writing 1 clears.
+constexpr std::uint32_t kConsoleStatus =
+    kr232::Devices::kBase + 2u * kr232::Devices::kPageSize + 0x08u;
+constexpr std::uint32_t kConsoleRxReady = 1u << 0;
+constexpr std::uint32_t kConsoleTxReady = 1u << 1;
+constexpr std::uint32_t kConsoleOverrun = 1u << 2;
+// A device access is a 32-bit word; the device model refuses any other width.
+constexpr std::uint32_t kDeviceWordBytes = 4u;
+
 // The console page as a byte port: the guest writes OUT and reads IN, and the
 // debugger side consumes and supplies the same queue one byte at a time.
 class Kr232ComPort final : public IComPort {
@@ -40,8 +54,16 @@ public:
 
     ComPortStatus status() const override {
         ComPortStatus status;
-        status.rx_ready = true;
-        status.tx_ready = true;
+        // The machine's own console status word is the honest answer: the
+        // debugger queues bytes into the same device queues the guest polls.
+        std::uint32_t word = 0;
+        if (machine_.devices().read(kConsoleStatus, kDeviceWordBytes, word) !=
+            kr232::DeviceResult::Ok) {
+            return status;
+        }
+        status.rx_ready = (word & kConsoleRxReady) != 0;
+        status.tx_ready = (word & kConsoleTxReady) != 0;
+        status.overrun = (word & kConsoleOverrun) != 0;
         return status;
     }
     bool read_output(std::uint8_t& byte) override {
@@ -50,7 +72,11 @@ public:
     bool write_input(std::uint8_t byte) override {
         return machine_.devices().console_push_input(byte);
     }
-    void clear_overrun() override {}
+    void clear_overrun() override {
+        // STATUS is write-1-to-clear for OVERRUN. A console write cannot fail
+        // through this interface, and a refused one leaves the sticky bit set.
+        (void)machine_.devices().write(kConsoleStatus, kDeviceWordBytes, 1);
+    }
 
 private:
     kr232::Machine& machine_;
@@ -136,6 +162,20 @@ public:
                 return false;
             }
         }
+        // A kernel session placed a program on top of the kernel image. Restoring
+        // the kernel alone would lose it, so place it again exactly as
+        // load_kernel did: the kernel runs at its entry, with the program's entry
+        // in R2.
+        if (!user_image_.empty()) {
+            const kr232::LoadOutcome placed =
+                kr232::load_image(machine_, user_image_, user_base_);
+            if (!placed.ok) {
+                error = "the user program image: " + placed.error;
+                return false;
+            }
+            machine_.set_pc(kernel_entry_);
+            machine_.set_reg(2, user_entry_);
+        }
         return true;
     }
 
@@ -152,8 +192,11 @@ public:
             return true;
         }
         if (group == "flags") {
-            value.bits = machine_.reg(kFlags);
-            value.width = 32;
+            if (index < 0 || static_cast<unsigned>(index) >= kFlagCount) {
+                return false;
+            }
+            value.bits = (machine_.reg(kFlags) >> static_cast<unsigned>(index)) & 1u;
+            value.width = 1;
             return true;
         }
         return false;
@@ -171,10 +214,17 @@ public:
             return true;
         }
         if (group == "flags") {
-            // K and I are hardware-owned: writing them through the debugger would
-            // let it change the privilege the machine is running at.
-            const std::uint32_t writable = static_cast<std::uint32_t>(value.bits) & 0x7Fu;
-            machine_.set_reg(kFlags, writable);
+            if (index < 0 || static_cast<unsigned>(index) >= kFlagCount) {
+                return false;
+            }
+            // R11's write rule restores K and I (kr232 machine.h), so the
+            // hardware-owned bits are read-only through this path as well: the
+            // request is accepted and the machine keeps its value.
+            const unsigned bit = static_cast<unsigned>(index);
+            const std::uint32_t mask = 1u << bit;
+            const std::uint32_t flags = machine_.reg(kFlags);
+            machine_.set_reg(kFlags,
+                             value.bits != 0 ? (flags | mask) : (flags & ~mask));
             return true;
         }
         return false;
@@ -285,6 +335,17 @@ public:
         image_ = std::move(bytes);
         base_ = base;
     }
+    // A kernel session places a second image on top of the kernel. Keeping it
+    // here is what lets `reset` rebuild the same machine load_kernel built: the
+    // kernel image, then the program at its base, with the kernel's entry in PC
+    // and the program's entry in R2.
+    void keep_user_image(std::vector<std::uint8_t> bytes, std::uint32_t base,
+                         std::uint32_t entry, std::uint32_t kernel_entry) {
+        user_image_ = std::move(bytes);
+        user_base_ = base;
+        user_entry_ = entry;
+        kernel_entry_ = kernel_entry;
+    }
 
     IComPort* com_port() override {
         if (!com_) {
@@ -375,17 +436,35 @@ private:
         }
         layout.groups.push_back(std::move(fpr));
 
+        // The STATE panel renders the seven flags from a Flags group, one
+        // RegisterDef per bit; the gpr R11 entry remains the whole word.
+        RegisterGroup flags;
+        flags.id = "flags";
+        flags.title = "FLAGS";
+        flags.kind = GroupKind::Flags;
+        flags.columns = 7;
         const char* names[] = {"Z", "N", "C", "V", "I", "T", "K"};
         const char* identifiers[] = {"z", "n", "c", "v", "i", "t", "k"};
-        for (unsigned bit = 0; bit < 7; ++bit) {
+        for (unsigned bit = 0; bit < kFlagCount; ++bit) {
+            const bool writable = bit != 4 && bit != 6;
             FlagDef flag;
             flag.id = identifiers[bit];
             flag.label = names[bit];
             flag.bit = bit;
             // K and I are hardware-owned: the debugger may show them, not set them.
-            flag.writable = bit != 4 && bit != 6;
+            flag.writable = writable;
             layout.flags.push_back(std::move(flag));
+
+            RegisterDef def;
+            def.id = identifiers[bit];
+            def.label = names[bit];
+            def.bits = 1;
+            def.format = ValueFormat::Bool;
+            def.role = RegisterRole::Flags;
+            def.writable = writable;
+            flags.registers.push_back(std::move(def));
         }
+        layout.groups.push_back(std::move(flags));
 
         layout.memory = {
             {"kernel RAM", 0, kKernelRamEnd, true, true, true},
@@ -404,6 +483,12 @@ private:
     kr232::Machine machine_;
     std::vector<std::uint8_t> image_;
     std::uint32_t base_ = 0;
+    // The user program a kernel session placed on top of image_, and the entry
+    // each of the two images was started from, for `reset`.
+    std::vector<std::uint8_t> user_image_;
+    std::uint32_t user_base_ = 0;
+    std::uint32_t user_entry_ = 0;
+    std::uint32_t kernel_entry_ = 0;
 };
 
 }  // namespace
@@ -571,6 +656,10 @@ bool load_kernel(const std::string& kernel_path, const std::string& program_path
     }
     target.machine().set_pc(kernel_pc);
     target.machine().set_reg(2, placed.entry);
+    // Remember both images and their entries so `reset` rebuilds the same
+    // kernel+user pair instead of the kernel alone.
+    target.keep_user_image(std::move(program_bytes), 0x08000000u, placed.entry,
+                           kernel_pc);
 
     LoadedProgram user;
     if (!load_image(program_path, options, user, error)) {
