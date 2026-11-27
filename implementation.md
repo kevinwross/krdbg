@@ -1006,10 +1006,15 @@ P1 — kr232 end to end:
       KERNEL button, and a RESET that restores both images.
       `--kr232-kernel` + `--kr232-program` load the pair; the
       `krdbg_kr232_kernel_pair` CTest row runs to the user entry and resets it.
-- [ ] **M7.13** Stop-at-main as a setting, implemented as an owned temporary
-      breakpoint on the first tick with a bounded run.
-- [ ] **M7.14** Run limits and distinct stop reasons (budget, halted, fault);
-      RUN stays responsive.
+- [x] **M7.13** Stop-at-main as a setting, implemented as an owned temporary
+      breakpoint on the first tick with a bounded run. `dbg.stop_at_main` is read
+      at load; loads record main's first line and the first frame runs to it with
+      `run_to_address` (owned breakpoint). Headless renders do the same before
+      drawing.
+- [x] **M7.14** Run limits and distinct stop reasons (budget, halted, fault);
+      RUN stays responsive. Step, run, run-to and tick record `StopResult`; the
+      status bar names breakpoint, halt, fault or the instruction limit, and
+      `dbg.instruction_limit` is read at run start.
 - [ ] **M7.15** Breakpoints persist across RESET/rebuild, line breakpoints
       re-resolve, enable/disable state survives, and the panel navigates.
 - [ ] **M7.16** Source model: multi-file list, follow vs pin, per-file cache,
@@ -1042,7 +1047,9 @@ load; an image reload does not re-resolve them until M7.16. M7.21/M7.24:
 `kr232_adapter_reset_restores_the_kernel_and_user_pair` pass (20 kr232 tests).
 M7.12: `krdbg_kr232_kernel_pair` passes, and the rendered pair shows
 `userprint.s` at PC `0x08000008` with per-bit FLAGS. M7.9:
-`docs/debugging-kr232.md` and the README entry landed.
+`docs/debugging-kr232.md` and the README entry landed. M7.13/M7.14: startrekng
+stops at `main_script.cpp`/`0x000080DC` after the deferred first-frame run, and the
+`loaded.kr232` halt renders `halted: halted with status 0` in the status bar.
 
 Gate G7:
 
@@ -1379,6 +1386,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:05:00-08:00** — **M7 P0 executed and the first P1 slice landed.** Commits: `c14d31d` (kr232 flags, COM status, reset pair), `1d95ef7` (letter shortcuts, clipboard, Linux picker), `7a255bd` (kr232 presets, build-debugger, package-debugger, app smoke), `3aef7cb` (target and source settings, RESET path), `0cec45e` (startup chooser). Verification: `scripts/build-debugger.ps1 -Clean` PASS; CTest 7/7; 117 unit tests 0 failures; headless goldens unchanged; chooser launches; `--kr232 startrekng_script.kr232 --reset` and `--load kr232_min.c --target kr232` exit 0. P1 remains open: kernel+user CLI, stop-at-main setting, limits and stop reasons, breakpoint persistence, source model, devices, A1–A17 scenarios, step/unwind, status/autoscroll, unresolved breakpoints, and the startrekng golden.
 
 - **2026-11-27T10:09:10-08:00** — **Kernel+user and the kr232 page.** `eb608bb` adds `--kr232-kernel`/`--kr232-program`, a pair-preserving RESET, the adapter's reported entry, and a CTest row that loads the pair, runs to the user entry and resets. The documentation commit adds `docs/debugging-kr232.md` and the README pointer. Verification: CTest 8/8, 117 and 20 unit tests at 0 failures, the pair renders `userprint.s` at PC `0x08000008`.
+- **2026-11-27T10:13:28-08:00** — **Deferred main stop and stop reasons.** `d3095b0` records main's first line at load and runs it on the first frame when `dbg.stop_at_main` is on (an owned temporary breakpoint), then names the stop reason from `StopResult` in the status bar and applies `dbg.instruction_limit` at run start. Verification: CTest 8/8, 117 unit tests at 0 failures; startrekng stops at `main_script.cpp`/`0x000080DC`; `loaded.kr232` run through surface ticks renders `halted: halted with status 0`.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
