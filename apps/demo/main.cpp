@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #if defined(KRDBG_HAVE_KR32)
 #include "kr32_adapter.h"
@@ -114,6 +115,15 @@ public:
         env_setting.description = "KEY=VALUE entries passed to the guest.";
         env_setting.type = krdbg::SettingType::StringMap;
         schema.settings.push_back(env_setting);
+        krdbg::SettingDescriptor target_setting;
+        target_setting.id = "target";
+        target_setting.group = "run";
+        target_setting.label = "Target";
+        target_setting.description =
+            "Build target for a source loaded with LOAD.";
+        target_setting.type = krdbg::SettingType::String;
+        target_setting.default_json = "kr32";
+        schema.settings.push_back(target_setting);
         return schema;
     }
 
@@ -122,6 +132,7 @@ public:
         snapshot.values["ram_mb"] = ram;
         snapshot.values["limit"] = limit;
         snapshot.values["env"] = env;
+        snapshot.values["target"] = target;
         snapshot.origins["ram_mb"] = krdbg::SettingOrigin::User;
         return snapshot;
     }
@@ -131,7 +142,8 @@ public:
         krdbg::SettingsApplyResult result;
         const krdbg::SettingsSchema current = schema();
         for (const auto& [id, value] : next.values) {
-            if (id != "ram_mb" && id != "limit" && id != "env") {
+            if (id != "ram_mb" && id != "limit" && id != "env" &&
+                id != "target") {
                 continue;
             }
             const auto found = std::find_if(
@@ -152,6 +164,8 @@ public:
                 ram = std::get<std::int64_t>(value);
             } else if (id == "limit") {
                 limit = std::get<std::int64_t>(value);
+            } else if (id == "target") {
+                target = std::get<std::string>(value);
             } else {
                 env = std::get<std::map<std::string, std::string>>(value);
             }
@@ -162,6 +176,7 @@ public:
 
     std::int64_t ram = 128;
     std::int64_t limit = 1000000;
+    std::string target = "kr32";
     std::map<std::string, std::string> env = {{"PATH", "/bin"},
                                              {"TERM", "dumb"}};
 };
@@ -258,7 +273,9 @@ struct Options {
     std::string load_path;
     std::string toolchain;
     std::string build_target = "kr32";
+    bool build_target_set = false;
     std::string source_root;
+    bool source_root_set = false;
 };
 
 void print_usage() {
@@ -326,8 +343,10 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.toolchain = argv[++index];
         } else if (argument == "--target" && index + 1 < argc) {
             options.build_target = argv[++index];
+            options.build_target_set = true;
         } else if (argument == "--source-root" && index + 1 < argc) {
             options.source_root = argv[++index];
+            options.source_root_set = true;
         } else if (argument == "--frames" && index + 1 < argc) {
             char* end = nullptr;
             const long frames = std::strtol(argv[++index], &end, 10);
@@ -426,6 +445,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<krdbg::DebugSession> session;
     krdbg::FakeTarget* fake_target = nullptr;
     std::optional<krdbg::ProgramInfo> real_program;
+    std::string loaded_source;
+    std::string loaded_image;
 #if defined(KRDBG_HAVE_KR32)
     if (options.kr32_os || !options.kr32_image.empty()) {
         krdbg::kr32adapter::LoadedProgram loaded;
@@ -449,6 +470,7 @@ int main(int argc, char** argv) {
         } else {
             const std::string name =
                 std::filesystem::path(options.kr32_image).filename().string();
+            loaded_image = options.kr32_image;
             real_program = krdbg::ProgramInfo{
                 options.kr32_image, name, loaded.target->pc(), true};
         }
@@ -496,6 +518,7 @@ int main(int argc, char** argv) {
         }
         const std::string name =
             std::filesystem::path(options.kr16_image).filename().string();
+        loaded_image = options.kr16_image;
         real_program = krdbg::ProgramInfo{
             options.kr16_image, name, loaded.target->pc(), true};
         session = std::make_unique<krdbg::DebugSession>(
@@ -535,6 +558,7 @@ int main(int argc, char** argv) {
         }
         const std::string name =
             std::filesystem::path(options.kr216_image).filename().string();
+        loaded_image = options.kr216_image;
         real_program = krdbg::ProgramInfo{
             options.kr216_image, name, loaded.target->pc(), true};
         session = std::make_unique<krdbg::DebugSession>(
@@ -574,6 +598,7 @@ int main(int argc, char** argv) {
         }
         const std::string name =
             std::filesystem::path(options.kr232_image).filename().string();
+        loaded_image = options.kr232_image;
         real_program = krdbg::ProgramInfo{
             options.kr232_image, name, loaded.target->pc(), true};
         // No reload callback: the adapter reloads from the image it loaded, so a
@@ -634,8 +659,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::string loaded_source;
-    std::string loaded_image;
     [[maybe_unused]] const auto stop_at_main = [](krdbg::DebugSession& current) {
         const krdbg::DebugInfo& info = current.info();
         for (std::size_t index = 0; index < info.functions.size(); ++index) {
@@ -680,7 +703,45 @@ int main(int argc, char** argv) {
                             lower.ends_with(".cxx") ||
                             lower.ends_with(".s");
         std::string image_path = path;
-        std::string target_name = options.build_target;
+
+        // The host's settings are the GUI's way to pick a build target and
+        // source roots; a command-line flag still wins.
+        const krdbg::SettingsSnapshot live = host.settings_values();
+        const auto setting_string = [&live](std::string_view id,
+                                            std::string fallback) {
+            const auto found = live.values.find(std::string(id));
+            if (found != live.values.end()) {
+                if (const auto* text = std::get_if<std::string>(&found->second)) {
+                    return *text;
+                }
+            }
+            return fallback;
+        };
+        const auto setting_list = [&live](std::string_view id) {
+            std::vector<std::string> roots;
+            const auto found = live.values.find(std::string(id));
+            if (found != live.values.end()) {
+                if (const auto* list =
+                        std::get_if<std::vector<std::string>>(&found->second)) {
+                    roots = *list;
+                }
+            }
+            return roots;
+        };
+        const std::vector<std::string> settings_roots =
+            options.source_root_set ? std::vector<std::string>{}
+                                    : setting_list("dbg.source_roots");
+        std::vector<std::string> source_roots{options.source_root};
+        for (const std::string& root : settings_roots) {
+            if (!root.empty()) {
+                source_roots.push_back(root);
+            }
+        }
+        std::string target_name =
+            options.build_target_set
+                ? options.build_target
+                : (source ? setting_string("vm.target", options.build_target)
+                          : options.build_target);
         if (source) {
             if (build_chain == nullptr) {
                 error = "source loading needs --toolchain <krc-install-prefix> "
@@ -689,7 +750,11 @@ int main(int argc, char** argv) {
             }
             krdbg::host::BuildOptions build_options;
             build_options.target = target_name;
-            build_options.source_root = options.source_root;
+            build_options.source_root =
+                options.source_root_set
+                    ? options.source_root
+                    : (settings_roots.empty() ? options.source_root
+                                              : settings_roots.front());
             const krdbg::host::BuildResult built =
                 build_chain->build(path, build_options);
             if (!built.ok) {
@@ -712,7 +777,7 @@ int main(int argc, char** argv) {
 #if defined(KRDBG_HAVE_KR16)
             krdbg::kr16adapter::LoadedProgram loaded;
             krdbg::kr16adapter::Options adapter_options;
-            adapter_options.source_roots = {options.source_root};
+            adapter_options.source_roots = source_roots;
             if (!krdbg::kr16adapter::load_image(image_path, adapter_options,
                                                  loaded, error)) {
                 return false;
@@ -726,7 +791,7 @@ int main(int argc, char** argv) {
 #if defined(KRDBG_HAVE_KR32)
             krdbg::kr32adapter::LoadedProgram loaded;
             krdbg::kr32adapter::Options adapter_options;
-            adapter_options.source_roots = {options.source_root};
+            adapter_options.source_roots = source_roots;
             if (!krdbg::kr32adapter::load_standalone(image_path, adapter_options,
                                                       loaded, error)) {
                 return false;
@@ -740,7 +805,7 @@ int main(int argc, char** argv) {
 #if defined(KRDBG_HAVE_KR216)
             krdbg::kr216adapter::LoadedProgram loaded;
             krdbg::kr216adapter::Options adapter_options;
-            adapter_options.source_roots = {options.source_root};
+            adapter_options.source_roots = source_roots;
             if (!krdbg::kr216adapter::load_image(image_path, adapter_options,
                                                  loaded, error)) {
                 return false;
@@ -754,7 +819,7 @@ int main(int argc, char** argv) {
 #if defined(KRDBG_HAVE_KR232)
             krdbg::kr232adapter::LoadedProgram loaded;
             krdbg::kr232adapter::Options adapter_options;
-            adapter_options.source_roots = {options.source_root};
+            adapter_options.source_roots = source_roots;
             if (!krdbg::kr232adapter::load_image(image_path, adapter_options,
                                                  loaded, error)) {
                 return false;
