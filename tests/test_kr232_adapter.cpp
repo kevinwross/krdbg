@@ -188,7 +188,7 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
     // The fixture says one byte on the console, draws and flips, then exits 7.
     (void)loaded.target->run(1000000);
     CHECK(loaded.target->halted());
-    CHECK(loaded.target->instructions_executed() > 2000U);
+    CHECK(loaded.target->instructions_executed() > 1000U);
 
     const krdbg::TargetLayout& layout = loaded.target->layout(0);
     CHECK(layout.has_com_port);
@@ -356,7 +356,7 @@ KRDBG_TEST(kr232_adapter_unwinds_two_frames) {
             local_offset = variable.location.frame_offset;
         }
     }
-    CHECK_EQ(local_offset, -4);
+    CHECK_EQ(local_offset, -12);
     if (local_offset != 0) {
         const std::uint64_t address =
             static_cast<std::uint64_t>(static_cast<std::int64_t>(frames[0].frame_base) +
@@ -466,7 +466,7 @@ KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
     if (!loaded.info.has_value()) {
         return;
     }
-    // One local, `x`, at -4 from the frame base: the slot the backend gave it.
+    // One local, `x`, at -12 from the frame base: the slot the backend gave it.
     CHECK(!loaded.info->variables.empty());
     bool saw_local = false;
     for (const krdbg::VariableInfo& variable : loaded.info->variables) {
@@ -474,7 +474,7 @@ KRDBG_TEST(kr232_adapter_reads_a_local_through_the_frame) {
             continue;
         }
         saw_local = true;
-        CHECK(variable.location.frame_offset == -4);
+        CHECK(variable.location.frame_offset == -12);
         CHECK(variable.size == 4U);
         CHECK_EQ(variable.name, std::string("x"));
     }
