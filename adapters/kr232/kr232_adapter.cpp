@@ -317,7 +317,16 @@ public:
             }
             efp = next;
         }
-        if (!frames.empty()) {
+        if (frames.empty()) {
+            // No ENTER-built frame yet (reset, kernel entry, or the first
+            // instructions of a program). Publish the current position as frame
+            // zero so the stack panel still names where the machine is; the
+            // session treats a single frame as "no caller" for step-out.
+            RawFrame frame;
+            frame.frame_base = machine_.reg(kSp);
+            frame.pc = machine_.pc();
+            frames.push_back(frame);
+        } else {
             // Frame zero is where the program is, not where it will return to.
             // Each chained frame stores a return address, so publishing those
             // alone names the caller for the innermost frame: the panel said

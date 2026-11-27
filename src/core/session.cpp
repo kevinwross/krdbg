@@ -405,12 +405,25 @@ StopResult DebugSession::step(StepMode mode) {
         break;
     case StepMode::InstructionOver: {
         const std::uint64_t depth = impl_->depth();
+        // kr232 builds its frame chain in ENTER, not at CALL, so the depth is
+        // unchanged on the first instruction inside a callee. A function change
+        // is the target-independent signal that a call was entered (M7.20).
+        const FunctionInfo* start_function = function_at(target.pc());
         result = target.step_instruction();
         finish_first();
-        if (result.kind == StopKind::Retired && !hit_breakpoint &&
-            impl_->depth() > depth) {
+        const auto inside_call = [&]() {
+            if (impl_->depth() > depth) {
+                return true;
+            }
+            if (start_function == nullptr) {
+                return false;
+            }
+            const FunctionInfo* current = function_at(target.pc());
+            return current != nullptr && current != start_function;
+        };
+        if (result.kind == StopKind::Retired && !hit_breakpoint && inside_call()) {
             std::uint64_t guard = 0;
-            while (impl_->depth() > depth) {
+            while (inside_call()) {
                 if (!advance()) {
                     break;
                 }
@@ -424,6 +437,12 @@ StopResult DebugSession::step(StepMode mode) {
     }
     case StepMode::InstructionOut: {
         const std::uint64_t depth = impl_->depth();
+        if (depth <= 1) {
+            // The outermost frame has no caller to return to. Running on would
+            // hit the guard and look like a hang.
+            result = StopResult{StopKind::Interrupted, "no caller frame"};
+            break;
+        }
         std::uint64_t guard = 0;
         while (impl_->depth() >= depth) {
             if (!advance()) {
@@ -502,6 +521,10 @@ StopResult DebugSession::step(StepMode mode) {
         const std::uint64_t depth = impl_->depth();
         std::uint64_t return_pc = 0;
         const std::vector<RawFrame> frames = target.unwind();
+        if (frames.size() <= 1) {
+            result = StopResult{StopKind::Interrupted, "no caller frame"};
+            break;
+        }
         if (frames.size() > 1) {
             return_pc = frames[1].pc;
         }

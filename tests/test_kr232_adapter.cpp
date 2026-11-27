@@ -795,3 +795,24 @@ KRDBG_TEST(kr232_adapter_reset_restores_the_kernel_and_user_pair) {
     CHECK(loaded.target->read_value("gpr", 2, exit_status));
     CHECK_EQ(exit_status.bits & 0xFFu, 3u);
 }
+KRDBG_TEST(kr232_session_step_out_without_a_caller_stops) {
+    // Before ENTER builds a frame, unwind publishes the current position as
+    // frame zero. Step-out from the outermost frame must say so and stop, not
+    // run to the step guard (M7.20).
+    krdbg::kr232adapter::LoadedProgram loaded;
+    std::string error;
+    if (!krdbg::kr232adapter::load_image(fixture_path(), {}, loaded, error)) {
+        return;
+    }
+    CHECK(loaded.target != nullptr);
+
+    auto reload = [](krdbg::IDebugTarget&, std::string&) { return true; };
+    krdbg::DebugSession session(std::move(loaded.target), loaded.info, reload);
+    CHECK_EQ(session.call_stack().size(), 1U);
+    const std::uint64_t before = session.pc();
+    const krdbg::StopResult result =
+        session.step(krdbg::StepMode::InstructionOut);
+    CHECK(result.kind == krdbg::StopKind::Interrupted);
+    CHECK(result.message == "no caller frame");
+    CHECK_EQ(session.pc(), before);
+}
