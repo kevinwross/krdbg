@@ -58,6 +58,24 @@ std::string environment_value(const char* name) {
 #endif
 }
 
+// The lowest line address in `main`, or 0 when the image has no line for it.
+std::uint64_t first_line_of_main(const krdbg::DebugInfo& info) {
+    for (std::size_t index = 0; index < info.functions.size(); ++index) {
+        if (info.functions[index].name != "main") {
+            continue;
+        }
+        std::uint64_t first_line = 0;
+        for (const krdbg::LineInfo& line : info.lines) {
+            if (line.function == index &&
+                (first_line == 0 || line.address < first_line)) {
+                first_line = line.address;
+            }
+        }
+        return first_line;
+    }
+    return 0;
+}
+
 class DemoVmProvider final : public krdbg::ISettingsProvider {
 public:
     std::string id() const override { return "vm"; }
@@ -261,6 +279,9 @@ struct Options {
     bool version = false;
     bool help = false;
     int frames = -1;
+    // Headless ticks to run before the frame is rendered: exercises the surface
+    // tick path (run slices, stop reasons) without a window.
+    int ticks = 0;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -310,6 +331,7 @@ void print_usage() {
         "  --reset                Reset the loaded program after it is loaded\n"
         "  --run N                Execute N instructions before the first render\n"
         "  --frames N             Exit after rendering N frames (windowed mode)\n"
+        "  --ticks N              Headless: run N surface ticks before rendering\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -363,6 +385,15 @@ bool parse_options(int argc, char** argv, Options& options) {
                 return false;
             }
             options.frames = static_cast<int>(frames);
+        } else if (argument == "--ticks" && index + 1 < argc) {
+            char* end = nullptr;
+            const long ticks = std::strtol(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || ticks < 0 ||
+                ticks > 100000) {
+                std::fprintf(stderr, "krdbg: --ticks needs a count\n");
+                return false;
+            }
+            options.ticks = static_cast<int>(ticks);
         } else if (argument == "--run" && index + 1 < argc) {
             char* end = nullptr;
             const long count = std::strtol(argv[++index], &end, 10);
@@ -462,6 +493,7 @@ int main(int argc, char** argv) {
     std::string loaded_image;
     std::string loaded_kernel;
     std::string loaded_program;
+    std::uint64_t pending_initial_stop = 0;
 #if defined(KRDBG_HAVE_KR32)
     if (options.kr32_os || !options.kr32_image.empty()) {
         krdbg::kr32adapter::LoadedProgram loaded;
@@ -496,26 +528,9 @@ int main(int argc, char** argv) {
             session->run(2'000'000);
             real_program->entry = session->pc();
         } else {
-            // Start on main's first source line, as KR32's own debugger does
-            // after running the startup stub.
-            const krdbg::DebugInfo& info = session->info();
-            for (std::size_t index = 0; index < info.functions.size(); ++index) {
-                if (info.functions[index].name != "main") {
-                    continue;
-                }
-                std::uint64_t first_line = 0;
-                for (const krdbg::LineInfo& line : info.lines) {
-                    if (line.function == index &&
-                        (first_line == 0 || line.address < first_line)) {
-                        first_line = line.address;
-                    }
-                }
-                if (first_line != 0) {
-                    session->run_to_address(first_line);
-                    real_program->entry = session->pc();
-                }
-                break;
-            }
+            // The first frame runs to main when the stop-at-main setting is on;
+            // headless renders apply the same pending stop before drawing.
+            pending_initial_stop = first_line_of_main(session->info());
         }
     }
 #endif
@@ -539,24 +554,7 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        const krdbg::DebugInfo& info = session->info();
-        for (std::size_t index = 0; index < info.functions.size(); ++index) {
-            if (info.functions[index].name != "main") {
-                continue;
-            }
-            std::uint64_t first_line = 0;
-            for (const krdbg::LineInfo& line : info.lines) {
-                if (line.function == index &&
-                    (first_line == 0 || line.address < first_line)) {
-                    first_line = line.address;
-                }
-            }
-            if (first_line != 0) {
-                session->run_to_address(first_line);
-                real_program->entry = session->pc();
-            }
-            break;
-        }
+        pending_initial_stop = first_line_of_main(session->info());
     }
 #endif
 #if defined(KRDBG_HAVE_KR216)
@@ -579,24 +577,7 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        const krdbg::DebugInfo& info = session->info();
-        for (std::size_t index = 0; index < info.functions.size(); ++index) {
-            if (info.functions[index].name != "main") {
-                continue;
-            }
-            std::uint64_t first_line = 0;
-            for (const krdbg::LineInfo& line : info.lines) {
-                if (line.function == index &&
-                    (first_line == 0 || line.address < first_line)) {
-                    first_line = line.address;
-                }
-            }
-            if (first_line != 0) {
-                session->run_to_address(first_line);
-                real_program->entry = session->pc();
-            }
-            break;
-        }
+        pending_initial_stop = first_line_of_main(session->info());
     }
 #endif
 #if defined(KRDBG_HAVE_KR232)
@@ -621,24 +602,7 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        const krdbg::DebugInfo& info = session->info();
-        for (std::size_t index = 0; index < info.functions.size(); ++index) {
-            if (info.functions[index].name != "main") {
-                continue;
-            }
-            std::uint64_t first_line = 0;
-            for (const krdbg::LineInfo& line : info.lines) {
-                if (line.function == index &&
-                    (first_line == 0 || line.address < first_line)) {
-                    first_line = line.address;
-                }
-            }
-            if (first_line != 0) {
-                session->run_to_address(first_line);
-                real_program->entry = session->pc();
-            }
-            break;
-        }
+        pending_initial_stop = first_line_of_main(session->info());
     }
     if (!session && !options.kr232_kernel_path.empty() &&
         !options.kr232_program_path.empty()) {
@@ -687,6 +651,23 @@ int main(int argc, char** argv) {
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
 
+    // The load paths record main's first line instead of running to it: the
+    // first frame does the bounded run, so a large image never blocks the window
+    // from opening (M7.13). Headless renders run it before drawing.
+    const auto apply_pending_stop = [&]() {
+        if (pending_initial_stop == 0) {
+            return;
+        }
+        const std::uint64_t target = pending_initial_stop;
+        pending_initial_stop = 0;
+        (void)session->run_to_address(target);
+        if (surface.program_info().loaded) {
+            krdbg::ProgramInfo info = surface.program_info();
+            info.entry = session->pc();
+            surface.set_program_info(std::move(info));
+        }
+    };
+
     std::unique_ptr<krdbg::host::BuildChain> build_chain;
     std::string toolchain_prefix = options.toolchain;
     if (toolchain_prefix.empty()) {
@@ -704,25 +685,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    [[maybe_unused]] const auto stop_at_main = [](krdbg::DebugSession& current) {
-        const krdbg::DebugInfo& info = current.info();
-        for (std::size_t index = 0; index < info.functions.size(); ++index) {
-            if (info.functions[index].name != "main") {
-                continue;
-            }
-            std::uint64_t first_line = 0;
-            for (const krdbg::LineInfo& line : info.lines) {
-                if (line.function == index &&
-                    (first_line == 0 || line.address < first_line)) {
-                    first_line = line.address;
-                }
-            }
-            if (first_line != 0) {
-                current.run_to_address(first_line);
-            }
-            break;
-        }
-    };
     const auto set_program = [&surface](const std::string& path,
                                         const std::string& name,
                                         std::uint64_t entry) {
@@ -878,7 +840,15 @@ int main(int argc, char** argv) {
             error = "unknown target '" + target_name + "'";
             return false;
         }
-        stop_at_main(*session);
+        bool stop_at_main_setting = true;
+        if (const auto found = live.values.find("dbg.stop_at_main");
+            found != live.values.end()) {
+            if (const auto* flag = std::get_if<bool>(&found->second)) {
+                stop_at_main_setting = *flag;
+            }
+        }
+        pending_initial_stop =
+            stop_at_main_setting ? first_line_of_main(session->info()) : 0;
         loaded_source = source ? path : std::string{};
         loaded_image = image_path;
         host.last_load_source = source;
@@ -1060,6 +1030,7 @@ int main(int argc, char** argv) {
     if (options.run_instructions > 0) {
         // A scripted run, so a screenshot can show the committed frame or a
         // populated stack without anyone pressing RUN.
+        apply_pending_stop();
         (void)session->run(static_cast<std::uint64_t>(options.run_instructions));
         options.loaded = true;
     }
@@ -1073,6 +1044,10 @@ int main(int argc, char** argv) {
     }
 
     if (options.headless) {
+        apply_pending_stop();
+        for (int index = 0; index < options.ticks; ++index) {
+            surface.tick();
+        }
         krdbg::Canvas canvas(surface.width(), surface.height());
         surface.render(canvas);
         std::printf("frame hash %016llX %dx%d\n",
@@ -1114,6 +1089,7 @@ int main(int argc, char** argv) {
             canvas_height = surface.height();
             canvas = std::make_unique<krdbg::Canvas>(canvas_width, canvas_height);
         }
+        apply_pending_stop();
         surface.tick();
         surface.render(*canvas);
         window->present(*canvas);

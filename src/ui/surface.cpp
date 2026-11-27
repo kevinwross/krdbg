@@ -298,6 +298,9 @@ struct DebuggerSurface::Impl {
     void toggle_line_breakpoint(std::string_view file, int line);
     void toggle_address_breakpoint(std::uint64_t address);
     void toggle_current_line_breakpoint();
+    void begin_run();
+    void note_stop(const StopResult& result);
+    void step_and_note(StepMode mode);
     void forward_video_key(const platform::Event& event);
 
     DebugSession* session = nullptr;
@@ -308,6 +311,14 @@ struct DebuggerSurface::Impl {
     SurfaceLayout layout;
     SurfacePanel focus = SurfacePanel::None;
     bool running = false;
+    // The last stop the session reported, so the status bar can say why the
+    // target is stopped instead of only where (M7.14). A plain step leaves an
+    // empty message and shows the PC; a breakpoint/halt/fault names itself.
+    StopKind last_stop_kind = StopKind::Retired;
+    std::string last_stop_message;
+    bool last_stop_known = false;
+    std::int64_t run_limit_remaining = 0;
+    bool run_limit_active = false;
     bool popup = false;
     bool video_tab = false;
     bool video_popped = false;
@@ -841,6 +852,36 @@ void DebuggerSurface::Impl::toggle_current_line_breakpoint() {
     session->add_line_breakpoint(source->path, static_cast<int>(line->line));
 }
 
+void DebuggerSurface::Impl::begin_run() {
+    last_stop_known = false;
+    run_limit_remaining = 0;
+    run_limit_active = false;
+    if (host == nullptr) {
+        return;
+    }
+    const SettingsSnapshot live = host->settings_values();
+    const auto found = live.values.find("dbg.instruction_limit");
+    if (found != live.values.end()) {
+        if (const auto* value = std::get_if<std::int64_t>(&found->second)) {
+            if (*value > 0) {
+                run_limit_remaining = *value;
+                run_limit_active = true;
+            }
+        }
+    }
+}
+
+void DebuggerSurface::Impl::note_stop(const StopResult& result) {
+    last_stop_kind = result.kind;
+    last_stop_message = result.message;
+    last_stop_known = true;
+}
+
+void DebuggerSurface::Impl::step_and_note(StepMode mode) {
+    running = false;
+    note_stop(session->step(mode));
+}
+
 std::vector<std::string> DebuggerSurface::Impl::source_lines() const {
     return source_state.text;
 }
@@ -1292,6 +1333,36 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
             }
         }
         left = "paused at " + hex_value(pc, session->layout().address_bits);
+        if (last_stop_known) {
+            switch (last_stop_kind) {
+            case StopKind::Halted:
+                left = "halted";
+                if (!last_stop_message.empty()) {
+                    left += ": " + last_stop_message;
+                }
+                break;
+            case StopKind::Fault:
+                left = "fault";
+                if (!last_stop_message.empty()) {
+                    left += ": " + last_stop_message;
+                }
+                break;
+            case StopKind::Interrupted:
+                left = "paused";
+                break;
+            case StopKind::Budget:
+                left = last_stop_message == "instruction limit"
+                           ? "instruction limit reached"
+                           : "instruction budget";
+                break;
+            case StopKind::Retired:
+                if (last_stop_message == "breakpoint") {
+                    left = "breakpoint at " +
+                           hex_value(pc, session->layout().address_bits);
+                }
+                break;
+            }
+        }
     }
     canvas.text(10, bar.y + 4, left,
                 error_text.empty() ? ui::theme::kDim : ui::theme::kBad,
@@ -2121,7 +2192,9 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         return;
     case ToolbarAction::Run:
         running = !running;
-        if (!running) {
+        if (running) {
+            begin_run();
+        } else {
             session->pause();
         }
         return;
@@ -2216,13 +2289,15 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
                 if (event.y < menu_rect.y + 28) {
                     toggle_line_breakpoint(menu_file, menu_line);
                 } else if (!menu_file.empty() && menu_line > 0) {
-                    session->run_to_line(menu_file, menu_line);
+                    running = false;
+                    note_stop(session->run_to_line(menu_file, menu_line));
                 }
             } else if (menu_mode == 1) {
                 if (event.y < menu_rect.y + 28) {
                     toggle_address_breakpoint(menu_address);
                 } else {
-                    session->run_to_address(menu_address);
+                    running = false;
+                    note_stop(session->run_to_address(menu_address));
                 }
             } else if (menu_mode == 2) {
                 if (event.y < menu_rect.y + 28) {
@@ -2272,17 +2347,17 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             return;
         }
         if (layout.source_over.contains(event.x, event.y)) {
-            session->step(StepMode::LineOver);
+            step_and_note(StepMode::LineOver);
             selected_frame = 0;
             return;
         }
         if (layout.source_in.contains(event.x, event.y)) {
-            session->step(StepMode::LineIn);
+            step_and_note(StepMode::LineIn);
             selected_frame = 0;
             return;
         }
         if (layout.source_out.contains(event.x, event.y)) {
-            session->step(StepMode::LineOut);
+            step_and_note(StepMode::LineOut);
             selected_frame = 0;
             return;
         }
@@ -2320,17 +2395,17 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
 
     if (panel == SurfacePanel::Disassembly) {
         if (layout.disassembly_over.contains(event.x, event.y)) {
-            session->step(StepMode::InstructionOver);
+            step_and_note(StepMode::InstructionOver);
             selected_frame = 0;
             return;
         }
         if (layout.disassembly_in.contains(event.x, event.y)) {
-            session->step(StepMode::Instruction);
+            step_and_note(StepMode::Instruction);
             selected_frame = 0;
             return;
         }
         if (layout.disassembly_out.contains(event.x, event.y)) {
-            session->step(StepMode::InstructionOut);
+            step_and_note(StepMode::InstructionOut);
             selected_frame = 0;
             return;
         }
@@ -3541,7 +3616,9 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         return true;
     case platform::key::F5:
         running = !running;
-        if (!running) {
+        if (running) {
+            begin_run();
+        } else {
             session->pause();
         }
         return true;
@@ -3553,14 +3630,15 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         toggle_current_line_breakpoint();
         return true;
     case platform::key::F10:
-        session->step(StepMode::InstructionOver);
+        step_and_note(StepMode::InstructionOver);
         running = false;
         return true;
     case platform::key::F11:
         // Shift+F11 steps out by instruction; plain F11 steps in. Both reach the
         // session through the same key, so the shift flag selects the mode.
-        session->step(event.shift ? StepMode::InstructionOut : StepMode::Instruction);
         running = false;
+        note_stop(session->step(event.shift ? StepMode::InstructionOut
+                                            : StepMode::Instruction));
         return true;
     default:
         break;
@@ -3764,9 +3842,19 @@ void DebuggerSurface::tick() {
             }
         }
     }
+    if (impl_->run_limit_active) {
+        slice = std::min(slice, impl_->run_limit_remaining);
+    }
     const StopResult result = impl_->session->run(static_cast<std::uint64_t>(slice));
+    if (impl_->run_limit_active) {
+        impl_->run_limit_remaining -= slice;
+    }
     if (result.kind != StopKind::Budget) {
         impl_->running = false;
+        impl_->note_stop(result);
+    } else if (impl_->run_limit_active && impl_->run_limit_remaining <= 0) {
+        impl_->running = false;
+        impl_->note_stop(StopResult{StopKind::Budget, "instruction limit"});
     }
 }
 
