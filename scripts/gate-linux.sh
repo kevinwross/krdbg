@@ -78,7 +78,14 @@ for index in "${!presets[@]}"; do
     # preset never enables. The gate owns the configuration, so it starts clean.
     cmake --preset "$preset" --fresh
     echo "== build $preset"
+    # GCC 15 in this WSL image intermittently segfaults while garbage-collecting, so
+# the x86_64 rows stay at two jobs; the ARM64 host uses every processor.
+if [ "$(uname -m 2>/dev/null || echo unknown)" = "x86_64" ]; then
+    JOBS="${FAMILY_JOBS:-2}"
+    [ "$JOBS" -gt 2 ] && JOBS=2
+else
     JOBS="${FAMILY_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+fi
 [ "$JOBS" -lt 1 ] && JOBS=1
 cmake --build --preset "$preset" -j "$JOBS"
     echo "== test $preset"

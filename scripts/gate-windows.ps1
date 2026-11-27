@@ -81,13 +81,17 @@ if (-not $prefix) {
 }
 Write-Host "prefix: $prefix"
 
+# Jobs follow the processor count, unless the family gate divided the machine
+# among several repositories.
+$jobs = if ($env:FAMILY_JOBS) { [Math]::Max(1, [int]$env:FAMILY_JOBS) } else { [Environment]::ProcessorCount }
+
 foreach ($preset in @('windows-msvc', 'windows-msvc-release')) {
     Write-Host "== configure $preset"
     Invoke-Checked "configure $preset" { cmake --preset $preset "-DCMAKE_PREFIX_PATH=$prefix" }
     Write-Host "== build $preset"
-    Invoke-Checked "build $preset" { cmake --build --preset $preset }
+    Invoke-Checked "build $preset" { cmake --build --preset $preset -j $jobs }
     Write-Host "== test $preset"
-    Invoke-Checked "test $preset" { ctest --preset $preset }
+    Invoke-Checked "test $preset" { ctest --preset $preset -j $jobs }
 }
 
 foreach ($preset in @('windows-msvc', 'windows-msvc-release')) {
