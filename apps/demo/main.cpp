@@ -59,7 +59,9 @@ std::string environment_value(const char* name) {
 }
 
 // The lowest line address in `main`, or 0 when the image has no line for it.
-std::uint64_t first_line_of_main(const krdbg::DebugInfo& info) {
+// Only the adapter-enabled build calls this; the adapter-free presets still
+// compile the demo and would otherwise warn about an unused static function.
+[[maybe_unused]] std::uint64_t first_line_of_main(const krdbg::DebugInfo& info) {
     for (std::size_t index = 0; index < info.functions.size(); ++index) {
         if (info.functions[index].name != "main") {
             continue;
