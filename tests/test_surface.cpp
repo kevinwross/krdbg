@@ -382,6 +382,39 @@ KRDBG_TEST(surface_run_tick_advances_until_the_target_stops) {
     CHECK(scene.session->stats().instructions > 0U);
 }
 
+KRDBG_TEST(surface_toolbar_hover_shows_tooltips) {
+    krdbg::test::TestScene scene(true);
+    const SurfaceLayout& layout = scene.surface->layout();
+    const auto hover = [&scene](const krdbg::Rect& rect) {
+        scene.mouse_move(center_x(rect), center_y(rect));
+        return scene.surface->tooltip_visible();
+    };
+    CHECK(hover(layout.toolbar_build));
+    CHECK(hover(layout.toolbar_run));
+    CHECK(hover(layout.toolbar_over));
+    CHECK(hover(layout.toolbar_breakpoint));
+    CHECK(hover(layout.toolbar_gear));
+}
+
+KRDBG_TEST(surface_toolbar_build_steps_and_breakpoint) {
+    krdbg::test::TestScene scene(true);
+    const SurfaceLayout& layout = scene.surface->layout();
+    CHECK(layout.step_visible);
+    CHECK(scene.click(center_x(layout.toolbar_build), center_y(layout.toolbar_build)));
+    CHECK_EQ(scene.host.reload_calls, 1);
+    const std::uint64_t before = scene.session->pc();
+    CHECK(scene.click(center_x(layout.toolbar_over), center_y(layout.toolbar_over)));
+    CHECK(scene.session->pc() != before);
+    const std::size_t count = scene.session->breakpoints().size();
+    CHECK(scene.click(center_x(layout.toolbar_breakpoint),
+                      center_y(layout.toolbar_breakpoint)));
+    CHECK_EQ(scene.session->breakpoints().size(), count + 1);
+    // The step group is hidden where it would collide with the stats.
+    scene.surface->resize(900, 600);
+    CHECK(!scene.surface->layout().step_visible);
+    CHECK(scene.surface->layout().toolbar_over.empty());
+}
+
 KRDBG_TEST(surface_status_text_names_the_stop) {
     krdbg::test::TestScene scene(true);
     CHECK(scene.surface->status_text().find("paused at") != std::string::npos);

@@ -53,10 +53,17 @@ struct SurfaceLayout {
     Rect toolbar_run;
     Rect toolbar_reset;
     Rect toolbar_load;
+    Rect toolbar_build;
     Rect toolbar_kernel;
     Rect toolbar_clr;
     Rect toolbar_video;
     Rect toolbar_gear;
+    // Instruction step controls; empty when the toolbar is too narrow for them.
+    Rect toolbar_over;
+    Rect toolbar_in;
+    Rect toolbar_out;
+    Rect toolbar_breakpoint;
+    bool step_visible = false;
     bool kernel_visible = false;
 
     // Panel controls and gutters used by the interaction tests.

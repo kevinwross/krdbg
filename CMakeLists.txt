@@ -413,7 +413,7 @@ if(KRDBG_BUILD_TESTS)
             # host toolchain; record the rendered hash each platform's build
             # produces for the same scripted image.
             if(WIN32)
-                set(KRDBG_STARTREKNG_HASH "EAB8F6EEC580D84F")
+                set(KRDBG_STARTREKNG_HASH "FF770DB7FEA84D7A")
             else()
                 set(KRDBG_STARTREKNG_HASH "2AC8CBA5C069DE87")
             endif()
@@ -448,6 +448,16 @@ if(KRDBG_BUILD_TESTS)
         set_tests_properties(krdbg_kr232_settings_golden PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_SETTINGS_HASH}")
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-variables.hash"
+             KRDBG_KR232_VARIABLES_HASH)
+        string(STRIP "${KRDBG_KR232_VARIABLES_HASH}" KRDBG_KR232_VARIABLES_HASH)
+        add_test(NAME krdbg_kr232_variables_golden
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/aggregate.kr232"
+                --no-stop-at-main --click 8,753 --click 8,769)
+        set_tests_properties(krdbg_kr232_variables_golden PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_VARIABLES_HASH}")
     endif()
     if(KRDBG_KR216_ADAPTER)
         # The adapter's own tests loaded two committed kr216 images, which were

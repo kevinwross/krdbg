@@ -203,7 +203,12 @@ struct DebuggerSurface::Impl {
         Run,
         Reset,
         Load,
+        Build,
         Kernel,
+        StepOver,
+        StepIn,
+        StepOut,
+        ToggleBreakpoint,
         Clr,
         Video,
         Gear,
@@ -462,11 +467,27 @@ void DebuggerSurface::Impl::recompute_layout() {
     place(layout.toolbar_run, "RUN");
     place(layout.toolbar_reset, "RESET");
     place(layout.toolbar_load, "LOAD");
+    place(layout.toolbar_build, "BUILD");
     layout.kernel_visible = host->supports_kernel_load();
     if (layout.kernel_visible) {
         place(layout.toolbar_kernel, "KERNEL");
     } else {
         layout.toolbar_kernel = Rect{};
+    }
+    // The instruction-step group needs about 210 px; on a narrow window it is
+    // hidden rather than overlapping the stats.
+    layout.step_visible = w >= 1100;
+    if (layout.step_visible) {
+        x += 10;
+        place(layout.toolbar_over, "OVER");
+        place(layout.toolbar_in, "IN");
+        place(layout.toolbar_out, "OUT");
+        place(layout.toolbar_breakpoint, "BP");
+    } else {
+        layout.toolbar_over = {};
+        layout.toolbar_in = {};
+        layout.toolbar_out = {};
+        layout.toolbar_breakpoint = {};
     }
     layout.toolbar_gear = Rect{w - 30, 3, 24, 24};
     const int clr_width = Canvas::text_width("CLR", FontRole::Ui) + 18;
@@ -1320,8 +1341,20 @@ void DebuggerSurface::Impl::draw_toolbar(Canvas& canvas) {
                 ui::theme::kBorder);
     draw_button(canvas, layout.toolbar_load, "LOAD", ui::theme::kText,
                 ui::theme::kBorder);
+    draw_button(canvas, layout.toolbar_build, "BUILD", ui::theme::kText,
+                ui::theme::kBorder);
     if (layout.kernel_visible) {
         draw_button(canvas, layout.toolbar_kernel, "KERNEL", ui::theme::kText,
+                    ui::theme::kBorder);
+    }
+    if (layout.step_visible) {
+        draw_button(canvas, layout.toolbar_over, "OVER", ui::theme::kText,
+                    ui::theme::kBorder);
+        draw_button(canvas, layout.toolbar_in, "IN", ui::theme::kText,
+                    ui::theme::kBorder);
+        draw_button(canvas, layout.toolbar_out, "OUT", ui::theme::kText,
+                    ui::theme::kBorder);
+        draw_button(canvas, layout.toolbar_breakpoint, "BP", ui::theme::kText,
                     ui::theme::kBorder);
     }
     draw_button(canvas, layout.toolbar_clr, "CLR", ui::theme::kText,
@@ -2252,8 +2285,17 @@ DebuggerSurface::Impl::ToolbarAction DebuggerSurface::Impl::toolbar_at(int x,
     if (layout.toolbar_run.contains(x, y)) return ToolbarAction::Run;
     if (layout.toolbar_reset.contains(x, y)) return ToolbarAction::Reset;
     if (layout.toolbar_load.contains(x, y)) return ToolbarAction::Load;
+    if (layout.toolbar_build.contains(x, y)) return ToolbarAction::Build;
     if (layout.kernel_visible && layout.toolbar_kernel.contains(x, y)) {
         return ToolbarAction::Kernel;
+    }
+    if (layout.step_visible) {
+        if (layout.toolbar_over.contains(x, y)) return ToolbarAction::StepOver;
+        if (layout.toolbar_in.contains(x, y)) return ToolbarAction::StepIn;
+        if (layout.toolbar_out.contains(x, y)) return ToolbarAction::StepOut;
+        if (layout.toolbar_breakpoint.contains(x, y)) {
+            return ToolbarAction::ToggleBreakpoint;
+        }
     }
     if (layout.toolbar_clr.contains(x, y)) return ToolbarAction::Clr;
     if (!layout.toolbar_video.empty() &&
@@ -2301,6 +2343,33 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
             error_text = error;
             host->show_error(error);
         }
+        return;
+    case ToolbarAction::Build:
+        // BUILD rebuilds a source program and reloads it; RESET restarts what is
+        // already loaded.
+        running = false;
+        session->pause();
+        error_text.clear();
+        if (!host->reload(error) && !error.empty()) {
+            error_text = error;
+            host->show_error(error);
+        }
+        return;
+    case ToolbarAction::StepOver:
+        step_and_note(StepMode::InstructionOver);
+        selected_frame = 0;
+        return;
+    case ToolbarAction::StepIn:
+        step_and_note(StepMode::Instruction);
+        selected_frame = 0;
+        return;
+    case ToolbarAction::StepOut:
+        running = false;
+        note_stop(session->step(StepMode::InstructionOut));
+        selected_frame = 0;
+        return;
+    case ToolbarAction::ToggleBreakpoint:
+        toggle_current_line_breakpoint();
         return;
     case ToolbarAction::Kernel:
         if (!layout.kernel_visible) {
@@ -2788,7 +2857,36 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
 
     const SurfacePanel panel = panel_at(event.x, event.y);
     std::string text;
-    if (panel == SurfacePanel::State) {
+    if (layout.toolbar.contains(event.x, event.y)) {
+        const auto over = [&event](const Rect& rect) {
+            return !rect.empty() && rect.contains(event.x, event.y);
+        };
+        if (over(layout.toolbar_run)) {
+            text = "F5 run or pause";
+        } else if (over(layout.toolbar_reset)) {
+            text = "Restart the loaded program; line breakpoints survive";
+        } else if (over(layout.toolbar_load)) {
+            text = "Open an image or build a source file";
+        } else if (over(layout.toolbar_build)) {
+            text = "Rebuild the loaded source and reload it";
+        } else if (over(layout.toolbar_kernel)) {
+            text = "Load the kernel and user program";
+        } else if (over(layout.toolbar_over)) {
+            text = "F10 step over one instruction";
+        } else if (over(layout.toolbar_in)) {
+            text = "F11 step into one instruction";
+        } else if (over(layout.toolbar_out)) {
+            text = "Shift+F11 step out of the frame";
+        } else if (over(layout.toolbar_breakpoint)) {
+            text = "F9 toggle a breakpoint on the current line";
+        } else if (over(layout.toolbar_clr)) {
+            text = "Clear the instruction, time and IPS counters";
+        } else if (over(layout.toolbar_video)) {
+            text = "Show the video tab";
+        } else if (over(layout.toolbar_gear)) {
+            text = "Settings";
+        }
+    } else if (panel == SurfacePanel::State) {
         update_scroll(SurfacePanel::State);
         const int offset = scroll_state(SurfacePanel::State).offset;
         for (const StateRow& row : state_rows()) {

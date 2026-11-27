@@ -311,7 +311,13 @@ KRDBG_TEST(kr32_ui_loaded_state_matches_the_committed_golden) {
     char hash[24] = {};
     std::snprintf(hash, sizeof(hash), "%016llX",
                   static_cast<unsigned long long>(canvas.hash()));
-    std::ifstream input(std::string(KRDBG_GOLDEN_DIR) + "/kr32-loaded.hash");
+    const std::string path =
+        std::string(KRDBG_GOLDEN_DIR) + "/kr32-loaded.hash";
+    if (krdbg::test::update_goldens()) {
+        krdbg::test::write_golden(path, hash);
+        return;
+    }
+    std::ifstream input(path);
     std::string expected;
     std::getline(input, expected);
     CHECK_EQ(std::string(hash), expected);

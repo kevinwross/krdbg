@@ -1259,7 +1259,8 @@ generalizations only where a second architecture requires them.
 `SOURCE | SCREEN` tab is removed. The framebuffer moves to a small preview in the
 bottom-right, tabbed with the COM port, and to a separate video window.
 
-- Toolbar 30 px: `RUN RESET LOAD KERNEL` + status + stats (`instr`, `time`,
+- Toolbar 30 px: `RUN RESET LOAD BUILD KERNEL` + `OVER IN OUT BP` (hidden below
+  1100 px) + status + stats (`instr`, `time`,
   `IPS`) + `CLR` + `VIDEO` toggle + gear. `RUN` is green while the VM is
   running and normal while stopped. `KERNEL` is hidden when the host has no
   embedded kernel/BIOS pair.

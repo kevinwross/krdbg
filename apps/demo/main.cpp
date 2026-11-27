@@ -423,6 +423,8 @@ struct Options {
     // `--set id=value`, in order, applied before any load. Values are persisted
     // by the host, so a following run sees them.
     std::vector<std::string> set_values;
+    // Synthetic clicks for interaction screenshots: `--click X,Y`.
+    std::vector<std::pair<int, int>> clicks;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -477,6 +479,7 @@ void print_usage() {
         "  --no-stop-at-main      Do not run to main on the first frame\n"
         "  --print-status         Headless: print the status-bar text\n"
         "  --set ID=VALUE         Apply and persist one setting before loading\n"
+        "  --click X,Y            Synthesize a click before the frame renders\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -563,6 +566,21 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.print_status = true;
         } else if (argument == "--set" && index + 1 < argc) {
             options.set_values.push_back(argv[++index]);
+        } else if (argument == "--click" && index + 1 < argc) {
+            const std::string position = argv[++index];
+            const std::size_t comma = position.find(',');
+            char* end = nullptr;
+            const long x = comma == std::string::npos
+                               ? -1
+                               : std::strtol(position.c_str(), &end, 10);
+            const long y = comma == std::string::npos
+                               ? -1
+                               : std::strtol(position.c_str() + comma + 1, &end, 10);
+            if (comma == std::string::npos || x < 0 || y < 0) {
+                std::fprintf(stderr, "krdbg: --click needs X,Y\n");
+                return false;
+            }
+            options.clicks.emplace_back(static_cast<int>(x), static_cast<int>(y));
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -1219,6 +1237,13 @@ int main(int argc, char** argv) {
     if (options.com && fake_target != nullptr) {
         fake_target->com().reset();
         fake_target->com().push_output("hello\nworld\n");
+    }
+    for (const auto& [x, y] : options.clicks) {
+        krdbg::platform::Event event;
+        event.kind = krdbg::platform::Event::Kind::MouseDown;
+        event.x = x;
+        event.y = y;
+        surface.handle_event(event);
     }
     if (options.settings) {
         const krdbg::Rect gear = surface.layout().toolbar_gear;
