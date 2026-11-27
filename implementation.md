@@ -1036,8 +1036,10 @@ P1 — kr232 end to end:
       `kr232_scenario_devices` reads the console byte and the committed 800x600
       frame through the session.
 - [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
-      Five CTest rows cover A1/A4–A11/A13 at session level; A2/A3/A12/A14–A17 need
-      surface-level rows before this is complete.
+      Session rows cover A1/A4–A11/A13; `krdbg_kr232_running_row`,
+      `krdbg_kr232_reset_row`, `krdbg_kr232_breakpoint_row` and the startrekng
+      golden add A2/A3/A12/A14 surface rows. A6 still depends on M7.17 (aggregates),
+      and A17's status text has screenshot evidence but no assertion yet.
 - [x] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
       across the `ENTER`-updated chain, step-out guard as an explicit stop.
       `unwind()` publishes the current position as frame zero; `InstructionOver`
@@ -1049,9 +1051,11 @@ P1 — kr232 end to end:
 - [x] **M7.23** Unresolved line breakpoints are marked, not drawn as live.
 - [x] **M7.24** Honest kr232 COM status (RX/TX from the machine, overrun
       reported).
-- [ ] **M7.25** startrekng (D6): script + scenario + golden in every gate.
-      Evidence: the script built both images on 2026-11-27 and krdbg loaded the
-      scripted image (see §9); the scenario and golden are pending.
+- [x] **M7.25** startrekng (D6): script + scenario + golden in every gate.
+      The script builds both images; `kr232_scenario_startrekng` checks the
+      nine sources, functions, main breakpoint, locals and a step;
+      `krdbg_kr232_startrekng_golden` renders the loaded image to a fixed hash
+      when the build tree contains the image.
 
 Evidence (2026-11-27): the kr232 presets configure from a clean tree;
 `scripts/build-debugger.ps1 -Clean` reports `BUILD DEBUGGER: PASS`; CTest is
@@ -1071,7 +1075,10 @@ M7.22: startrekng at 200,000 instructions shows `galaxy.cpp` lines 221–250 wit
 PC line in view. M7.23: `--break-line 1` renders `crt0.s:1  (unresolved)` and a dim
 gutter square. M7.15/M7.16/M7.18: the five `kr232_scenario_*` CTest rows and the
 breakpoint-persistence row pass (27 kr232 tests, 0 failures); source text is
-cached per source file. M7.17 stays open: no kr232 fixture contains an aggregate.
+cached per source file. M7.17 stays open: krc emits no KDBG type records, so the
+committed `aggregate.kr232` cannot expand its members. M7.25: the startrekng
+scenario passes and its loaded-state frame hash is
+`EAB8F6EEC580D84F`; CTest is 12/12.
 
 Gate G7:
 
@@ -1412,6 +1419,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:17:19-08:00** — **Step semantics, source follow and unresolved breakpoints.** `63c8d4b` fixes kr232 step-over across ENTER-built frames, publishes a synthetic frame before ENTER, and makes step-out report `no caller frame`; `7421ee9` follows the PC in the source pane and marks unresolved line breakpoints; `5e473bc` makes the panel name short and adds `--break-line` for scripted screenshots. Verification: CTest 8/8, 117 and 21 unit tests at 0 failures; screenshots show `galaxy.cpp` lines 221–250 and `crt0.s:1 (unresolved)`.
 - **2026-11-27T10:20:35-08:00** — **Scenario suite, breakpoint persistence and source cache.** `tests/test_kr232_scenarios.cpp` adds five session scenarios (breakpoint/step, frames/locals, registers/memory/disassembly, COM/video, kernel+user) to `krdbg_kr232_tests`; a persistence test covers restart and `replace_target`; `load_source` caches per source id. Verification: 27 kr232 tests, 0 failures; CTest 8/8.
 - **2026-11-27T10:22:41-08:00** — **Aggregate fixture; M7.17 blocked on KDBG types.** `tests/fixtures/kr232/aggregate.kr232` (6,858 B, crt0-only) carries `struct Point points[2]` and `int total`. `krc --dump-symbols --json` reports zero type records for every kr232 fixture, and krdbg's globals list is empty for the aggregate, so M7.17 is BLOCKED on KRCompiler emitting C/M type records and sized data symbols; §10 records the prerequisite. The documentation review, the M7 plan and the startrekng scripts were committed in the same pass. Tests: 27 kr232, 117 unit.
+- **2026-11-27T10:27:58-08:00** — **startrekng scenario and golden; headless surface rows.** `819d0ae` adds `--no-stop-at-main` (a run makes the header's instruction rate time-dependent, so the loaded frame is the reproducible one), `kr232_scenario_startrekng`, the startrekng golden row and headless run/RESET/breakpoint rows. Verification: CTest 12/12 including `krdbg_kr232_startrekng_golden` (`EAB8F6EEC580D84F`); 28 kr232 tests, 0 failures. M7.25 is checked; M7.19 remains partial because A6 needs the KDBG type records tracked in §10.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
