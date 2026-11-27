@@ -89,11 +89,11 @@ The settings dialog exposes two values that change how a load resolves:
 - `dbg.source_roots` — extra directories used to resolve recorded source paths.
   The dialog's list accepts one root per entry.
 
-A `--target` or `--source-root` on the command line wins over the settings.
+A `--target` or `--source-root` on the command line wins over the settings. Changes are saved to `%APPDATA%\krdbg\settings.json` on Windows, or `$XDG_CONFIG_HOME/krdbg/settings.json` (default `~/.config/krdbg/settings.json`) elsewhere, and are loaded on the next start. `--set ID=VALUE` applies and saves one setting before any load; `--set vm.target=kr232` then `--load prog.cpp` builds the source for the program without touching the dialog.
 
 ## Current limits
 
-- The RECENT list is per session; it is not written to disk.
+- The RECENT list is per session; it is not written to disk (settings are).
 - Source paths are resolved when a program loads. Changing `dbg.source_roots`
   affects the next load, not an already-loaded image.
 - The kr232 COM panel reports the console's real RX/TX/OVERRUN bits; the guest

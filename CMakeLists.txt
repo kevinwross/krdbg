@@ -426,6 +426,28 @@ if(KRDBG_BUILD_TESTS)
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                 PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_STARTREKNG_HASH}")
         endif()
+        # P2 kr232 state goldens: a breakpoint set without executing and the
+        # settings dialog over a real image. Both render deterministic states.
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-breakpoint.hash"
+             KRDBG_KR232_BREAKPOINT_HASH)
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-settings.hash"
+             KRDBG_KR232_SETTINGS_HASH)
+        string(STRIP "${KRDBG_KR232_BREAKPOINT_HASH}" KRDBG_KR232_BREAKPOINT_HASH)
+        string(STRIP "${KRDBG_KR232_SETTINGS_HASH}" KRDBG_KR232_SETTINGS_HASH)
+        add_test(NAME krdbg_kr232_breakpoint_golden
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/session.kr232"
+                --break-line 5 --no-stop-at-main)
+        set_tests_properties(krdbg_kr232_breakpoint_golden PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_BREAKPOINT_HASH}")
+        add_test(NAME krdbg_kr232_settings_golden
+            COMMAND krdbg_demo --headless
+                --kr232 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.kr232"
+                --state settings --no-stop-at-main)
+        set_tests_properties(krdbg_kr232_settings_golden PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_SETTINGS_HASH}")
     endif()
     if(KRDBG_KR216_ADAPTER)
         # The adapter's own tests loaded two committed kr216 images, which were
@@ -466,6 +488,11 @@ if(KRDBG_BUILD_TESTS)
     add_test(NAME krdbg_version COMMAND krdbg_demo --version)
     set_tests_properties(krdbg_version PROPERTIES
         PASS_REGULAR_EXPRESSION "krdbg ${PROJECT_VERSION}")
+    add_test(NAME krdbg_settings_persist
+        COMMAND ${CMAKE_COMMAND}
+            -DEXE=$<TARGET_FILE:krdbg_demo>
+            -DWORK=${CMAKE_BINARY_DIR}/settings-persist
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/settings_persist.cmake)
 endif()
 
 # The boundary check runs on every build and as its own CTest entry, so G0.8 can

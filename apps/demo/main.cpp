@@ -35,6 +35,7 @@
 #include "fake_target.h"
 #include "build_chain.h"
 #include "settings_host.h"
+#include "settings_json.h"
 #include "tool_settings.h"
 #include "settings_validation.h"
 
@@ -76,6 +77,118 @@ std::string environment_value(const char* name) {
         return first_line;
     }
     return 0;
+}
+
+// The host-owned settings file: `%APPDATA%\krdbg\settings.json` on Windows and
+// `$XDG_CONFIG_HOME/krdbg/settings.json` (or `~/.config/...`) elsewhere. An
+// empty result means the environment names no home directory.
+std::string settings_file_path() {
+#if defined(_WIN32)
+    const std::string base = environment_value("APPDATA");
+    return base.empty() ? std::string{} : base + "\\krdbg\\settings.json";
+#else
+    std::string base = environment_value("XDG_CONFIG_HOME");
+    if (base.empty()) {
+        const std::string home = environment_value("HOME");
+        if (home.empty()) {
+            return {};
+        }
+        base = home + "/.config";
+    }
+    return base + "/krdbg/settings.json";
+#endif
+}
+
+// Parses one `--set id=value` assignment against the schema's type. The dialog
+// would have produced the same typed value; this keeps the headless path honest.
+bool parse_setting_value(const krdbg::SettingDescriptor& descriptor,
+                         const std::string& text, krdbg::SettingValue& value,
+                         std::string& error) {
+    const auto parse_int = [&](std::int64_t& out) {
+        char* end = nullptr;
+        const long long parsed = std::strtoll(text.c_str(), &end, 0);
+        if (end == text.c_str() || *end != '\0') {
+            error = "expected an integer";
+            return false;
+        }
+        out = static_cast<std::int64_t>(parsed);
+        return true;
+    };
+    switch (descriptor.type) {
+    case krdbg::SettingType::Bool:
+        if (text == "true" || text == "1") {
+            value = true;
+            return true;
+        }
+        if (text == "false" || text == "0") {
+            value = false;
+            return true;
+        }
+        error = "expected true or false";
+        return false;
+    case krdbg::SettingType::Int: {
+        std::int64_t parsed = 0;
+        if (!parse_int(parsed)) {
+            return false;
+        }
+        value = parsed;
+        return true;
+    }
+    case krdbg::SettingType::Float: {
+        char* end = nullptr;
+        const double parsed = std::strtod(text.c_str(), &end);
+        if (end == text.c_str() || *end != '\0') {
+            error = "expected a number";
+            return false;
+        }
+        value = parsed;
+        return true;
+    }
+    case krdbg::SettingType::StringList: {
+        std::vector<std::string> list;
+        std::size_t start = 0;
+        while (start <= text.size()) {
+            const std::size_t comma = text.find(',', start);
+            const std::string item = text.substr(
+                start, comma == std::string::npos ? std::string::npos : comma - start);
+            if (!item.empty()) {
+                list.push_back(item);
+            }
+            if (comma == std::string::npos) {
+                break;
+            }
+            start = comma + 1;
+        }
+        value = std::move(list);
+        return true;
+    }
+    case krdbg::SettingType::StringMap: {
+        std::map<std::string, std::string> map;
+        std::size_t start = 0;
+        while (start <= text.size()) {
+            const std::size_t comma = text.find(',', start);
+            const std::string item = text.substr(
+                start, comma == std::string::npos ? std::string::npos : comma - start);
+            const std::size_t equals = item.find('=');
+            if (equals != std::string::npos && equals > 0) {
+                map[item.substr(0, equals)] = item.substr(equals + 1);
+            }
+            if (comma == std::string::npos) {
+                break;
+            }
+            start = comma + 1;
+        }
+        value = std::move(map);
+        return true;
+    }
+    case krdbg::SettingType::String:
+    case krdbg::SettingType::Enum:
+    case krdbg::SettingType::Path:
+        value = text;
+        return true;
+    }
+    error = "unsupported setting type";
+    return false;
 }
 
 class DemoVmProvider final : public krdbg::ISettingsProvider {
@@ -246,14 +359,27 @@ public:
     }
     krdbg::SettingsApplyResult apply_settings(const krdbg::SettingsSnapshot& next,
                                               krdbg::SettingsLayer layer) override {
-        return aggregator_.apply(next, layer);
+        krdbg::SettingsApplyResult result = aggregator_.apply(next, layer);
+        if (result.ok && !settings_path_.empty()) {
+            std::string save_error;
+            if (!krdbg::settings_json::save_snapshot_file(
+                    settings_path_, aggregator_.schema(), aggregator_.values(),
+                    save_error)) {
+                show_error("cannot save settings: " + save_error);
+            }
+        }
+        return result;
     }
+
+    // The host owns the settings file; the surface only asks for a layer.
+    void set_settings_path(std::string path) { settings_path_ = std::move(path); }
 
     std::function<bool(const std::string&, std::string&)> load_callback;
     std::function<bool(std::string&)> reload_callback;
     std::function<bool(std::string&)> kernel_callback;
     bool kernel_supported = false;
     bool last_load_source = false;
+    std::string settings_path_;
     DemoVmProvider vm_;
     krdbg::CompilerSettingsProvider cc_;
     krdbg::LinkerSettingsProvider ld_;
@@ -294,6 +420,9 @@ struct Options {
     // Headless: print the surface status text, so a CTest row can assert the
     // stop reason without reading pixels.
     bool print_status = false;
+    // `--set id=value`, in order, applied before any load. Values are persisted
+    // by the host, so a following run sees them.
+    std::vector<std::string> set_values;
     // Instructions to execute before the first render, so a scripted screenshot
     // can show what the guest committed without a click on RUN.
     int run_instructions = 0;
@@ -347,6 +476,7 @@ void print_usage() {
         "  --break-line N         Add a line breakpoint in the first source\n"
         "  --no-stop-at-main      Do not run to main on the first frame\n"
         "  --print-status         Headless: print the status-bar text\n"
+        "  --set ID=VALUE         Apply and persist one setting before loading\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
         "\n"
@@ -431,6 +561,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.no_stop_at_main = true;
         } else if (argument == "--print-status") {
             options.print_status = true;
+        } else if (argument == "--set" && index + 1 < argc) {
+            options.set_values.push_back(argv[++index]);
         } else if (argument == "--state" && index + 1 < argc) {
             const std::string_view state = argv[++index];
             if (state == "loaded") {
@@ -694,6 +826,57 @@ int main(int argc, char** argv) {
     }
 
     DemoHost host;
+    // The host owns the settings file; load it before a source load so
+    // `vm.target` and `dbg.source_roots` take effect (P2 persistence).
+    const std::string settings_path = settings_file_path();
+    host.set_settings_path(settings_path);
+    if (!settings_path.empty() && std::filesystem::exists(settings_path)) {
+        krdbg::SettingsSnapshot stored;
+        std::string settings_error;
+        if (krdbg::settings_json::load_snapshot_file(
+                settings_path, host.settings_schema(), stored, settings_error)) {
+            (void)host.apply_settings(stored, krdbg::SettingsLayer::User);
+        } else {
+            host.show_error("settings: " + settings_error);
+        }
+    }
+    for (const std::string& assignment : options.set_values) {
+        const std::size_t equals = assignment.find('=');
+        if (equals == std::string::npos || equals == 0) {
+            std::fprintf(stderr, "krdbg: --set needs ID=VALUE\n");
+            return 2;
+        }
+        const std::string id = assignment.substr(0, equals);
+        const std::string text = assignment.substr(equals + 1);
+        const krdbg::SettingsSchema schema = host.settings_schema();
+        const auto found = std::find_if(
+            schema.settings.begin(), schema.settings.end(),
+            [&id](const krdbg::SettingDescriptor& candidate) {
+                return candidate.id == id;
+            });
+        if (found == schema.settings.end()) {
+            std::fprintf(stderr, "krdbg: unknown setting '%s'\n", id.c_str());
+            return 2;
+        }
+        krdbg::SettingValue value;
+        std::string value_error;
+        if (!parse_setting_value(*found, text, value, value_error)) {
+            std::fprintf(stderr, "krdbg: --set %s: %s\n", id.c_str(),
+                         value_error.c_str());
+            return 2;
+        }
+        krdbg::SettingsSnapshot snapshot;
+        snapshot.values[id] = value;
+        const krdbg::SettingsApplyResult applied =
+            host.apply_settings(snapshot, krdbg::SettingsLayer::User);
+        if (!applied.ok) {
+            for (const auto& [setting, message] : applied.errors) {
+                std::fprintf(stderr, "krdbg: --set %s: %s\n", setting.c_str(),
+                             message.c_str());
+            }
+            return 2;
+        }
+    }
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
 
