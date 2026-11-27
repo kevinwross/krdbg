@@ -613,6 +613,7 @@ bool load_image(const std::string& image_path, const Options& options,
             break;
         }
     }
+    program.entry = loaded.entry;
     program.target = std::move(target);
     return true;
 }
@@ -669,6 +670,7 @@ bool load_kernel(const std::string& kernel_path, const std::string& program_path
     program.info = std::move(user.info);
     program.image_path = kernel_path;
     program.debug_path = user.debug_path;
+    program.entry = placed.entry;
     return true;
 }
 

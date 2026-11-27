@@ -362,6 +362,16 @@ if(KRDBG_BUILD_TESTS)
             COMMAND krdbg_kr232_tests --filter kr232_app_smoke)
         set_tests_properties(krdbg_kr232_app_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # The M7.12 kernel+user path: load the kernel and the user program, run
+        # to the user entry, render one frame, then RESET the pair.
+        add_test(NAME krdbg_kr232_kernel_pair
+            COMMAND krdbg_demo --headless
+                --kr232-kernel "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/kernel.kr232"
+                --kr232-program "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/userprint.kr232"
+                --source-root "${CMAKE_CURRENT_SOURCE_DIR}/../krcompiler"
+                --reset)
+        set_tests_properties(krdbg_kr232_kernel_pair PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
     if(KRDBG_KR216_ADAPTER)
         # The adapter's own tests loaded two committed kr216 images, which were

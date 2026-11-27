@@ -270,6 +270,8 @@ struct Options {
     std::string kr16_image;
     std::string kr216_image;
     std::string kr232_image;
+    std::string kr232_kernel_path;
+    std::string kr232_program_path;
     std::string load_path;
     std::string toolchain;
     std::string build_target = "kr32";
@@ -295,6 +297,8 @@ void print_usage() {
         "  --kr16 FILE            Load a KR16 image\n"
         "  --kr216 FILE           Load a KR216 image\n"
         "  --kr232 FILE           Load a KR232 image\n"
+        "  --kr232-kernel FILE    With --kr232-program, load a kr232 kernel\n"
+        "  --kr232-program FILE   and run a user program under it\n"
         "  --load PATH            Load a source or image at startup; a source\n"
         "                         needs --toolchain\n"
         "  --toolchain DIR        krc installation prefix for building sources\n"
@@ -327,6 +331,10 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.kr32_os = true;
         } else if (argument == "--kr232" && index + 1 < argc) {
             options.kr232_image = argv[++index];
+        } else if (argument == "--kr232-kernel" && index + 1 < argc) {
+            options.kr232_kernel_path = argv[++index];
+        } else if (argument == "--kr232-program" && index + 1 < argc) {
+            options.kr232_program_path = argv[++index];
         } else if (argument == "--kernel") {
             options.kernel = true;
         } else if (argument == "--reset") {
@@ -441,12 +449,19 @@ int main(int argc, char** argv) {
     if (options.source_root.empty()) {
         options.source_root = std::filesystem::current_path().string();
     }
+    if (options.kr232_kernel_path.empty() != options.kr232_program_path.empty()) {
+        std::fprintf(stderr,
+                     "krdbg: --kr232-kernel and --kr232-program go together\n");
+        return 2;
+    }
 
     std::unique_ptr<krdbg::DebugSession> session;
     krdbg::FakeTarget* fake_target = nullptr;
     std::optional<krdbg::ProgramInfo> real_program;
     std::string loaded_source;
     std::string loaded_image;
+    std::string loaded_kernel;
+    std::string loaded_program;
 #if defined(KRDBG_HAVE_KR32)
     if (options.kr32_os || !options.kr32_image.empty()) {
         krdbg::kr32adapter::LoadedProgram loaded;
@@ -623,6 +638,36 @@ int main(int argc, char** argv) {
                 real_program->entry = session->pc();
             }
             break;
+        }
+    }
+    if (!session && !options.kr232_kernel_path.empty() &&
+        !options.kr232_program_path.empty()) {
+        krdbg::kr232adapter::LoadedProgram loaded;
+        krdbg::kr232adapter::Options adapter_options;
+        adapter_options.source_roots = {options.source_root};
+        std::string error;
+        if (!krdbg::kr232adapter::load_kernel(
+                options.kr232_kernel_path, options.kr232_program_path,
+                adapter_options, loaded, error)) {
+            std::fprintf(stderr, "krdbg: kr232 kernel load failed: %s\n",
+                         error.c_str());
+            return 1;
+        }
+        loaded_kernel = options.kr232_kernel_path;
+        loaded_program = options.kr232_program_path;
+        loaded_image = options.kr232_program_path;
+        const std::string name =
+            std::filesystem::path(options.kr232_program_path).filename().string();
+        real_program = krdbg::ProgramInfo{
+            options.kr232_program_path, name, loaded.entry, true};
+        session = std::make_unique<krdbg::DebugSession>(
+            std::move(loaded.target), loaded.info,
+            std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
+        // The pair starts at the kernel entry with the user entry in R2; run
+        // until the user program is entered so the source view is the program.
+        if (loaded.entry != 0) {
+            session->run_to_address(loaded.entry);
+            real_program->entry = session->pc();
         }
     }
 #endif
@@ -847,8 +892,57 @@ int main(int argc, char** argv) {
     };
 #endif
 
+#if defined(KRDBG_HAVE_KR232)
+    const auto load_kr232_pair = [&](const std::string& kernel_path,
+                                     const std::string& program_path,
+                                     std::string& error) {
+        krdbg::kr232adapter::LoadedProgram loaded;
+        krdbg::kr232adapter::Options adapter_options;
+        adapter_options.source_roots = {options.source_root};
+        const krdbg::SettingsSnapshot live = host.settings_values();
+        if (!options.source_root_set) {
+            const auto found = live.values.find("dbg.source_roots");
+            if (found != live.values.end()) {
+                if (const auto* list =
+                        std::get_if<std::vector<std::string>>(&found->second)) {
+                    for (const std::string& root : *list) {
+                        if (!root.empty()) {
+                            adapter_options.source_roots.push_back(root);
+                        }
+                    }
+                }
+            }
+        }
+        if (!krdbg::kr232adapter::load_kernel(kernel_path, program_path,
+                                              adapter_options, loaded, error)) {
+            return false;
+        }
+        session->replace_target(std::move(loaded.target), loaded.info);
+        loaded_kernel = kernel_path;
+        loaded_program = program_path;
+        loaded_image = program_path;
+        loaded_source.clear();
+        host.last_load_source = false;
+        // The pair starts at the kernel entry with the user entry in R2; run to
+        // the user entry so the source pane shows the program under debug.
+        std::uint64_t entry = loaded.entry;
+        if (entry != 0) {
+            session->run_to_address(entry);
+            entry = session->pc();
+        }
+        set_program(program_path,
+                    std::filesystem::path(program_path).filename().string(), entry);
+        return true;
+    };
+#endif
+
     host.load_callback = load_any;
     host.reload_callback = [&](std::string& error) {
+#if defined(KRDBG_HAVE_KR232)
+        if (!loaded_kernel.empty() && !loaded_program.empty()) {
+            return load_kr232_pair(loaded_kernel, loaded_program, error);
+        }
+#endif
         if (!loaded_source.empty()) {
             return load_any(loaded_source, error);
         }
@@ -859,23 +953,33 @@ int main(int argc, char** argv) {
                     session->pc());
         return true;
     };
+#if defined(KRDBG_HAVE_KR232)
+    if (!loaded_kernel.empty()) {
+        host.kernel_supported = true;
+        host.kernel_callback = [&](std::string& error) {
+            return load_kr232_pair(loaded_kernel, loaded_program, error);
+        };
+    }
+#endif
 #if defined(KRDBG_HAVE_KR32)
-    host.kernel_supported = true;
-    host.kernel_callback = [&](std::string& error) {
-        krdbg::kr32adapter::LoadedProgram loaded;
-        krdbg::kr32adapter::Options adapter_options;
-        adapter_options.source_roots = {options.source_root};
-        if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
-                                                   error)) {
-            return false;
-        }
-        session->replace_target(std::move(loaded.target), loaded.info);
-        loaded_source.clear();
-        loaded_image = "<embedded KR32OS>";
-        host.last_load_source = false;
-        set_program(loaded_image, "KR32OS", session->pc());
-        return true;
-    };
+    if (!host.kernel_supported) {
+        host.kernel_supported = true;
+        host.kernel_callback = [&](std::string& error) {
+            krdbg::kr32adapter::LoadedProgram loaded;
+            krdbg::kr32adapter::Options adapter_options;
+            adapter_options.source_roots = {options.source_root};
+            if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
+                                                       error)) {
+                return false;
+            }
+            session->replace_target(std::move(loaded.target), loaded.info);
+            loaded_source.clear();
+            loaded_image = "<embedded KR32OS>";
+            host.last_load_source = false;
+            set_program(loaded_image, "KR32OS", session->pc());
+            return true;
+        };
+    }
 #endif
 
     if (!options.load_path.empty()) {

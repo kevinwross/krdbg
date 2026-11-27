@@ -26,9 +26,13 @@ struct LoadedProgram {
     std::optional<DebugInfo> info;
     std::string image_path;
     DebugPath debug_path = DebugPath::None;
+    // The entry the debugger should stop at: the image's entry for a single
+    // image, and the user program's entry for a kernel+user pair.
+    std::uint64_t entry = 0;
 };
 
-// Loads a `K232` container (or a flat kernel image) and decodes its `.kdbg`.
+// Loads a `K232` container and decodes its `.kdbg`. A flat image has no header
+// to trust, so it is rejected.
 bool load_image(const std::string& image_path, const Options& options,
                 LoadedProgram& program, std::string& error);
 
