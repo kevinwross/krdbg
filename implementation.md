@@ -1015,16 +1015,24 @@ P1 — kr232 end to end:
       RUN stays responsive. Step, run, run-to and tick record `StopResult`; the
       status bar names breakpoint, halt, fault or the instruction limit, and
       `dbg.instruction_limit` is read at run start.
-- [ ] **M7.15** Breakpoints persist across RESET/rebuild, line breakpoints
+- [x] **M7.15** Breakpoints persist across RESET/rebuild, line breakpoints
       re-resolve, enable/disable state survives, and the panel navigates.
-- [ ] **M7.16** Source model: multi-file list, follow vs pin, per-file cache,
-      unresolved markers, paths that survive a reload.
+      `kr232_line_breakpoints_survive_restart_and_replace` covers restart and
+      `replace_target`; the panel toggles enable/disable and opens the source line.
+- [x] **M7.16** Source model: multi-file list, follow vs pin, per-file cache,
+      unresolved markers, paths that survive a reload. The dropdown and PIN are
+      existing surface behaviour; `load_source` now caches text per source id and
+      clears it when the program changes.
 - [ ] **M7.17** Inspection on all fixtures: locals/globals at frame N,
       aggregates, two-frame unwind, kernel/user memory, variable-length
       disassembly.
-- [ ] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
+- [x] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
       rule when both exist, screen focus and function-key forwarding.
+      `kr232_scenario_devices` reads the console byte and the committed 800x600
+      frame through the session.
 - [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
+      Five CTest rows cover A1/A4–A11/A13 at session level; A2/A3/A12/A14–A17 need
+      surface-level rows before this is complete.
 - [x] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
       across the `ENTER`-updated chain, step-out guard as an explicit stop.
       `unwind()` publishes the current position as frame zero; `InstructionOver`
@@ -1056,7 +1064,9 @@ stops at `main_script.cpp`/`0x000080DC` after the deferred first-frame run, and 
 M7.20: 21 kr232 tests, including `kr232_session_step_out_without_a_caller_stops`.
 M7.22: startrekng at 200,000 instructions shows `galaxy.cpp` lines 221–250 with the
 PC line in view. M7.23: `--break-line 1` renders `crt0.s:1  (unresolved)` and a dim
-gutter square.
+gutter square. M7.15/M7.16/M7.18: the five `kr232_scenario_*` CTest rows and the
+breakpoint-persistence row pass (27 kr232 tests, 0 failures); source text is
+cached per source file. M7.17 stays open: no kr232 fixture contains an aggregate.
 
 Gate G7:
 
@@ -1395,6 +1405,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:09:10-08:00** — **Kernel+user and the kr232 page.** `eb608bb` adds `--kr232-kernel`/`--kr232-program`, a pair-preserving RESET, the adapter's reported entry, and a CTest row that loads the pair, runs to the user entry and resets. The documentation commit adds `docs/debugging-kr232.md` and the README pointer. Verification: CTest 8/8, 117 and 20 unit tests at 0 failures, the pair renders `userprint.s` at PC `0x08000008`.
 - **2026-11-27T10:13:28-08:00** — **Deferred main stop and stop reasons.** `d3095b0` records main's first line at load and runs it on the first frame when `dbg.stop_at_main` is on (an owned temporary breakpoint), then names the stop reason from `StopResult` in the status bar and applies `dbg.instruction_limit` at run start. Verification: CTest 8/8, 117 unit tests at 0 failures; startrekng stops at `main_script.cpp`/`0x000080DC`; `loaded.kr232` run through surface ticks renders `halted: halted with status 0`.
 - **2026-11-27T10:17:19-08:00** — **Step semantics, source follow and unresolved breakpoints.** `63c8d4b` fixes kr232 step-over across ENTER-built frames, publishes a synthetic frame before ENTER, and makes step-out report `no caller frame`; `7421ee9` follows the PC in the source pane and marks unresolved line breakpoints; `5e473bc` makes the panel name short and adds `--break-line` for scripted screenshots. Verification: CTest 8/8, 117 and 21 unit tests at 0 failures; screenshots show `galaxy.cpp` lines 221–250 and `crt0.s:1 (unresolved)`.
+- **2026-11-27T10:20:35-08:00** — **Scenario suite, breakpoint persistence and source cache.** `tests/test_kr232_scenarios.cpp` adds five session scenarios (breakpoint/step, frames/locals, registers/memory/disassembly, COM/video, kernel+user) to `krdbg_kr232_tests`; a persistence test covers restart and `replace_target`; `load_source` caches per source id. Verification: 27 kr232 tests, 0 failures; CTest 8/8.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
