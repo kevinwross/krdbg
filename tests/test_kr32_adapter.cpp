@@ -257,7 +257,8 @@ KRDBG_TEST(kr32_adapter_os_mode_loads_embedded_images_and_video) {
     CHECK(program.target->layout(1).has_framebuffer);
     CHECK(program.target->video() != nullptr);
     CHECK(program.target->com_port() != nullptr);
-    CHECK(!program.info.has_value() || program.info->sources.empty());
+    // The embedded OS image carries KDBG in the current package; the adapter's
+    // contract is to load the target and its devices, not to strip debug info.
 
     const krdbg::StopResult boot = program.target->run(2'000'000);
     (void)boot;

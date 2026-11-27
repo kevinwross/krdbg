@@ -2959,6 +2959,45 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
                    type + " = " + row.value;
             break;
         }
+    } else if (panel == SurfacePanel::Breakpoints && program.loaded) {
+        update_scroll(SurfacePanel::Breakpoints);
+        const int offset = scroll_state(SurfacePanel::Breakpoints).offset;
+        const int index = (event.y - (layout.breakpoints.y + 28)) / kRowHeight +
+                          offset;
+        const std::vector<BreakpointView> breakpoints = session->breakpoints();
+        if (index >= 0 && index < static_cast<int>(breakpoints.size())) {
+            const BreakpointView& breakpoint =
+                breakpoints[static_cast<std::size_t>(index)];
+            text = breakpoint.has_line
+                       ? breakpoint.file + ":" + std::to_string(breakpoint.line)
+                       : hex_value(breakpoint.address,
+                                   session->layout().address_bits);
+            if (!breakpoint.enabled) {
+                text += " (disabled)";
+            }
+            if (breakpoint.has_line && !line_breakpoint_resolved(breakpoint)) {
+                text += " (unresolved)";
+            }
+        }
+    } else if (panel == SurfacePanel::CallStack && program.loaded) {
+        update_scroll(SurfacePanel::CallStack);
+        const int offset = scroll_state(SurfacePanel::CallStack).offset;
+        const int index = (event.y - (layout.call_stack.y + 28)) / kRowHeight +
+                          offset;
+        const std::vector<FrameView> frames = session->call_stack();
+        if (index >= 0 && index < static_cast<int>(frames.size())) {
+            const FrameView& frame = frames[static_cast<std::size_t>(index)];
+            text = "frame " + std::to_string(index) + ": " +
+                   (frame.function.empty() ? "(unknown)" : frame.function) +
+                   " at " +
+                   hex_value(frame.pc, session->layout().address_bits);
+        }
+    } else if (panel == SurfacePanel::Memory) {
+        text = "memory bytes: type in ADDR to jump; PTR follows SP";
+    }
+    if (text.empty() && layout.toolbar.contains(event.x, event.y) &&
+        event.x > layout.toolbar_clr.x - 320) {
+        text = "instructions executed, elapsed time and rate since CLR";
     }
 
     if (!text.empty()) {
