@@ -1023,14 +1023,11 @@ P1 — kr232 end to end:
       unresolved markers, paths that survive a reload. The dropdown and PIN are
       existing surface behaviour; `load_source` now caches text per source id and
       clears it when the program changes.
-- [ ] **M7.17** Inspection on all fixtures: locals/globals at frame N,
+- [x] **M7.17** Inspection on all fixtures: locals/globals at frame N,
       aggregates, two-frame unwind, kernel/user memory, variable-length
-      disassembly.
-      BLOCKED: krc 0.2.0 emits no KDBG type records for kr232, and krdbg's
-      globals list is empty for `aggregate.kr232`, so aggregates and data
-      globals cannot be expanded. The fixture is committed and the other
-      inspection paths are covered by the scenario suite; this needs KRCompiler
-      to emit C/M type records and sized data symbols.
+      disassembly. KRCompiler now emits kr232 type records and sized globals;
+      the fixtures were regenerated and `kr232_scenario_globals_and_members`
+      expands `points[2]` to two structs and each to its `x`/`y` fields.
 - [x] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
       rule when both exist, screen focus and function-key forwarding.
       `kr232_scenario_devices` reads the console byte and the committed 800x600
@@ -1038,8 +1035,8 @@ P1 — kr232 end to end:
 - [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
       Session rows cover A1/A4–A11/A13; `krdbg_kr232_running_row`,
       `krdbg_kr232_reset_row`, `krdbg_kr232_breakpoint_row` and the startrekng
-      golden add A2/A3/A12/A14 surface rows. A6 still depends on M7.17 (aggregates),
-      and A17's status text has screenshot evidence but no assertion yet.
+      golden add A2/A3/A12/A14 surface rows. A6 passes through M7.17. A17's
+      status text has screenshot evidence but no assertion yet.
 - [x] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
       across the `ENTER`-updated chain, step-out guard as an explicit stop.
       `unwind()` publishes the current position as frame zero; `InstructionOver`
@@ -1078,7 +1075,10 @@ breakpoint-persistence row pass (27 kr232 tests, 0 failures); source text is
 cached per source file. M7.17 stays open: krc emits no KDBG type records, so the
 committed `aggregate.kr232` cannot expand its members. M7.25: the startrekng
 scenario passes and its loaded-state frame hash is
-`EAB8F6EEC580D84F`; CTest is 12/12.
+`EAB8F6EEC580D84F`; CTest is 12/12. M7.17: KRCompiler `ff72fce`/`a9e22a0`
+emits kr232 type records and sized globals; the fixtures were regenerated
+(29 kr232 tests) and a rendered `aggregate.kr232` shows `GLOBALS (2)` with
+`points = [2]`; expanding it returns `x`/`y`.
 
 Gate G7:
 
@@ -1420,6 +1420,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:20:35-08:00** — **Scenario suite, breakpoint persistence and source cache.** `tests/test_kr232_scenarios.cpp` adds five session scenarios (breakpoint/step, frames/locals, registers/memory/disassembly, COM/video, kernel+user) to `krdbg_kr232_tests`; a persistence test covers restart and `replace_target`; `load_source` caches per source id. Verification: 27 kr232 tests, 0 failures; CTest 8/8.
 - **2026-11-27T10:22:41-08:00** — **Aggregate fixture; M7.17 blocked on KDBG types.** `tests/fixtures/kr232/aggregate.kr232` (6,858 B, crt0-only) carries `struct Point points[2]` and `int total`. `krc --dump-symbols --json` reports zero type records for every kr232 fixture, and krdbg's globals list is empty for the aggregate, so M7.17 is BLOCKED on KRCompiler emitting C/M type records and sized data symbols; §10 records the prerequisite. The documentation review, the M7 plan and the startrekng scripts were committed in the same pass. Tests: 27 kr232, 117 unit.
 - **2026-11-27T10:27:58-08:00** — **startrekng scenario and golden; headless surface rows.** `819d0ae` adds `--no-stop-at-main` (a run makes the header's instruction rate time-dependent, so the loaded frame is the reproducible one), `kr232_scenario_startrekng`, the startrekng golden row and headless run/RESET/breakpoint rows. Verification: CTest 12/12 including `krdbg_kr232_startrekng_golden` (`EAB8F6EEC580D84F`); 28 kr232 tests, 0 failures. M7.25 is checked; M7.19 remains partial because A6 needs the KDBG type records tracked in §10.
+- **2026-11-27T10:40:00-08:00** — **KR232 KDBG types and globals.** KRCompiler `ff72fce` emits `.debug_type` T/C/M/A/R records and typed `.debug_var` names from the kr232 backend; the assembler forwards them, emits F only for text functions and G for data symbols with type/size. `a9e22a0` deduplicates merged members. The six fixtures were regenerated (`46ada06`), `members()` now stores array-element bytes, and `kr232_scenario_globals_and_members` passes. Verification: `krc_tests` 313/313; krdbg CTest 12/12, 117 and 29 unit tests, 0 failures; a rendered `aggregate.kr232` shows `GLOBALS (2)` with `points = [2]` and expands to `x`/`y`.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
@@ -1430,7 +1431,7 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | ARM64 gate on `BitWhiz` (Raspberry Pi on the local network) | G0 / G6 | kevinwross | `[x]` BitWhiz is driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS`. There is no in-repository test log. There is no GitHub Actions runner and none is planned. |
 | `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `e04b3b2` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair and still requires the installed package to configure (`PLAN.md` §4.9). |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
-| KDBG type records and sized data symbols for kr232 | M7.17 / A6 aggregate and global expansion | KRCompiler | `[ ]` `krc --dump-symbols --json` reports zero types for the kr232 fixtures; `kr232_scenario` sees no globals for `aggregate.kr232` |
+| KDBG type records and sized data symbols for kr232 | M7.17 / A6 aggregate and global expansion | KRCompiler | `[x]` resolved in KRCompiler `ff72fce`/`a9e22a0`; `krc` emits T/C/M/A/R and G records, and the six fixtures were regenerated |
 | `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[x]` `write_kr16_image` carries `.kdbg` as an unallocated debug section; older images use the legacy parser. |
 | `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[x]` The installed `402cfaf` package provides `bin/krc`, `bin/krld` and the target sysroots; the 0.2.0 build and the host-build tests use it. |
 
