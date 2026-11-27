@@ -73,4 +73,9 @@ Link-Fixture $kr232Root 'kernel.kr232' @("$workText/kernel.o")
 Compile-From $fixtureRoot 'userprint.s' "$workText/userprint.o"
 Link-Fixture $fixtureRoot 'userprint.kr232' @("$workText/userprint.o") @('--base=0x08000000')
 
+# aggregate.kr232: an array of structs and a scalar global. It links against
+# crt0 only; the fixture has no libc calls.
+Compile-From $repo 'tests/fixtures/kr232/aggregate.c' "$workText/aggregate.o"
+Link-Fixture $repo 'aggregate.kr232' @("$workText/crt0.o", "$workText/aggregate.o")
+
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'
