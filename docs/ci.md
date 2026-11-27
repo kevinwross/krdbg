@@ -30,8 +30,7 @@ Packaging is run by hand at a tag, not by a workflow:
 | Linux | `scripts/package-linux-tarball.sh` |
 
 The ARM64 verification path is described in [ci-arm64.md](ci-arm64.md): the
-family gate on BitWhiz runs this repository's ARM64 gate, and direct tester runs
-are recorded in [arm64-test-log.md](arm64-test-log.md).
+family gate on BitWhiz runs this repository's ARM64 gate and reports the result.
 
 Until 2026-11-23 this repository had a GitHub Actions workflow that re-ran the same
 steps on hosted runners. It was removed: those runners cost minutes for a pipeline

@@ -151,7 +151,9 @@ includes a VM header. A VM's build does:
 
 ```cpp
 auto target = kr32debug::make_target(image);   // in the KR32 tree
-auto info   = krdbg::kdbg::read_section(image, ".kdbg");
+krdbg::DebugInfo info;
+std::string error;
+krdbg::kdbg::read_section(image, info, error); // false on failure
 krdbg::DebugSession session(std::move(target), std::move(info));
 krdbg::DebuggerSurface ui(session, host_services);
 return krdbg::platform::run(ui);
@@ -233,6 +235,9 @@ struct TargetLayout {
     unsigned address_bits = 32;
     unsigned pointer_bits = 32;
     unsigned instruction_alignment = 4;
+    // When true, a disassembly row advances by InstructionView::length instead
+    // of a fixed alignment (variable-length encodings such as kr216).
+    bool variable_instruction_length = false;
     bool little_endian = true;
     std::string step_unit = "instructions";
     std::vector<RegisterGroup> groups;
@@ -795,8 +800,7 @@ Chosen shape: **two thin presenters, one surface.**
   one, and both presenters stay independent of the surface.
 - ARM64 has no GitHub Actions runner. The family gate
   `../kr232/scripts/check-arm64.ps1` runs `scripts/gate-linux-arm64.sh` on
-  BitWhiz; `docs/arm64-test-log.md` records direct tester runs, and
-  `docs/arm64-tester.md` is their protocol.
+  BitWhiz and reports `ARM64 CHECKS`.
 - Win32 GDI is the same presenter strategy KR16 already ships, so it is proven
   in this family of projects.
 - Static SDL2 was considered and rejected for v1: it requires building SDL2
@@ -819,22 +823,20 @@ integer scaling when the window is at least native size and falls back to fit
 when it is smaller; the preview always fits.
 
 ```cpp
-enum class VideoScaleMode { Fit, OneToOne };
-
 class IVideoWindow {
 public:
     virtual ~IVideoWindow() = default;
     virtual bool create(std::string_view title, int width, int height) = 0;
     virtual bool poll(Event& event) = 0;   // same Event type as the debugger
-    virtual void present(const FramebufferView& frame, VideoScaleMode mode) = 0;
+    virtual void present(const FramebufferView& frame, bool fit) = 0;  // true = FIT
     virtual void set_title(std::string_view title) = 0;
     virtual void destroy() = 0;
 };
 ```
 
-The separate window opens when the first committed frame arrives, or when the
-user enables it from the toolbar. Closing it leaves the preview and does not
-unload the target. Headless mode never creates it.
+The separate window opens from the toolbar or `POP OUT`, and once per target
+after a committed frame while the `VIDEO` tab is active. Closing it leaves the
+preview and does not unload the target. Headless mode never creates it.
 
 The plan therefore does not require `SDL2.dll` on Windows and does not require
 a static SDL2 build to get there. M0 uses the SDL2 presenter as a **development
@@ -898,30 +900,33 @@ toolchain, but it makes krdbg harder to drop into an unrelated VM. The options:
 | Approach | Build dependency | Drift risk | Best when |
 |---|---|---|---|
 | **A. Link `krc::debug`** | KRCompiler installed | None | KRCompiler is always the toolchain |
-| **B. Vendor `kdbg.*`** | None | Medium; parity test required | krdbg must be self-contained |
+| **B. Vendor `kdbg.*`** | KRCompiler installed for the target table | Medium; parity test required | The decoder source must be in-tree |
 | **C. Generated single header** | None | Low; regenerate on change | Want one file and no CMake package |
 | **D. krdbg writes its own** | None | Highest | Rejected; second format implementation |
 
 **Chosen: A.** KRCompiler extracts `krc::debug` and installs it; krdbg links
-it. The vendored exact pair (option B) is a **bootstrap fallback only** while
-the package is being created — same implementation, not a second parser. The
+it. The vendored exact pair (option B) remains the default decoder source
+(`KRDBG_KDBG_VENDORED=ON`) — the same implementation, not a second parser. The
 generated single header (option C) is a possible future packaging convenience,
 not a separate parser.
 
-krdbg's CMake expects `find_package(krc-debug CONFIG REQUIRED)`. A
-`KRDBG_KDBG_VENDORED` build option can point at a temporary copy while the
-package lands, so a bare krdbg checkout is never blocked on KRCompiler.
+krdbg's CMake requires the installed `krc-debug` and `krc-toolchain` packages
+and needs the compiler prefix on the CMake search path, so a build always names
+a KRCompiler install. `KRDBG_KDBG_VENDORED` (default ON) selects the vendored
+decoder source instead of linking `krc::debug`; it does not remove either
+`find_package` call.
 
 #### What this means for the plan
 
 - **M1 depends on a KRCompiler work item:** extract `krc::debug`, install the
   header/library/package, and link `krc`/`krld` against it. This is tracked in
   §11 as a prerequisite, not as an open krdbg decision.
-- Until that package exists, the vendored fallback keeps the UI buildable; it
-  must carry the commit hash and a parity test against `krc --dump-symbols
-  --json`.
-- `krdbg::kdbg::read()` is the only entry point the rest of krdbg uses.
-  Changing the packaging later does not touch the surface.
+- The vendored pair keeps the decoder source inside the tree, carries the
+  commit hash, and is covered by a parity test against `krc --dump-symbols
+  --json`; the package is still required at configure time.
+- `krdbg::kdbg::read_payload()` and `krdbg::kdbg::read_section()` are the only
+  entry points the rest of krdbg uses. Changing the packaging later does not
+  touch the surface.
 
 ### 4.10 Settings and configuration
 
@@ -1076,13 +1081,12 @@ workspace directory), merges the layers, and returns the effective
 
 Saving:
 
-- The dialog has a `SAVE TO: PROJECT | USER` selector. It defaults to `Project`
-  when a project is open and `User` otherwise.
+- The dialog has a `SAVE: USER` / `SAVE: PROJ` layer selector. It defaults to
+  `User`.
 - Apply writes only the fields the user changed to the selected layer; existing
   overrides in the other layer are preserved.
-- Clearing a field (or Reset to Defaults) removes that layer's override and
-  falls back to the next layer; it does not necessarily write the schema default
-  as an explicit value.
+- Clearing a field removes that layer's override and falls back to the next
+  layer; it does not necessarily write the schema default as an explicit value.
 - `IMPORT`/`EXPORT` names the layer it writes. A project export contains only
   overrides; a user export contains the user values.
 - `secret` fields default to the `User` layer; saving one to a project file
@@ -1285,11 +1289,12 @@ bottom-right, tabbed with the COM port, and to a separate video window.
   and the video preview.
   - COM tab title: `IComPort::name()` (for example `COM1`, `UART0`), default
     `COM1`.
-  - Video tab title: `VIDEO`. The initial tab is `VIDEO` when a framebuffer
-    exists, otherwise the COM tab; the last selection is remembered.
+  - Video tab title: `VIDEO`. The initial tab is `VIDEO` when the target has a
+    framebuffer and no COM port, otherwise `COM`; the last selection is
+    remembered.
   - The video preview is centered and aspect-correct (letterboxed, nearest
     neighbour, never stretched) with a small `fit WxH` label and a `POP OUT`
-    button; double-clicking it opens the separate video window.
+    button; `POP OUT` opens the separate video window.
 - If the target has no framebuffer, the `VIDEO` tab is hidden; if it has no COM
   port, the COM tab is hidden; if it has neither, the whole tabbed panel is
   hidden and the neighbouring bottom panels expand.
@@ -1308,9 +1313,9 @@ and 8-byte instruction widths.
 
 From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
 
-- `F5` run/pause, `F6` break, `F9` toggle breakpoint at current line,
-  `F10` instruction over, `F11` instruction in, `Shift+F11` instruction out,
-  `R` restart, `Esc` quit (or close a menu/focus first).
+- `F5` run/pause, `F6` break, `F10` instruction over, `F11` instruction in,
+  `Esc` quit (or close a menu/focus first). Restart is the `RESET` toolbar
+  button. `F9` (toggle breakpoint) and `R` (restart) are not implemented.
 - Toolbar actions:
   - `RUN` toggles the VM running state (F5). It is green while running and
     normal while stopped; the status bar shows `F5 PAUSE` while running.
@@ -1359,7 +1364,7 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   parse or scroll it. Clicking gives the guest screen keyboard focus (green
   dot); `Esc` releases focus before quitting; debugger function keys always
   work. Hovering a pixel shows its coordinates, guest address and colour.
-  Double-clicking the preview opens the video window. Video focus and COM-port
+  `POP OUT` opens the video window. Video focus and COM-port
   focus are separate and mutually exclusive.
 - Video window: a separate top-level window presenting the same frames at
   native size or aspect-preserving fit, nearest-neighbour, with a `1:1`/`FIT`
@@ -1456,12 +1461,12 @@ These are reflected in §6.1, §6.2, §6.3, and §7.1.
 
 **Separate window.**
 
-- Opens automatically when the target first commits a frame, and can be toggled
-  from the toolbar. Auto-open happens once per target; if the user closes it, it
-  stays closed until the toolbar or `POP OUT` reopens it.
-- Title: target name, frame geometry and frame number.
-- Default size: native frame size, clamped to the monitor. Default mode is
-  `FIT`, which preserves aspect ratio; `1:1` shows native pixels.
+- Opens from the toolbar or `POP OUT`, and once per target after a committed
+  frame while the `VIDEO` tab is active. The surface selects that tab itself only
+  when the target has no COM port. Closing it leaves it closed until reopened.
+- Title: `krdbg video`.
+- Default size: 640x480. The window presents the surface's `FIT` (aspect
+  preserving) or `1:1` mode.
   Nearest-neighbour, no bilinear filtering.
 - Keyboard and pointer events go to the guest screen; debugger function keys
   (`F5`, `F6`, `F9`–`F11`) are forwarded to the debugger.
@@ -1475,7 +1480,7 @@ These are reflected in §6.1, §6.2, §6.3, and §7.1.
   exclusive, so only one is visible at a time.
 - Uses the same `fit_rect()`; always letterboxed, never stretched; shows
   `fit WxH`.
-- Double-click or `POP OUT` opens the video window.
+- `POP OUT` opens the video window.
 - It is a view, not a second input device; clicking it only gives the guest
   screen keyboard focus.
 
@@ -1560,8 +1565,9 @@ hardcoded.
   `0 = unlimited`; it is a normal integer field.
 - An `Advanced` toggle hides low-level settings by default. A search box filters
   by label/id when the schema is large.
-- Footer: `SAVE TO: PROJECT | USER` (project by default when a project is open),
-  `APPLY`, `APPLY & RELOAD` (only when needed), `RESET TO DEFAULTS`, `CANCEL`.
+- Footer: the layer selector (`SAVE: USER` / `SAVE: PROJ`, user by default),
+  `ADV` (advanced settings), `APPLY`, `APPLY & RELOAD`, `CANCEL`. `Delete`
+  clears the selected override; there is no reset-to-defaults control.
   Errors appear inline at the offending field; Apply is disabled while any value
   is invalid.
 
@@ -1572,8 +1578,8 @@ hardcoded.
 - Apply writes only the changed fields to the selected layer. Project values
   override user values; user values override schema defaults.
 - Clearing a field removes that layer's override and falls back to the next
-  layer. `RESET TO DEFAULTS` clears the selected layer's overrides in the form;
-  it does not touch the VM until Apply.
+  layer. `Delete` on a selected field clears its override in the form; it does
+  not touch the VM until Apply.
 - Apply validates the whole snapshot, then calls
   `IHostServices::apply_settings(snapshot, layer)`. Invalid input applies
   nothing.
@@ -1681,16 +1687,17 @@ Wraps `kr216::Machine`, its image loader, decoder and disassembler:
 
 Wraps `kr232::Machine`, its container loader, decoder and disassembler:
 
-- Load: `.kr232` containers and flat kernel images; the adapter reads the
-  program's `.kdbg` and resolves source paths against the image directory and
-  configured roots. `load_kernel()` loads a kernel and a user program together.
+- Load: `K232` containers only; a flat image is rejected as "not a .kr232
+  container". The adapter reads the program's `.kdbg` and resolves source paths
+  against the image directory and configured roots. `load_kernel()` loads a
+  kernel container and a user program together.
 - State: R0–R15, PC/SP/EFP, four f64 registers, flags Z…K with K and I
   non-writable; 32-bit addresses and pointers; kernel RAM, user RAM, device
   window and the unbacked gaps between them.
 - Disassembly: kr232's decoder; variable-length instructions advance by decoded
   length.
-- Unwind: the EFP chain, with `FunctionInfo::frame` zero and frame offsets
-  negated.
+- Unwind: the EFP chain, with `FunctionInfo::frame` zero and the payload's
+  signed frame offsets copied as-is.
 - Devices: the three-register COM port over page 2 and the committed framebuffer
   as `IVideoSource`.
 - Coverage: `tests/test_kr232_adapter.cpp` and its fixtures, plus
@@ -1746,12 +1753,15 @@ link krdbg, done.
 | **M3 — KR32 vertical slice** | KR32 adapter; load a `krc`-built `.kr32` with `.kdbg`; set source breakpoint, step line, inspect locals/struct/globals, call stack, memory, disassembly | Side-by-side with KR32 GUI on the same image; behaviour matches `docs/ui.md` | 2 weeks |
 | **M4 — Second architecture** | KR16 adapter; 16-bit image; address width/registers/flags adapt | Same interactions on KR16; only adapter code changed; no `if (kr16)` in UI | 2 weeks |
 | **M5 — Compiler pipeline** | Load/build provider invoking `krc`/`krld`; `LOAD` builds source and loads it; `RESET` rebuilds from source; `KERNEL` loads the embedded pair; source roots; compiler/linker/assembler settings schemas | Load a `.c`/`.cpp`/`.s`, build, stop at `main`, step to a line, inspect a local; `KERNEL` loads the embedded OS; source resolves from a clean checkout; tool settings appear in the dialog without UI changes | 2–3 weeks |
-| **M6 — Packaging and post-v1** | Windows zip; Linux x64/ARM64 tarballs (SDL2 2.32 system requirement, no bundled SDL2), DAP front end, extra architectures | Windows and Linux x64 artifacts run from clean checkouts; the ARM64 tester log records the Pi tarball; DAP and GUI share the session | 2+ weeks |
+| **M6 — Packaging and post-v1** | Windows zip; Linux x64/ARM64 tarballs (SDL2 2.32 system requirement, no bundled SDL2), DAP front end, extra architectures | Windows and Linux x64 artifacts run from clean checkouts; the ARM64 gate on BitWhiz verifies the Pi tarball; DAP and GUI share the session | 2+ weeks |
+| **M7 — Working kr232 debugger** | Adapter-enabled kr232 debugger artifact, chooser and target selection, kernel+user, step/unwind correctness, the startrekng multi-file case (`docs/working-debugger-plan.md`) | A1–A20 pass headless on Windows and Linux; the D1 artifact loads a kr232 image; the adapter-free UI artifact is unchanged | 6–7 weeks |
 
 **Release state.** 0.2.0 shipped the M0–M6 packaging work with the KR32 and KR16
 adapters. The DAP server and multi-core scheduler run remain post-v1, as do the
 kr216 and kr232 adapters. `implementation.md` §8.1 records adapter coverage and
-the remaining gaps.
+the remaining gaps. M7 is the post-0.2.0 path from a UI shell to a working
+debugger: its plan is `docs/working-debugger-plan.md`, its decisions D1–D6 are
+settled, and its tasks are `implementation.md` §8.2.
 
 The order is deliberate: **visual baseline first** (the user's priority), then
 the engine, then a real target, then a second architecture to prove the
@@ -1759,7 +1769,7 @@ abstraction, then the compiler pipeline.
 
 **M6.2 packaging:** Linux x64 ships a tarball, not an AppImage. The tarball
 contains no SDL2; SDL2 2.32 is a system requirement documented in the release
-notes and README. ARM64 packaging waits for the tester machine and uses a
+notes and README. ARM64 packaging runs on BitWhiz and uses a
 tarball as well; a cross-build is not a substitute.
 
 ### 8.1 Companion work in KRCompiler
@@ -1775,6 +1785,26 @@ the v1.1 record set is tracked in `implementation.md` §10.
 | Add the v1.1 records from §5.3 | Locations, inheritance, arrays, scopes, 64-bit, real target IDs | Full M3/M4 fidelity; M3 can use v1 fallbacks |
 | Embed `.kdbg` in the KR16 `.kr16` writer, or write a build-ID sidecar | Delivered: `write_kr16_image` writes `.kdbg` as an unallocated debug section; older images fall back to the legacy parser | M4's KDBG path |
 | Set `target_id` per target instead of `1` | Delivered: the linker copies the object's `target_id` into the image and KDBG (`linker.cpp:426,737`) | M1's target/format check |
+
+### 8.2 M7 — Working kr232 debugger (G7)
+
+**Goal.** The surface debugs a real kr232 program rather than the fake target:
+load, source, breakpoints, run and step, inspection, COM/video, kernel+user, and
+the multi-file `startrekng` example, on Windows and Linux, headless-tested.
+
+**Scope.** The D1 artifact (a separate package with the kr232 adapter linked; the
+adapter-free artifact stays the UI baseline), the D2 startup chooser and target
+selection, host input services, source roots and settings, the kr232 kernel/user
+pair (D3), stop-at-main and run limits, breakpoint persistence, the kr232
+step/unwind and per-bit-flag corrections, and the D6 startrekng gate case. DAP
+stays at G9 and the plugin ABI at G10; neither is part of M7.
+
+**Acceptance.** Gate G7 is A1–A20 in
+[`docs/working-debugger-plan.md`](docs/working-debugger-plan.md), run headless in
+CTest on Windows and Linux over the five kr232 fixtures plus
+`startrekng_script.kr232` built by `scripts/build-startrekng-kr232.ps1`. The
+estimate is 6–7 weeks. Tasks and the gate checklist are in `implementation.md`
+§8.2.
 
 ---
 
@@ -1864,7 +1894,7 @@ the v1.1 record set is tracked in `implementation.md` §10.
 |---|---|
 | First integration | KR32 adapter loading a `krc`-built `.kr32` with `.kdbg` |
 | KDBG extensions | Additive v1.1 approved (locations, inheritance, arrays, scopes, 64-bit, target IDs, `.kr16` embedding) |
-| KDBG reader | **A.** KRCompiler exports and installs `krc::debug`; krdbg links it. A vendored exact pair is a bootstrap fallback only. |
+| KDBG reader | **A.** KRCompiler exports and installs `krc::debug`; krdbg links it. The vendored exact pair remains the default decoder source, and the package is still required to configure. |
 | KDBG v1.1 owner | KRCompiler owns format, writer, decoder changes, and dumper output; krdbg consumes |
 | Target model | Typed register groups by default; addressable values plus one optional custom state panel for exotic architectures. The custom-panel interface is reserved, not implemented, in v1. |
 | Cores/threads | Flat `contexts()` list with `kind = Core/Thread` and `parent`; the UI nests threads under cores visually |
@@ -1898,12 +1928,19 @@ detection for layered settings.
 
 ## 12. Current work
 
-The v1 release is complete. Post-v1 work is tracked in `implementation.md`:
+The v1 release is complete; 0.2.0 shipped it. Post-v1 adapter work is on `main`
+and tracked in `implementation.md` §8.1:
 
+- M7 — a working kr232 debugger (G7), planned in
+  [`docs/working-debugger-plan.md`](docs/working-debugger-plan.md) and tracked in
+  `implementation.md` §8.2.
+- kr216: image-load only, no devices, and no fixture, test or golden.
+- kr232: full adapter with COM, framebuffer, kernel/user load, fixtures and a
+  golden.
+- Remaining: a kr216 fixture, test and golden; a gate that builds all four
+  adapters; and kr216/kr232 coverage in the platform boundary check.
 - DAP server from the same session.
 - Multi-core scheduler run.
-- Adapter hardening: a kr216 fixture, test and golden, and a gate that builds all
-  four adapters rather than the adapter-OFF configuration alone.
 
 ---
 

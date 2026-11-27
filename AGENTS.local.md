@@ -52,7 +52,7 @@ adapter separately as well; the default presets set every adapter option off.
 |---|---|---|---|
 | Windows | x64 | BigBrain with `scripts/gate-windows.ps1` | PLAN.md §4.8; 0.2.0 release gate passed |
 | Linux | x64 | WSL Ubuntu on BigBrain with `scripts/gate-linux.sh` | PLAN.md §4.8; 0.2.0 release gate passed |
-| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; 0.2.0 verified through the tester log |
+| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; 0.2.0 verified on BitWhiz |
 
 Target-specific notes:
 
@@ -64,7 +64,7 @@ Target-specific notes:
 - **Linux (Raspberry Pi):**
   - Confirm every native dependency has a prebuilt artifact for ARM64, or document the build-from-source requirement.
   - Do not assume word size, byte order, or the presence of SIMD.
-  - Verification is the ARM64 gate on BitWhiz, driven by `../kr232/scripts/check-arm64.ps1`; this repository's `docs/arm64-test-log.md` records runs made directly from its checkout. There is no GitHub Actions runner.
+  - Verification is the ARM64 gate on BitWhiz, driven by `../kr232/scripts/check-arm64.ps1`, which runs `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS`. There is no GitHub Actions runner.
 <!-- project:targets:end -->
 
 ## Architecture boundaries
@@ -86,10 +86,15 @@ Linux ARM64: `scripts/gate-linux-arm64.sh`, invoked by the kr232 family gate.
 There is no hosted CI; the family gate `../kr232/scripts/check-family.ps1` runs
 each repository's gate in dependency order.
 
-The presets can be driven directly once the environment is initialized:
+**Shell.** Developer PowerShell for VS 18 is the preferred shell. It puts the
+MSVC tools on `PATH` (`cl.exe`, the Windows SDK, CMake and Ninja), so the presets
+below need no separate `vcvarsall` step; `scripts/gate-windows.ps1` initializes
+MSVC itself and still runs from a plain shell.
+
+The presets can be driven directly from Developer PowerShell for VS 18:
 
 ```sh
-# Windows, from a Visual Studio developer shell:
+# Windows, from Developer PowerShell for VS 18:
 cmake --preset windows-msvc
 cmake --build --preset windows-msvc
 ctest --preset windows-msvc
@@ -104,12 +109,18 @@ cmake --preset linux-arm64 && cmake --build --preset linux-arm64 && ctest --pres
 # Release: linux-arm64-release
 ```
 
+**Configure prefix.** `CMakeLists.txt` requires the installed `krc-debug` and
+`krc-toolchain` packages. `scripts/gate-windows.ps1` passes
+`-DCMAKE_PREFIX_PATH` from `KRG_PREFIX`, `KRG_KRC`, or `../build/family-prefix`;
+`scripts/gate-linux.sh` passes no prefix, so the WSL environment must make the
+package discoverable. A preset driven directly needs the argument.
+
 **Doctor.** `.agents/templates/doctor.msvc.ps1` — run it when a build cannot find
 its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 
-**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH` in a plain shell); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`. WSL Ubuntu x64: GCC 15.2.0, CMake 4.2.3, Ninja 1.13.2, SDL2 2.32.10 (`libsdl2-dev`). ARM64 `BitWhiz`: Debian g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1, SDL2 2.32.4 (from the tester log).
+**Toolchain.** MSVC 14.51.36231 at `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64`; CMake 4.3.1-msvc1 and Ninja 1.13.2 bundled with Visual Studio 18 (not on `PATH` in a plain shell); Windows SDK 10 at `C:\Program Files (x86)\Windows Kits\10\Include`. WSL Ubuntu x64: GCC 15.2.0, CMake 4.2.3, Ninja 1.13.2, SDL2 2.32.10 (`libsdl2-dev`). ARM64 `BitWhiz`: Debian g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1, SDL2 2.32.4 (from the 0.2.0 ARM64 runs).
 
-**Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets; WSLg presented the loaded window. All three platform gates passed at M0, ARM64 via the `BitWhiz` tester log.
+**Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets; WSLg presented the loaded window. All three platform gates passed at M0, ARM64 via the BitWhiz gate.
 
 **Install (requires approval).** A gate never installs a compiler, SDK, CMake,
 Ninja or SDL. Windows uses the MSVC, CMake and Ninja bundled with Visual Studio
@@ -118,12 +129,12 @@ missing tool; provisioning is the user's decision.
 
 ## Known traps
 
-- ARM64 is verified on BitWhiz, not GitHub Actions. Current runs are driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh`; `docs/arm64-test-log.md` records runs made directly from this checkout. There is no self-hosted runner and none is planned; do not add an `arm64` job.
+- ARM64 is verified on BitWhiz, not GitHub Actions. Current runs are driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS` ([docs/ci-arm64.md](docs/ci-arm64.md)). There is no self-hosted runner and none is planned; do not add an `arm64` job.
 - The `windows-msvc` and `linux-wsl` presets set every `KRDBG_*_ADAPTER` option to `OFF`. A bare gate pass is not adapter evidence; build the adapter with its option and root set.
 - `src/host/build_chain.cpp` accepts `kr32`, `kr16` and `kr232` sources. A kr216 source passed to `--load ... --target kr216` is rejected; `--kr216` loads an existing `.kr216` image.
 - WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
-- KRCompiler `e04b3b2` exports the KDBG v1.1 `krc::debug` pair; krdbg vendors the exact `kdbg.*` files under `third_party/krc-debug/` so a bare checkout builds without a KRCompiler install. The vendored copy carries the commit SHA and a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).
+- KRCompiler `e04b3b2` exports the KDBG v1.1 `krc::debug` pair; krdbg vendors the exact `kdbg.*` files under `third_party/krc-debug/`. The copy carries the commit SHA and a parity test against `krc --dump-symbols --json`, but it does not make a bare checkout build: `CMakeLists.txt` has `find_package(krc-debug CONFIG REQUIRED)` and `find_package(krc-toolchain CONFIG REQUIRED)` outside the `KRDBG_KDBG_VENDORED` branch (`PLAN.md` §4.9).
 
 ## WSL builds
 

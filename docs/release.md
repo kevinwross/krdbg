@@ -8,7 +8,7 @@ version in `CMakeLists.txt`.
 
 There is no release workflow and no hosted CI. Run the gate for the host, build
 the release preset, run the packaging script by hand, and attach the resulting
-archive to the tag. ARM64 packaging runs on the tester machine. The packaging
+archive to the tag. ARM64 packaging runs on BitWhiz. The packaging
 scripts default to version `0.2.0`; pass `-Version` or `--version` when the
 project version changes.
 
@@ -77,7 +77,7 @@ krdbg-0.2.0-linux-x64.tar.gz
 ```
 
 SDL2 **2.32** is a system requirement; the tarball bundles no SDL2 library and
-therefore carries no SDL2 notice. For ARM64 on the tester machine, use
+therefore carries no SDL2 notice. For ARM64 on BitWhiz, use
 `--arch arm64`; the default build directory is `build/linux-arm64-release` and
 the artifact is `krdbg-<version>-linux-arm64.tar.gz`. Do not cross-build it on
 x64.
@@ -88,6 +88,6 @@ asserts the license payload and the absence of bundled SDL2, writes
 
 ## Linux ARM64
 
-ARM64 packaging runs on the tester machine from an ARM64 build. The artifact
+ARM64 packaging runs on BitWhiz from an ARM64 build. The artifact
 evidence is the packaged tarball and its smoke test, recorded with the release
 revision.

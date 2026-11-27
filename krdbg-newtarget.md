@@ -229,7 +229,7 @@ The KDBG header carries:
 
 | Field | Use |
 |---|---|
-| `target_id` | Target identity. Current tree: `1` KR32, `2` KR16, `3` KR64, `4` KR216. Coordinate a new id with KRCompiler. krdbg copies the value into `DebugInfo::target_id`; it does not currently reject a mismatch. |
+| `target_id` | Target identity. Current tree: `1` KR32, `2` KR16, `3` KR64, `4` KR216, `5` KR232. Coordinate a new id with KRCompiler. krdbg copies the value into `DebugInfo::target_id`; it does not currently reject a mismatch. |
 | `pointer_width` | Width in bytes; the translator turns it into `DebugInfo::pointer_bits`. |
 | `image_base` | The load base the payload's addresses were built for. `read_section` rejects a mismatch; for a raw payload, compare the payload's `build_id` against the image's build id before trusting it. |
 | `build_id` | Compare against the image's build id when loading a sidecar, so a stale payload is not paired with a new image. |
@@ -250,11 +250,11 @@ Two different frame facts are easy to confuse:
   A fixed-layout ABI can ignore it, as KR16 and KR216 do.
 - `Location::FrameOffset` is added directly to `RawFrame::frame_base` by the
   session ([`src/core/variables.cpp`](src/core/variables.cpp)). The KDBG
-  translator copies the recorded variable offset into this field; the current
-  fixtures use positive offsets into the frame. The adapter must convert that
-  offset to the sign its `frame_base` requires: KR32 uses the offset as-is;
-  KR16 and KR216 negate it. This is the single most common place for a new
-  adapter to read the wrong slot.
+  translator copies the recorded signed variable offset into this field. KR32
+  and KR232 use it as-is (kr232 payloads already record negative offsets, such
+  as `-12`); KR16 and KR216 negate the payload's positive offset to match their
+  `frame_base`. This is the single most common place for a new adapter to read
+  the wrong slot.
 
 Set `RawFrame::frame_base` to the value the ABI's frame offsets are relative to
 (typically the frame pointer). The current frame must come first. Return an
@@ -414,13 +414,14 @@ When the option is ON:
 - add `tests/test_<vm>_adapter.cpp` to `krdbg_tests` and define the fixture
   macros.
 
-KR32 and KR16 are the `add_subdirectory` pattern: their CMake trees expose
-`kr32_core`/`kr16_core` (KR32 also exposes its container, disassembler and OS
-targets), and the adapter links those targets. KR216 is the direct-source
-pattern: its adapter target lists `decode.cpp`, `disasm.cpp`, `encoding.cpp`,
-`image.cpp` and `machine.cpp` and includes the VM's `src` directory. Use
-whichever matches the VM's build system; krdbg does not require the VM to use
-CMake, only that the adapter target can compile and link it.
+All four in-tree adapters link a core target from the VM's own CMake tree: the
+root `CMakeLists.txt` adds that tree with `add_subdirectory` (KR32 and KR16 use
+`EXCLUDE_FROM_ALL`), and the adapter target compiles only `<vm>_adapter.cpp` and
+links `kr32::core`, `kr16_core`, `kr216::core` or `kr232::core`; KR32 also links
+its container, disassembler and OS targets. No adapter compiles VM sources into
+itself. A VM without a CMake build can instead be compiled directly into the
+adapter target; krdbg does not require the VM to use CMake, only that the adapter
+target can compile and link it.
 
 On MSVC, check the VM's runtime library. KR16 sets a static CRT for its own
 executables; when its core is linked into krdbg's dynamic-CRT test/demo

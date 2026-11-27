@@ -40,6 +40,13 @@ Pass the installed prefix with `--toolchain <prefix>` or set
 `KRDBG_KRC_PREFIX`. `krdbg_host` validates `bin/krc`, `bin/krld` and the sysroot
 before running either tool.
 
+Configuring krdbg itself needs the package: pass `-DCMAKE_PREFIX_PATH=<prefix>`
+to the configure step. `scripts/gate-windows.ps1` resolves that prefix from
+`KRG_PREFIX`, `KRG_KRC` or `../build/family-prefix` and passes it; on Linux the
+package must already be discoverable by CMake. The vendored KDBG copy under
+`third_party/krc-debug/` supplies decoder source and the parity test; it does not
+remove the `krc-debug`/`krc-toolchain` package requirement.
+
 ## Host commands
 
 ```sh
