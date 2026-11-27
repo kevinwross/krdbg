@@ -1025,12 +1025,15 @@ P1 — kr232 end to end:
 - [ ] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
       rule when both exist, screen focus and function-key forwarding.
 - [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
-- [ ] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
+- [x] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
       across the `ENTER`-updated chain, step-out guard as an explicit stop.
+      `unwind()` publishes the current position as frame zero; `InstructionOver`
+      treats a function change as entering a callee; step-out from the outermost
+      frame reports "no caller frame" instead of running to the guard.
 - [x] **M7.21** A `GroupKind::Flags` group with per-bit Z/N/C/V/I/T/K read/write;
       K and I read-only.
-- [ ] **M7.22** Stop reason in the status line and source autoscroll to the PC.
-- [ ] **M7.23** Unresolved line breakpoints are marked, not drawn as live.
+- [x] **M7.22** Stop reason in the status line and source autoscroll to the PC.
+- [x] **M7.23** Unresolved line breakpoints are marked, not drawn as live.
 - [x] **M7.24** Honest kr232 COM status (RX/TX from the machine, overrun
       reported).
 - [ ] **M7.25** startrekng (D6): script + scenario + golden in every gate.
@@ -1050,6 +1053,10 @@ M7.12: `krdbg_kr232_kernel_pair` passes, and the rendered pair shows
 `docs/debugging-kr232.md` and the README entry landed. M7.13/M7.14: startrekng
 stops at `main_script.cpp`/`0x000080DC` after the deferred first-frame run, and the
 `loaded.kr232` halt renders `halted: halted with status 0` in the status bar.
+M7.20: 21 kr232 tests, including `kr232_session_step_out_without_a_caller_stops`.
+M7.22: startrekng at 200,000 instructions shows `galaxy.cpp` lines 221–250 with the
+PC line in view. M7.23: `--break-line 1` renders `crt0.s:1  (unresolved)` and a dim
+gutter square.
 
 Gate G7:
 
@@ -1387,6 +1394,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-27T10:09:10-08:00** — **Kernel+user and the kr232 page.** `eb608bb` adds `--kr232-kernel`/`--kr232-program`, a pair-preserving RESET, the adapter's reported entry, and a CTest row that loads the pair, runs to the user entry and resets. The documentation commit adds `docs/debugging-kr232.md` and the README pointer. Verification: CTest 8/8, 117 and 20 unit tests at 0 failures, the pair renders `userprint.s` at PC `0x08000008`.
 - **2026-11-27T10:13:28-08:00** — **Deferred main stop and stop reasons.** `d3095b0` records main's first line at load and runs it on the first frame when `dbg.stop_at_main` is on (an owned temporary breakpoint), then names the stop reason from `StopResult` in the status bar and applies `dbg.instruction_limit` at run start. Verification: CTest 8/8, 117 unit tests at 0 failures; startrekng stops at `main_script.cpp`/`0x000080DC`; `loaded.kr232` run through surface ticks renders `halted: halted with status 0`.
+- **2026-11-27T10:17:19-08:00** — **Step semantics, source follow and unresolved breakpoints.** `63c8d4b` fixes kr232 step-over across ENTER-built frames, publishes a synthetic frame before ENTER, and makes step-out report `no caller frame`; `7421ee9` follows the PC in the source pane and marks unresolved line breakpoints; `5e473bc` makes the panel name short and adds `--break-line` for scripted screenshots. Verification: CTest 8/8, 117 and 21 unit tests at 0 failures; screenshots show `galaxy.cpp` lines 221–250 and `crt0.s:1 (unresolved)`.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
