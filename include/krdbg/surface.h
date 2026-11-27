@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -86,6 +87,16 @@ struct SurfaceLayout {
     Rect settings_cancel;
     Rect settings_layer;
     Rect settings_advanced;
+
+    // Startup chooser controls, drawn while ProgramInfo.loaded is false and the
+    // host is running the interactive frame loop. Hit-tested by the interaction
+    // tests instead of copying layout constants.
+    Rect chooser_panel;
+    Rect chooser_open_image;
+    Rect chooser_open_source;
+    Rect chooser_quit;
+    std::array<Rect, 5> chooser_recent{};
+    int chooser_recent_count = 0;
 };
 
 // The host owns everything VM- or platform-specific. krdbg calls only this
@@ -135,6 +146,12 @@ public:
 
     void set_program_info(ProgramInfo program);
     [[nodiscard]] const ProgramInfo& program_info() const;
+
+    // True when the startup chooser is on screen: no program is loaded, no error
+    // is set, and the host has called tick(). Headless renders never call tick(),
+    // so the committed empty-state golden keeps the plain "no program loaded"
+    // layout while the windowed application starts on the chooser.
+    [[nodiscard]] bool chooser_visible() const;
 
     // Shows a host error in the status bar until the next successful action.
     void set_error(std::string message);

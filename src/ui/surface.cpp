@@ -30,6 +30,8 @@ constexpr int kMinWidth = 800;
 constexpr int kMinHeight = 520;
 constexpr int kRowHeight = 16;
 constexpr int kPanelCount = 9;
+// The chooser shows this many most-recently loaded paths.
+constexpr int kMaxRecentFiles = 5;
 
 constexpr Color kRunGreen{96, 214, 126, 255};
 
@@ -127,6 +129,22 @@ void draw_small_button(Canvas& canvas, Rect rect, std::string_view label,
     canvas.text(rect.x + 4, rect.y + 3, label, text_color, FontRole::MonoSmall);
 }
 
+// A chooser action button: a wide target with a centred label and a highlighted
+// frame while the pointer is over it.
+void draw_chooser_button(Canvas& canvas, Rect rect, std::string_view label,
+                         bool hovered) {
+    if (rect.empty()) {
+        return;
+    }
+    canvas.fill(rect, hovered ? ui::theme::kPanelAlt : ui::theme::kPanel);
+    canvas.frame(rect, hovered ? ui::theme::kAccent : ui::theme::kBorder);
+    const int text_width = Canvas::text_width(label, FontRole::Ui);
+    const int text_y =
+        rect.y + (rect.height - Canvas::text_height(FontRole::Ui)) / 2;
+    canvas.text(rect.x + (rect.width - text_width) / 2, text_y, label,
+                hovered ? ui::theme::kText : ui::theme::kStats, FontRole::Ui);
+}
+
 int panel_index(SurfacePanel panel) {
     return static_cast<int>(panel);
 }
@@ -214,6 +232,15 @@ struct DebuggerSurface::Impl {
     void draw_com_panel(Canvas& canvas);
     void draw_video_preview(Canvas& canvas, Rect content);
     void draw_settings(Canvas& canvas);
+    void draw_chooser(Canvas& canvas);
+    [[nodiscard]] bool chooser_shown() const;
+    [[nodiscard]] int chooser_recent_count() const;
+    [[nodiscard]] int chooser_hit(int x, int y) const;
+    void chooser_mouse(const platform::Event& event);
+    bool chooser_key(const platform::Event& event);
+    void chooser_open();
+    void chooser_load_recent(int index);
+    void remember_recent(const std::string& path);
     [[nodiscard]] std::vector<const SettingDescriptor*> visible_settings() const;
     [[nodiscard]] std::string setting_text(const SettingDescriptor& setting) const;
     void open_settings();
@@ -342,6 +369,13 @@ struct DebuggerSurface::Impl {
     bool settings_editing = false;
     std::string settings_buffer;
     std::string settings_error;
+    // The host calls tick() once per frame; headless renders and goldens do not.
+    // That documented split is how the surface knows a window exists, so the
+    // startup chooser never replaces the committed empty-state golden.
+    bool interactive = false;
+    bool quit_requested = false;
+    int chooser_hover = -1;
+    std::vector<std::string> recent_files;
     std::string error_text;
     mutable std::array<ScrollState, kPanelCount> scrolls{};
 };
@@ -499,6 +533,31 @@ void DebuggerSurface::Impl::recompute_layout() {
         Rect{button_right - 118, footer_y, 118, 22};
     button_right -= 124;
     layout.settings_apply = Rect{button_right - 58, footer_y, 58, 22};
+
+    // The startup chooser is a centred card independent of the debugger panels;
+    // its controls are fixed here so interaction tests hit-test the layout.
+    const int chooser_width = std::min(std::max(460, w * 42 / 100), w - 60);
+    const int chooser_height = std::min(500, h - 60);
+    layout.chooser_panel = Rect{(w - chooser_width) / 2,
+                                (h - chooser_height) / 2, chooser_width,
+                                chooser_height};
+    const int chooser_left = layout.chooser_panel.x + 36;
+    const int chooser_inner = chooser_width - 72;
+    const int chooser_button_y = layout.chooser_panel.y + 126;
+    const int chooser_half = (chooser_inner - 12) / 2;
+    layout.chooser_open_image =
+        Rect{chooser_left, chooser_button_y, chooser_half, 30};
+    layout.chooser_open_source =
+        Rect{chooser_left + chooser_half + 12, chooser_button_y,
+             chooser_inner - chooser_half - 12, 30};
+    layout.chooser_quit =
+        Rect{chooser_left, chooser_button_y + 42, 140, 30};
+    const int chooser_row_y = layout.chooser_panel.y + 294;
+    for (int index = 0; index < kMaxRecentFiles; ++index) {
+        layout.chooser_recent[static_cast<std::size_t>(index)] =
+            Rect{chooser_left, chooser_row_y + index * 26, chooser_inner, 22};
+    }
+    layout.chooser_recent_count = chooser_recent_count();
 
     popup_rect = Rect{(w - 360) / 2, (h - 120) / 2, 360, 120};
     clamp_scrolls();
@@ -1242,6 +1301,164 @@ void DebuggerSurface::Impl::draw_status_bar(Canvas& canvas) {
                 bar.y + 4, right, ui::theme::kDim, FontRole::MonoSmall);
 }
 
+bool DebuggerSurface::Impl::chooser_shown() const {
+    return interactive && !program.loaded && error_text.empty();
+}
+
+int DebuggerSurface::Impl::chooser_recent_count() const {
+    return std::min<int>(kMaxRecentFiles,
+                         static_cast<int>(recent_files.size()));
+}
+
+int DebuggerSurface::Impl::chooser_hit(int x, int y) const {
+    if (layout.chooser_open_image.contains(x, y)) {
+        return 0;
+    }
+    if (layout.chooser_open_source.contains(x, y)) {
+        return 1;
+    }
+    if (layout.chooser_quit.contains(x, y)) {
+        return 2;
+    }
+    for (int index = 0; index < chooser_recent_count(); ++index) {
+        if (layout.chooser_recent[static_cast<std::size_t>(index)].contains(x, y)) {
+            return 10 + index;
+        }
+    }
+    return -1;
+}
+
+void DebuggerSurface::Impl::chooser_mouse(const platform::Event& event) {
+    if (event.button != 0) {
+        return;
+    }
+    const int hit = chooser_hit(event.x, event.y);
+    if (hit == 2) {
+        quit_requested = true;
+    } else if (hit >= 10) {
+        chooser_load_recent(hit - 10);
+    } else if (hit >= 0) {
+        chooser_open();
+    }
+}
+
+bool DebuggerSurface::Impl::chooser_key(const platform::Event& event) {
+    if (event.key == platform::key::Escape) {
+        return false;
+    }
+    if (event.key == platform::key::Enter) {
+        chooser_open();
+        return true;
+    }
+    const int character = event_character(event);
+    if (is_letter(character, 'O')) {
+        chooser_open();
+        return true;
+    }
+    if (is_letter(character, 'Q')) {
+        return false;
+    }
+    return true;
+}
+
+void DebuggerSurface::Impl::chooser_open() {
+    running = false;
+    session->pause();
+    error_text.clear();
+    std::string error;
+    if (!host->choose_and_load(error) && !error.empty()) {
+        error_text = error;
+        host->show_error(error);
+    }
+}
+
+void DebuggerSurface::Impl::chooser_load_recent(int index) {
+    if (index < 0 || index >= chooser_recent_count()) {
+        return;
+    }
+    // A successful load reports back through set_program_info, which reorders
+    // the recent list; copy the path before the host runs.
+    const std::string path = recent_files[static_cast<std::size_t>(index)];
+    running = false;
+    session->pause();
+    error_text.clear();
+    std::string error;
+    if (!host->load_path(path, error) && !error.empty()) {
+        error_text = error;
+        host->show_error(error);
+    }
+}
+
+void DebuggerSurface::Impl::remember_recent(const std::string& path) {
+    const auto found = std::find(recent_files.begin(), recent_files.end(), path);
+    if (found != recent_files.end()) {
+        recent_files.erase(found);
+    }
+    recent_files.insert(recent_files.begin(), path);
+    if (static_cast<int>(recent_files.size()) > kMaxRecentFiles) {
+        recent_files.resize(static_cast<std::size_t>(kMaxRecentFiles));
+    }
+    layout.chooser_recent_count = chooser_recent_count();
+}
+
+void DebuggerSurface::Impl::draw_chooser(Canvas& canvas) {
+    canvas.fill(Rect{0, 0, width, height}, ui::theme::kBackground);
+    const Rect card = layout.chooser_panel;
+    canvas.fill(card, ui::theme::kPanel);
+    canvas.frame(card, ui::theme::kBorder);
+    canvas.fill(Rect{card.x, card.y, card.width, 3}, ui::theme::kAccent);
+
+    const int pad = 36;
+    const int left = card.x + pad;
+    const int inner = card.width - pad * 2;
+
+    canvas.text(left, card.y + 16, "krdbg", ui::theme::kText, FontRole::UiBold, 3);
+    canvas.text(left + 2, card.y + 62, "KR virtual-machine debugger",
+                ui::theme::kDim, FontRole::Ui);
+    canvas.fill(Rect{left, card.y + 90, inner, 1}, ui::theme::kBorder);
+
+    canvas.text(left, card.y + 100, "START A SESSION", ui::theme::kDim,
+                FontRole::MonoSmall);
+    draw_chooser_button(canvas, layout.chooser_open_image, "OPEN IMAGE",
+                        chooser_hover == 0);
+    draw_chooser_button(canvas, layout.chooser_open_source, "OPEN SOURCE",
+                        chooser_hover == 1);
+    draw_chooser_button(canvas, layout.chooser_quit, "QUIT", chooser_hover == 2);
+    canvas.text(left, card.y + 212, "Enter or O opens a file. Q quits.",
+                ui::theme::kDim, FontRole::MonoSmall);
+
+    canvas.fill(Rect{left, card.y + 234, inner, 1}, ui::theme::kBorder);
+    canvas.text(left, card.y + 244, "TARGET", ui::theme::kDim,
+                FontRole::MonoSmall);
+    canvas.text(left + 64, card.y + 244,
+                clip(session->layout().name, inner - 64, FontRole::MonoSmall),
+                ui::theme::kText, FontRole::MonoSmall);
+    canvas.text(left, card.y + 268, "RECENT FILES", ui::theme::kDim,
+                FontRole::MonoSmall);
+
+    if (recent_files.empty()) {
+        canvas.text(left, card.y + 290, "(no files loaded in this session)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+    } else {
+        for (int index = 0; index < chooser_recent_count(); ++index) {
+            const Rect row = layout.chooser_recent[static_cast<std::size_t>(index)];
+            if (chooser_hover == 10 + index) {
+                canvas.fill(row, ui::theme::kPanelAlt);
+            }
+            canvas.text(row.x + 6, row.y + 3,
+                        clip(recent_files[static_cast<std::size_t>(index)],
+                             row.width - 12, FontRole::MonoSmall),
+                        ui::theme::kText, FontRole::MonoSmall);
+        }
+    }
+
+    const std::string footer =
+        "--load <path> on the command line also starts a session";
+    canvas.text(left, card.y + card.height - 28,
+                clip(footer, inner, FontRole::MonoSmall), ui::theme::kDim,
+                FontRole::MonoSmall);
+}
+
 void DebuggerSurface::Impl::draw_scrollbar(Canvas& canvas, SurfacePanel panel) {
     update_scroll(panel);
     const ScrollState& state = scroll_state(panel);
@@ -1849,6 +2066,10 @@ void DebuggerSurface::Impl::draw_tooltip(Canvas& canvas) {
 
 void DebuggerSurface::Impl::render(Canvas& canvas) {
     canvas.clear(ui::theme::kBackground);
+    if (chooser_shown()) {
+        draw_chooser(canvas);
+        return;
+    }
     draw_toolbar(canvas);
     sync_source();
     draw_source_panel(canvas);
@@ -1960,6 +2181,10 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
 }
 
 void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
+    if (chooser_shown()) {
+        chooser_mouse(event);
+        return;
+    }
     if (settings_open) {
         settings_click(event);
         return;
@@ -2395,6 +2620,10 @@ void DebuggerSurface::Impl::mouse_up() {
 }
 
 void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
+    if (chooser_shown()) {
+        chooser_hover = chooser_hit(event.x, event.y);
+        return;
+    }
     tooltip_visible = false;
     for (int index = 0; index < kPanelCount; ++index) {
         const auto panel = static_cast<SurfacePanel>(index);
@@ -2492,6 +2721,9 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
 }
 
 void DebuggerSurface::Impl::wheel(const platform::Event& event) {
+    if (chooser_shown()) {
+        return;
+    }
     const SurfacePanel panel = panel_at(event.x, event.y);
     if (panel == SurfacePanel::None) {
         return;
@@ -3132,6 +3364,9 @@ bool DebuggerSurface::Impl::settings_key(const platform::Event& event) {
 
 
 bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
+    if (chooser_shown()) {
+        return chooser_key(event);
+    }
     if (settings_open) {
         return settings_key(event);
     }
@@ -3426,6 +3661,13 @@ const SurfaceLayout& DebuggerSurface::layout() const {
 void DebuggerSurface::set_program_info(ProgramInfo program) {
     const bool changed = impl_->program.loaded != program.loaded;
     impl_->program = std::move(program);
+    if (impl_->program.loaded && !impl_->program.path.empty() &&
+        impl_->program.path.front() != '<') {
+        // The host reports a successful load here; an embedded program uses a
+        // display path like "<embedded KR32OS>" that is not worth offering back
+        // to the picker.
+        impl_->remember_recent(impl_->program.path);
+    }
     if (impl_->program.loaded) {
         impl_->error_text.clear();
         impl_->memory_base = 0x2000;
@@ -3461,6 +3703,10 @@ const ProgramInfo& DebuggerSurface::program_info() const {
     return impl_->program;
 }
 
+bool DebuggerSurface::chooser_visible() const {
+    return impl_->chooser_shown();
+}
+
 void DebuggerSurface::set_error(std::string message) {
     impl_->error_text = std::move(message);
 }
@@ -3470,6 +3716,13 @@ void DebuggerSurface::render(Canvas& canvas) {
 }
 
 void DebuggerSurface::tick() {
+    // The windowed host calls this once per frame; a headless render does not.
+    // That is the documented split the startup chooser uses to tell the
+    // interactive application from a golden capture.
+    impl_->interactive = true;
+    if (impl_->chooser_shown()) {
+        return;
+    }
     if (impl_->video_tab && impl_->session->video() != nullptr &&
         !impl_->video_auto_opened) {
         FramebufferView frame;
@@ -3534,7 +3787,7 @@ bool DebuggerSurface::handle_event(const platform::Event& event) {
         return impl_->key_down(event);
     case platform::Event::Kind::MouseDown:
         impl_->mouse_down(event);
-        return true;
+        return !impl_->quit_requested;
     case platform::Event::Kind::MouseMove:
         impl_->mouse_move(event);
         return true;

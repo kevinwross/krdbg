@@ -778,3 +778,96 @@ KRDBG_TEST(surface_ctrl_v_pastes_through_the_character) {
     CHECK(scene.send_key(0, 'v', true));
     CHECK_EQ(scene.surface->com_queued(), 4);
 }
+
+// The startup chooser is the windowed application's no-program screen. The
+// headless renderer and the golden captures never call tick(), so the committed
+// empty state stays byte-identical; the window loop calls it before each frame.
+KRDBG_TEST(surface_startup_chooser_replaces_the_empty_state_in_the_window) {
+    krdbg::test::TestScene headless(false);
+    CHECK(!headless.surface->chooser_visible());
+
+    krdbg::test::TestScene interactive(false);
+    interactive.surface->tick();
+    CHECK(interactive.surface->chooser_visible());
+    CHECK(headless.render_hash() != interactive.render_hash());
+
+    const SurfaceLayout& layout = interactive.surface->layout();
+    CHECK(!layout.chooser_panel.empty());
+    CHECK(!layout.chooser_open_image.empty());
+    CHECK(!layout.chooser_open_source.empty());
+    CHECK(!layout.chooser_quit.empty());
+}
+
+// OPEN IMAGE, OPEN SOURCE, O and Enter all reach the host's load entry; Q and
+// Escape quit, and QUIT makes the mouse event report that the app should exit.
+KRDBG_TEST(surface_chooser_controls_reach_the_host_and_quit) {
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        const SurfaceLayout& layout = scene.surface->layout();
+        CHECK(scene.click(center_x(layout.chooser_open_image),
+                          center_y(layout.chooser_open_image)));
+        CHECK_EQ(scene.host.load_calls, 1);
+    }
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        const SurfaceLayout& layout = scene.surface->layout();
+        CHECK(scene.click(center_x(layout.chooser_open_source),
+                          center_y(layout.chooser_open_source)));
+        CHECK_EQ(scene.host.load_calls, 1);
+    }
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        CHECK(scene.send_key(0, 'O'));
+        CHECK_EQ(scene.host.load_calls, 1);
+    }
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        CHECK(scene.send_key(krdbg::platform::key::Enter));
+        CHECK_EQ(scene.host.load_calls, 1);
+    }
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        const SurfaceLayout& layout = scene.surface->layout();
+        CHECK(!scene.click(center_x(layout.chooser_quit),
+                           center_y(layout.chooser_quit)));
+    }
+    {
+        krdbg::test::TestScene scene(false);
+        scene.surface->tick();
+        CHECK(!scene.send_key(0, 'Q'));
+        CHECK(!scene.send_key(krdbg::platform::key::Escape));
+    }
+}
+
+// A loaded program is the normal debugger surface: no chooser, and the chooser
+// buttons are not routed to the host.
+KRDBG_TEST(surface_loaded_program_suppresses_the_startup_chooser) {
+    krdbg::test::TestScene scene(true);
+    scene.surface->tick();
+    CHECK(!scene.surface->chooser_visible());
+    const SurfaceLayout& layout = scene.surface->layout();
+    scene.click(center_x(layout.chooser_open_image),
+                center_y(layout.chooser_open_image));
+    CHECK_EQ(scene.host.load_calls, 0);
+}
+
+// A path the host loaded earlier is offered back: clicking the row calls
+// load_path with it. The M0 fake host reports the call through last_error.
+KRDBG_TEST(surface_chooser_recent_row_calls_load_path) {
+    krdbg::test::TestScene scene(true);
+    CHECK_EQ(scene.surface->layout().chooser_recent_count, 1);
+    scene.surface->set_program_info(krdbg::ProgramInfo{});
+    scene.surface->tick();
+    CHECK(scene.surface->chooser_visible());
+    CHECK_EQ(scene.surface->layout().chooser_recent_count, 1);
+    const krdbg::Rect row = scene.surface->layout().chooser_recent[0];
+    CHECK(!row.empty());
+    CHECK(scene.click(center_x(row), center_y(row)));
+    CHECK(!scene.host.last_error.empty());
+}
+
