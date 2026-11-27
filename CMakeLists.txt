@@ -344,6 +344,7 @@ if(KRDBG_BUILD_TESTS)
             tests/test_main.cpp
             tests/test_kr232_adapter.cpp
             tests/test_host_build.cpp
+            tests/test_app_smoke.cpp
         )
         target_link_libraries(krdbg_kr232_tests PRIVATE
             krdbg_core krdbg_kdbg krdbg_kr232 krdbg_host krdbg_warnings)
@@ -354,6 +355,12 @@ if(KRDBG_BUILD_TESTS)
             KRDBG_KR232_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/loaded.kr232")
         add_test(NAME krdbg_kr232_unit COMMAND krdbg_kr232_tests)
         set_tests_properties(krdbg_kr232_unit PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # The M7.10 smoke: the gate fails if loading loaded.kr232 through the
+        # adapter or one instruction step regresses.
+        add_test(NAME krdbg_kr232_app_smoke
+            COMMAND krdbg_kr232_tests --filter kr232_app_smoke)
+        set_tests_properties(krdbg_kr232_app_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
     if(KRDBG_KR216_ADAPTER)

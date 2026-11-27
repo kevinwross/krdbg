@@ -32,6 +32,26 @@
       }
     },
     {
+      "name": "windows-msvc-kr232",
+      "displayName": "Windows MSVC (Debug, kr232 adapter)",
+      "inherits": "windows-msvc",
+      "binaryDir": "${sourceDir}/build/windows-msvc-kr232",
+      "cacheVariables": {
+        "KRDBG_KR232_ADAPTER": "ON",
+        "KRDBG_KR232_ROOT": "${sourceDir}/../kr232",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../build/family-prefix"
+      }
+    },
+    {
+      "name": "windows-msvc-kr232-release",
+      "displayName": "Windows MSVC (Release, kr232 adapter)",
+      "inherits": "windows-msvc-kr232",
+      "binaryDir": "${sourceDir}/build/windows-msvc-kr232-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "linux-wsl",
       "displayName": "Linux x64 (Debug)",
       "generator": "Ninja",
@@ -52,6 +72,25 @@
       "displayName": "Linux x64 (Release)",
       "inherits": "linux-wsl",
       "binaryDir": "${sourceDir}/build/linux-wsl-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-wsl-kr232",
+      "displayName": "Linux x64 (Debug, kr232 adapter)",
+      "inherits": "linux-wsl",
+      "binaryDir": "${sourceDir}/build/linux-wsl-kr232",
+      "cacheVariables": {
+        "KRDBG_KR232_ADAPTER": "ON",
+        "KRDBG_KR232_ROOT": "${sourceDir}/../kr232"
+      }
+    },
+    {
+      "name": "linux-wsl-kr232-release",
+      "displayName": "Linux x64 (Release, kr232 adapter)",
+      "inherits": "linux-wsl-kr232",
+      "binaryDir": "${sourceDir}/build/linux-wsl-kr232-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -79,12 +118,28 @@
       "configurePreset": "windows-msvc-release"
     },
     {
+      "name": "windows-msvc-kr232",
+      "configurePreset": "windows-msvc-kr232"
+    },
+    {
+      "name": "windows-msvc-kr232-release",
+      "configurePreset": "windows-msvc-kr232-release"
+    },
+    {
       "name": "linux-wsl",
       "configurePreset": "linux-wsl"
     },
     {
       "name": "linux-wsl-release",
       "configurePreset": "linux-wsl-release"
+    },
+    {
+      "name": "linux-wsl-kr232",
+      "configurePreset": "linux-wsl-kr232"
+    },
+    {
+      "name": "linux-wsl-kr232-release",
+      "configurePreset": "linux-wsl-kr232-release"
     },
     {
       "name": "linux-arm64",
@@ -111,6 +166,20 @@
       }
     },
     {
+      "name": "windows-msvc-kr232",
+      "configurePreset": "windows-msvc-kr232",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc-kr232-release",
+      "configurePreset": "windows-msvc-kr232-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "linux-wsl",
       "configurePreset": "linux-wsl",
       "output": {
@@ -120,6 +189,20 @@
     {
       "name": "linux-wsl-release",
       "configurePreset": "linux-wsl-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-wsl-kr232",
+      "configurePreset": "linux-wsl-kr232",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-wsl-kr232-release",
+      "configurePreset": "linux-wsl-kr232-release",
       "output": {
         "outputOnFailure": true
       }
