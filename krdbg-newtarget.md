@@ -469,7 +469,7 @@ valid when the VM has no settings. Target settings such as RAM size belong in
 the host's schema, not in `IDebugTarget`; the target exposes only the state that
 exists after the current load.
 
-`PLAN.md` §7.4 describes exported targets as the long-term integration shape;
+`PLAN.md` §7.6 describes exported targets as the long-term integration shape;
 they do not exist in this tree yet.
 
 ## 7. Tests and acceptance
@@ -479,7 +479,8 @@ tests, and the bare gate still passes.
 
 ### 7.1 Fixtures
 
-Commit a small image and its source under `tests/fixtures/<vm>/`. Include:
+Put a small image's source under `tests/fixtures/<vm>/` and commit the source and
+a regeneration script, not the generated image. Include:
 
 - a program with `main`, a callee, a local scalar, a struct or array, and a
   global;
@@ -487,10 +488,10 @@ Commit a small image and its source under `tests/fixtures/<vm>/`. Include:
 - optionally a second image with no debug information, and a malformed image
   for the error path.
 
-Keep the fixture independent of a compiler install. KR32 and KR16 pair the
-image with a `regenerate.ps1` that records the command and takes the tool paths
-from environment variables; KR216 commits the images directly. Either way, a
-test must not need a compiler.
+KR32, KR16 and KR232 pair the source with a `regenerate.ps1` that records the
+command and takes the tool paths from environment variables. Generate the image
+before running the adapter test; the test itself must not need a compiler.
+KR216 has no fixture or regeneration script yet.
 
 ### 7.2 Required tests
 
@@ -531,9 +532,9 @@ For an in-tree adapter, add a loaded-state golden like
 4. render a 1440×900 `Canvas`;
 5. compare `Canvas::hash()` with `goldens/<vm>-loaded.hash`.
 
-The existing kr216 adapter has no golden; add one for a new adapter so the
-surface integration is pinned. Golden comparisons are x64-only: the ARM64 test
-run uses `krdbg_tests --exclude golden`.
+KR32, KR16 and KR232 have loaded-state goldens; KR216 does not. Add one for a new
+adapter so the surface integration is pinned. Golden comparisons are x64-only:
+the ARM64 test run uses `krdbg_tests --exclude golden`.
 
 ### 7.4 Boundary and gate
 
@@ -545,8 +546,9 @@ cmake --build build/<preset> --target krdbg_platform_boundary
 
 It must report the UI/public and core/kdbg files clean. A new adapter may
 include VM headers; `include/krdbg`, `src/ui`, `src/core` and `src/kdbg` may
-not. The check currently scans for `kr32`, `kr16` and (in UI/public) `krc`;
-keep any new VM prefix out of those directories regardless.
+not. The check scans for `kr32`, `kr16` and (in UI/public) `krc`; it does not yet
+scan for `kr216` or `kr232`, so keep those prefixes out of those directories
+regardless.
 
 The repository gate builds the adapter-OFF configuration only. Build and test
 the adapter separately:
@@ -589,11 +591,13 @@ the adapter build; say which check ran when reporting.
 |---|---|---|
 | [KR32](adapters/kr32/kr32_adapter.cpp) | 32-bit, KDBG section, COM via syscalls/serial device, framebuffer, embedded OS pair, merged debug info, line/over/out tests, golden | `adapters/kr32`, `tests/test_kr32_adapter.cpp` |
 | [KR16](adapters/kr16/kr16_adapter.cpp) | 16-bit, KDBG section with legacy fallback, COM console block, no framebuffer, no kernel, golden | `adapters/kr16`, `tests/test_kr16_adapter.cpp` |
-| [KR216](adapters/kr216/kr216_adapter.cpp) | 16-bit, variable-length instructions, KDBG via a raw payload, no devices, minimal target | `adapters/kr216`, `tests/test_kr216_adapter.cpp` |
+| [KR216](adapters/kr216/kr216_adapter.cpp) | 16-bit, variable-length instructions, KDBG via a raw payload, no devices, minimal target; no in-tree test or golden | `adapters/kr216` |
+| [KR232](adapters/kr232/kr232_adapter.cpp) | 32-bit, KDBG source level, COM, framebuffer, kernel+user load, dedicated test binary and golden | `adapters/kr232`, `tests/test_kr232_adapter.cpp` |
 
-KR32 and KR16 are the best templates when the VM has its own CMake targets.
-KR216 is the smallest complete adapter and the best template for a new VM with a
-custom container or no device surface.
+KR32, KR16 and KR232 are the best templates when the VM has its own CMake
+targets. KR216 is the smallest complete adapter and the best template for a new
+VM with a custom container or no device surface, but it has no test harness to
+copy.
 
 ## 9. Common failures
 

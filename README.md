@@ -11,10 +11,12 @@ and KDBG as the debug format.
 - Third-party licenses: [docs/licenses.md](docs/licenses.md)
 - License: [LICENSE](LICENSE) (MIT)
 
-Version: `0.2.0`.
+Latest release: `0.2.0`.
 
-Status: M0–M6 complete. Release 0.2.0 provides the Windows x64 zip, Linux x64
-tarball and the tester-built ARM64 tarball.
+Status: release 0.2.0 completed M0–M6 with the KR32 and KR16 adapters, and
+provided the Windows x64 zip, Linux x64 tarball and tester-built ARM64 tarball.
+`main` adds the unreleased kr216 and kr232 adapters; [implementation.md](implementation.md)
+records their current coverage.
 
 ## Run
 
@@ -34,8 +36,10 @@ Linux:
 
 The debugger opens the fake target by default. `--load <source-or-image>`
 builds a `.c`, `.cpp` or `.s` through the installed `krc`/`krld` package (set
-`KRDBG_KRC_PREFIX` or pass `--toolchain <prefix>`), or opens a `.kr32`/`.kr16`
-image directly. `--kernel` loads the embedded KR32OS pair.
+`KRDBG_KRC_PREFIX` or pass `--toolchain <prefix>`), or opens a `.kr32`, `.kr16`,
+`.kr216` or `.kr232` image directly. Source builds currently cover kr32, kr16 and
+kr232; load a kr216 image with `--kr216` or `--load`. `--kernel` loads the
+embedded KR32OS pair.
 
 The Windows artifact is a single executable and contains no `SDL2.dll`. The
 Linux x64 tarball requires SDL2 **2.32** from the system package manager and
@@ -52,6 +56,10 @@ cmake --build --preset windows-msvc-release
 cmake --preset linux-wsl-release
 cmake --build --preset linux-wsl-release
 ```
+
+The presets build with every VM adapter off. Configure an adapter with
+`-DKRDBG_<VM>_ADAPTER=ON` and the matching `KRDBG_<VM>_ROOT`; see
+[krdbg-newtarget.md](krdbg-newtarget.md).
 
 The gate scripts in `scripts/` configure, build and test Debug and Release.
 Release packaging is described in [docs/release.md](docs/release.md).

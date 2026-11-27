@@ -1,6 +1,8 @@
 # krdbg — a shared, linked-in debugger surface for KR virtual machines
 
-**Status:** approved 2026-11-20T03:04:50-08:00 by kevinwross. No product code written.
+**Status:** approved 2026-11-20T03:04:50-08:00 by kevinwross. M0–M6 are released
+as 0.2.0 with the KR32 and KR16 adapters; `main` carries the unreleased kr216 and
+kr232 adapters. `implementation.md` tracks current status.
 **Decisions applied:** KR32 first; additive KDBG v1.1 owned by KRCompiler;
 typed register groups plus a reserved custom-state-panel hook; v1 includes core
 panels, register/flag editing, FPR/matrix, a separate video window and
@@ -95,13 +97,13 @@ adapter and the compiler supplying KDBG.
 
 1. One surface codebase, visually and behaviourally close to KR32's GUI.
 2. Linked in-process: no DAP socket, no second process, no serialization.
-3. Target-agnostic: the UI contains no KR32/KR16 types, register numbers,
+3. Target-agnostic: the UI contains no VM types, register numbers,
    instruction lengths, or address widths.
 4. Works for 16-, 32- and 64-bit targets, register machines and (eventually)
    accumulator/stack machines.
 5. Consumes KDBG directly; legacy debug dialects are optional adapters.
-6. Same surface can be hosted by KR32, KR16, KRCompiler-built images, and a
-   future VM with only a new adapter.
+6. Same surface can be hosted by KR32, KR16, KR216, KR232, KRCompiler-built
+   images, and a future VM with only a new adapter.
 7. Headless rendering and deterministic screenshot/hash tests.
 8. One session model that can later back a DAP server as well as the GUI.
 9. A separate video window for framebuffer targets, plus an aspect-correct
@@ -115,7 +117,7 @@ adapter and the compiler supplying KDBG.
 - Emulating a UART (baud rate, parity, FIFO, modem lines). The COM port is a
   three-register byte port.
 - Replacing the embedded compilers in KR32/KR16.
-- Writing to the KR32, KR16 or KRCompiler trees.
+- Writing to the KR32, KR16, KR216, KR232 or KRCompiler trees.
 - Pixel-identical rendering across every host; visual parity on Windows first.
 - Remote debugging, time-travel debugging, live process attach.
 
@@ -787,14 +789,14 @@ Chosen shape: **two thin presenters, one surface.**
 |---|---|---|
 | Windows x64 | Win32 GDI (`StretchDIBits` of the software Canvas) | None; single exe |
 | Linux x64 | SDL2 | `libSDL2` 2.32 system package; the release is a tarball with no bundled SDL2 |
-| Linux ARM64 | SDL2 | same; verified by the ARM64 tester log, not a GitHub Actions runner |
+| Linux ARM64 | SDL2 | same; verified on BitWhiz by the family gate, not a GitHub Actions runner |
 
 - `IWindow` is per-top-level-window; the debugger and the video display each own
   one, and both presenters stay independent of the surface.
-- ARM64 has no GitHub Actions runner. The verification path is the ARM64 tester
-  session on BitWhiz: it polls `main`, runs `scripts/gate-linux-arm64.sh` and
-  appends one entry to `docs/arm64-test-log.md`; the protocol is in
-  `docs/arm64-tester.md`. The entry is the ARM64 evidence for that revision.
+- ARM64 has no GitHub Actions runner. The family gate
+  `../kr232/scripts/check-arm64.ps1` runs `scripts/gate-linux-arm64.sh` on
+  BitWhiz; `docs/arm64-test-log.md` records direct tester runs, and
+  `docs/arm64-tester.md` is their protocol.
 - Win32 GDI is the same presenter strategy KR16 already ships, so it is proven
   in this family of projects.
 - Static SDL2 was considered and rejected for v1: it requires building SDL2
@@ -1152,8 +1154,7 @@ It is **not** enough to match KR32's current surface in these places:
 | Array element type/count | **Missing** (kind `array`, size only) | Arrays cannot be paged/expanded correctly; KR32 parses type strings and pages 16 elements at a time. |
 | Parameter/local/static distinction, scopes | **Missing** | Shadowed locals collide by `function + name`; params are indistinguishable. |
 | 64-bit addresses | Fields are `u32` | KR64 or any >4 GiB target cannot be represented. |
-| Target identity | `target_id` is hardcoded to `1` in the linker (`linker.cpp:588`) | Every target looks like KR32. |
-| KR16 image | `.kr16` writer emits only `.text` + `.debug_str` (`kr16_image.cpp:51-105`); `attach_kdbg` is built but dropped (`krld/main.cpp:242, 278-298`) | No KDBG in KRCompiler-built KR16 images today. |
+| KR16 image | The writer carries `.kdbg` as an unallocated debug section (`kr16_image.h`); older images built before that change carry only `.text` + `.debug_str`. | New images debug at source level; older images use the legacy adapter. |
 
 The updated KR32 UI makes the location gap concrete: a promoted local now shows
 `register: R9` or `register: F2` instead of an address, and its members are read
@@ -1205,7 +1206,7 @@ Do **not** make the surface wait for a perfect format. Two tracks:
 
 ### 5.5 Legacy dialects
 
-To debug images produced by the current KR32/KR16 toolchains, krdbg can provide
+To debug images produced by the KR32 and KR16 toolchains, krdbg can provide
 optional adapters:
 
 - `legacy_kr32`: parse `.debug_info` (`S/L/F/V/P/G/T/C/M`) into `DebugInfo`.
@@ -1659,13 +1660,50 @@ is too UI-shaped):
 This adapter is the real test of the abstraction: if it needs UI changes, the
 abstraction is wrong. Target: **zero `if (target == kr16)` in krdbg.**
 
-### 7.3 KRCompiler host (the eventual product)
+### 7.3 KR216 adapter (minimal target)
+
+Wraps `kr216::Machine`, its image loader, decoder and disassembler:
+
+- Load: `.kr216` directly. KDBG is read from the image's payload. The host build
+  chain does not build kr216 sources; a kr216 image is loaded with `--kr216`.
+- State: sixteen 16-bit general registers with PC/SP/FP roles, the flag word and
+  the FPU values; 64 KiB address space.
+- Disassembly: kr216's decoder; instructions are 1–6 bytes and the view advances
+  by decoded length.
+- Unwind: the kr216 frame layout.
+- Devices: none. `com_port()` and `video()` return `nullptr`; the surface hides
+  the COM and video panels.
+- Coverage: the adapter has no committed fixture, test file or golden. The
+  two-adapter configure links it so the render goldens are measured with an
+  adapter present, not to test its behavior.
+
+### 7.4 KR232 adapter (second 32-bit target)
+
+Wraps `kr232::Machine`, its container loader, decoder and disassembler:
+
+- Load: `.kr232` containers and flat kernel images; the adapter reads the
+  program's `.kdbg` and resolves source paths against the image directory and
+  configured roots. `load_kernel()` loads a kernel and a user program together.
+- State: R0–R15, PC/SP/EFP, four f64 registers, flags Z…K with K and I
+  non-writable; 32-bit addresses and pointers; kernel RAM, user RAM, device
+  window and the unbacked gaps between them.
+- Disassembly: kr232's decoder; variable-length instructions advance by decoded
+  length.
+- Unwind: the EFP chain, with `FunctionInfo::frame` zero and frame offsets
+  negated.
+- Devices: the three-register COM port over page 2 and the committed framebuffer
+  as `IVideoSource`.
+- Coverage: `tests/test_kr232_adapter.cpp` and its fixtures, plus
+  `goldens/kr232-loaded.hash`, are a separate test binary so the render goldens
+  stay adapter-independent. The host build chain builds kr232 sources.
+
+### 7.5 KRCompiler host (the eventual product)
 
 A small `krdbg-host` executable (or a mode in `krc`) can:
 
 1. on `LOAD`, run `krc`/`krld` for a source file (or load a container directly);
    on `KERNEL`, use the host's embedded kernel/BIOS pair,
-2. load the resulting `.kr32`/`.kr16`,
+2. load the resulting `.kr32`/`.kr16`/`.kr216`/`.kr232`,
 3. locate `.kdbg` (or sidecar),
 4. construct a target adapter,
 5. run the surface.
@@ -1673,7 +1711,7 @@ A small `krdbg-host` executable (or a mode in `krc`) can:
 This host is the reference for “new VM in a weekend”: implement `IDebugTarget`,
 link krdbg, done.
 
-### 7.4 Integration mechanics
+### 7.6 Integration mechanics
 
 - krdbg exports CMake targets: `krdbg::core`, `krdbg::ui`,
   `krdbg::platform_sdl2`, `krdbg::platform_win32`, `krdbg::kdbg`,
@@ -1685,13 +1723,14 @@ link krdbg, done.
   `debug_gui` command. Its existing `gui` command can be replaced when parity
   is proven.
 - krdbg has no dependency on a VM. Optional in-tree adapters
-  (`adapters/kr32`, `adapters/kr16`) are development bridges behind CMake
-  options; long-term they belong in the VM repos, because the VM owns its ABI.
-  `KRDBG_KR32_ADAPTER` and `KRDBG_KR16_ADAPTER` default to `OFF`. When an
-  adapter is `ON`, its `KRDBG_KR32_ROOT`/`KRDBG_KR16_ROOT` must name a tree
+  (`adapters/kr32`, `adapters/kr16`, `adapters/kr216`, `adapters/kr232`) are
+  development bridges behind CMake options; long-term they belong in the VM
+  repos, because the VM owns its ABI. `KRDBG_KR32_ADAPTER`,
+  `KRDBG_KR16_ADAPTER`, `KRDBG_KR216_ADAPTER` and `KRDBG_KR232_ADAPTER` default
+  to `OFF`. When an adapter is `ON`, its `KRDBG_<VM>_ROOT` must name a tree
   containing `CMakeLists.txt` and the VM's `machine` header, and a missing tree
-  stops configuration with that path. A bare checkout and CI build the
-  adapter-OFF configuration only.
+  stops configuration with that path. A bare checkout and the default gate build
+  the adapter-OFF configuration only.
 - Version the interface (`krdbg::version`) so a VM can check compatibility at
   compile time.
 
@@ -1709,6 +1748,11 @@ link krdbg, done.
 | **M5 — Compiler pipeline** | Load/build provider invoking `krc`/`krld`; `LOAD` builds source and loads it; `RESET` rebuilds from source; `KERNEL` loads the embedded pair; source roots; compiler/linker/assembler settings schemas | Load a `.c`/`.cpp`/`.s`, build, stop at `main`, step to a line, inspect a local; `KERNEL` loads the embedded OS; source resolves from a clean checkout; tool settings appear in the dialog without UI changes | 2–3 weeks |
 | **M6 — Packaging and post-v1** | Windows zip; Linux x64/ARM64 tarballs (SDL2 2.32 system requirement, no bundled SDL2), DAP front end, extra architectures | Windows and Linux x64 artifacts run from clean checkouts; the ARM64 tester log records the Pi tarball; DAP and GUI share the session | 2+ weeks |
 
+**Release state.** 0.2.0 shipped the M0–M6 packaging work with the KR32 and KR16
+adapters. The DAP server and multi-core scheduler run remain post-v1, as do the
+kr216 and kr232 adapters. `implementation.md` §8.1 records adapter coverage and
+the remaining gaps.
+
 The order is deliberate: **visual baseline first** (the user's priority), then
 the engine, then a real target, then a second architecture to prove the
 abstraction, then the compiler pipeline.
@@ -1722,13 +1766,15 @@ tarball as well; a cross-build is not a substitute.
 
 These are prerequisites, not krdbg tasks. They should be tracked in the
 KRCompiler workspace so krdbg does not quietly depend on a missing change.
+`krc::debug`, the KR16 `.kdbg` writer and per-target `target_id` are delivered;
+the v1.1 record set is tracked in `implementation.md` §10.
 
 | Item | Why | Blocks |
 |---|---|---|
 | Extract and install `krc::debug` (public header, static lib, CMake package) | Chosen KDBG reader ownership; one parser | M1's canonical link (the vendored bootstrap keeps the UI buildable until then) |
 | Add the v1.1 records from §5.3 | Locations, inheritance, arrays, scopes, 64-bit, real target IDs | Full M3/M4 fidelity; M3 can use v1 fallbacks |
-| Embed `.kdbg` in the KR16 `.kr16` writer, or write a build-ID sidecar | KRCompiler-built KR16 images currently carry no debug info | M4's KDBG path (legacy KR16 parser is the fallback) |
-| Set `target_id` per target instead of `1` | The debugger must validate the image's target | M1's target/format check |
+| Embed `.kdbg` in the KR16 `.kr16` writer, or write a build-ID sidecar | Delivered: `write_kr16_image` writes `.kdbg` as an unallocated debug section; older images fall back to the legacy parser | M4's KDBG path |
+| Set `target_id` per target instead of `1` | Delivered: the linker copies the object's `target_id` into the image and KDBG (`linker.cpp:426,737`) | M1's target/format check |
 
 ---
 
@@ -1792,7 +1838,7 @@ KRCompiler workspace so krdbg does not quietly depend on a missing change.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | KDBG v1 lacks locations/base/arrays/64-bit | Cannot match KR32 at `-O1`, C++ inheritance, or 64-bit targets | Neutral model + approved additive v1.1; legacy KR32 adapter for v1 parity |
-| KR16 `.kr16` has no KDBG | KRCompiler-built KR16 images debug as assembly only | Add `.kdbg` to `write_kr16_image`; or start with legacy KR16 info |
+| Older KR16 images have no KDBG | Images built before the writer change debug as assembly only | Use the legacy KR16 parser; new images carry `.kdbg` |
 | UI scope is large | Months of painting/hit-testing | Fake target + vertical slices; copy KR32 constants and interactions; don't redesign |
 | Adapter ABI coupling | Each VM needs code | Keep interface narrow; adapter lives with the VM; version it |
 | Platform dependency | SDL2 DLL on Windows or static-build cost | Win32 GDI presenter on Windows, SDL2 on Linux; abstract `IWindow` |
@@ -1850,26 +1896,14 @@ detection for layered settings.
 
 ---
 
-## 12. Next actions
+## 12. Current work
 
-1. **Freeze the four public interfaces** — `target.h`, `session.h`, `settings.h`,
-   `surface.h` — as the integration contract. Everything else can wait; these
-   are what a VM links against.
-2. **Start M0** (no VM dependency): CMake skeleton, portable `Canvas`,
-   `IWindow` + SDL2 development presenter, fake target, empty/loaded surface,
-   headless PPM and frame hash. The first screenshot should match KR32's layout
-   and theme.
-3. **Open the KRCompiler prerequisites in parallel:** extract/install
-   `krc::debug`; define the additive v1.1 records; embed `.kdbg` in the KR16
-   `.kr16` writer; replace the hardcoded `target_id`.
-4. **Then M1:** `DebugInfo`, KDBG v1 decode, `DebugSession`, line stepping,
-   unwinding, breakpoints, variable expansion and fake-target tests. M1 links
-   `krc::debug`, or the vendored bootstrap until that package exists.
-5. **First design review before M2:** KDBG v1.1 tags, the custom-panel contract,
-   the fake-target program used for goldens, and project-root detection.
+The v1 release is complete. Post-v1 work is tracked in `implementation.md`:
 
-M0 can start immediately. M1 is the first point that touches KRCompiler; M3 is
-the first point that runs a real VM.
+- DAP server from the same session.
+- Multi-core scheduler run.
+- Adapter hardening: a kr216 fixture, test and golden, and a gate that builds all
+  four adapters rather than the adapter-OFF configuration alone.
 
 ---
 

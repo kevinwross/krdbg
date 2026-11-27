@@ -10,20 +10,18 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 
 ## Plan
 
-**Status.** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross — `PLAN.md` and
-`implementation.md` are approved. G0–G6 are closed; M1–M6 are complete. Release
-0.2.0 has Windows x64, Linux x64 and ARM64 artifacts; the tag workflow attaches
-the two x64 assets and ARM64 is recorded in the tester log. The host runs the
-installed KRCompiler `402cfaf` package. There is no ARM64 GitHub Actions runner
-and none is planned.
+**Authority.** `PLAN.md` and `implementation.md` are approved
+(2026-11-20T03:04:50-08:00 by kevinwross). `PLAN.md` is the design of record;
+`implementation.md` is the status tracker. The host runs the installed KRCompiler
+`402cfaf` package.
 
-**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §8 (milestones), and §11 (decisions) before starting M2; §1–2 and the appendices are background.
+**Authoritative for.** `PLAN.md` — architecture, the four public interfaces, milestones, and decisions. Read §3 (goals and non-goals), §4 (architecture), §7 (adapters), §8 (milestones), and §11 (decisions) before changing the design; §1–2 and the appendices are background.
 
 **Standing constraints.** Freeze the four interfaces (`target.h`, `session.h`, `settings.h`, `surface.h`) before implementation starts. `krdbg_ui` depends on `krdbg_core`, never the reverse, and neither depends on a VM. The UI contains no VM types, register numbers, instruction widths, or target conditionals. KDBG is the only debug format; legacy dialects are optional adapters. Windows ships a Win32 GDI presenter with no SDL2 DLL; Linux x64 and ARM64 use SDL2. `krc::debug` is a KRCompiler prerequisite; a vendored bootstrap is temporary and must carry provenance and a parity test.
 
 ## Definition of done
 
-- [ ] The current milestone's acceptance criteria in `PLAN.md` §8 are met
+- [ ] The current task's acceptance criteria in `PLAN.md` or `implementation.md` are met
 - [ ] Build and tests pass (use the gate commands in Environment)
 - [ ] Golden screenshots or frame hashes added or updated for every UI change (from M0)
 - [ ] `PLAN.md` updated first for any interface or contract change; it remains the design of record
@@ -31,7 +29,8 @@ and none is planned.
 - [ ] Change committed; no secrets, debug output, or unrelated edits
 
 The gate scripts in Environment are the executable checks; run the one for the
-platform you changed.
+platform you changed. When the change touches an adapter, build and test that
+adapter separately as well; the default presets set every adapter option off.
 
 ## Platform targets
 
@@ -41,9 +40,9 @@ platform you changed.
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | BigBrain with `scripts/gate-windows.ps1` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
-| Linux | x64 | WSL Ubuntu on BigBrain with `scripts/gate-linux.sh` | PLAN.md §4.8; M0 gate pass on 2026-11-20 |
-| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; M0 gate pass on 2026-11-20 (tester log) |
+| Windows | x64 | BigBrain with `scripts/gate-windows.ps1` | PLAN.md §4.8; 0.2.0 release gate passed |
+| Linux | x64 | WSL Ubuntu on BigBrain with `scripts/gate-linux.sh` | PLAN.md §4.8; 0.2.0 release gate passed |
+| Linux (Raspberry Pi) | ARM64 | `BitWhiz` with `scripts/gate-linux-arm64.sh` | PLAN.md §4.8 and §8 M6; 0.2.0 verified through the tester log |
 
 Target-specific notes:
 
@@ -55,13 +54,13 @@ Target-specific notes:
 - **Linux (Raspberry Pi):**
   - Confirm every native dependency has a prebuilt artifact for ARM64, or document the build-from-source requirement.
   - Do not assume word size, byte order, or the presence of SIMD.
-  - Verification is the ARM64 tester session on BitWhiz, which polls `main`, runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`; there is no GitHub Actions runner.
+  - Verification is the ARM64 gate on BitWhiz, driven by `../kr232/scripts/check-arm64.ps1`; this repository's `docs/arm64-test-log.md` records runs made directly from its checkout. There is no GitHub Actions runner.
 <!-- project:targets:end -->
 
 ## Architecture boundaries
 
 - `krdbg_ui` may depend on `krdbg_core`; `krdbg_core` must not depend on `krdbg_ui`. Neither may depend on a VM; VM code lives in an adapter.
-- `krdbg/ui` contains no KR32/KR16 types, register numbers, instruction lengths, address widths, or `if (target == …)`.
+- `krdbg/ui` contains no VM types, register numbers, instruction lengths, address widths, or `if (target == …)`.
 - Platform code sits behind `IWindow`/`IVideoWindow`; the Win32 and SDL2 presenters stay independent of the surface.
 - `krdbg_kdbg` alone translates `KdbgImage` into `DebugInfo`; the UI never sees `KdbgImage`.
 
@@ -73,8 +72,9 @@ Target-specific notes:
 Visual Studio developer environment with `vcvarsall.bat x64`, then configures,
 builds and tests the `windows-msvc` and `windows-msvc-release` presets and checks
 the goldens and the no-`SDL2.dll` rule. Linux x64: `scripts/gate-linux.sh`;
-Linux ARM64: `scripts/gate-linux-arm64.sh`. CI calls the same scripts
-(`.github/workflows/ci.yml`).
+Linux ARM64: `scripts/gate-linux-arm64.sh`, invoked by the kr232 family gate.
+There is no hosted CI; the family gate `../kr232/scripts/check-family.ps1` runs
+each repository's gate in dependency order.
 
 The presets can be driven directly once the environment is initialized:
 
@@ -101,14 +101,19 @@ its toolchain; it resolves MSVC, the Windows SDK and CMake through `vswhere`.
 
 **Verified on** BigBrain **at** 2026-11-20T04:05:45-08:00: `.agents/templates/doctor.msvc.ps1` → exit 0, reporting `msvc 14.51.36231`, `cl` at the path above, `cmake version 4.3.1-msvc1 (developer environment)`, and that this machine builds only from the Visual Studio developer environment. WSL Ubuntu configured, built and tested the `linux-wsl` and `linux-wsl-release` presets; WSLg presented the loaded window. All three platform gates passed at M0, ARM64 via the `BitWhiz` tester log.
 
-**Install (requires approval).** Nothing was installed for M0. Windows uses the MSVC, CMake and Ninja already bundled with Visual Studio 18; WSL uses the existing GCC, CMake, Ninja and `libsdl2-dev` packages. Never install a compiler, SDK, CMake, Ninja or SDL to make a gate pass: report the missing tool.
+**Install (requires approval).** A gate never installs a compiler, SDK, CMake,
+Ninja or SDL. Windows uses the MSVC, CMake and Ninja bundled with Visual Studio
+18; WSL uses the existing GCC, CMake, Ninja and `libsdl2-dev` packages. Report a
+missing tool; provisioning is the user's decision.
 
 ## Known traps
 
-- ARM64 is verified by a tester session, not GitHub Actions: BitWhiz polls `main`, runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`. There is no self-hosted runner and none is planned; do not add an `arm64` job. The protocol is `docs/arm64-tester.md`; the latest entry is the ARM64 evidence for its revision.
+- ARM64 is verified on BitWhiz, not GitHub Actions. Current runs are driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh`; `docs/arm64-test-log.md` records runs made directly from this checkout. There is no self-hosted runner and none is planned; do not add an `arm64` job.
+- The `windows-msvc` and `linux-wsl` presets set every `KRDBG_*_ADAPTER` option to `OFF`. A bare gate pass is not adapter evidence; build the adapter with its option and root set.
+- `src/host/build_chain.cpp` accepts `kr32`, `kr16` and `kr232` sources. A kr216 source passed to `--load ... --target kr216` is rejected; `--kr216` loads an existing `.kr216` image.
 - WSLg supplies `DISPLAY=:0` and `WAYLAND_DISPLAY=wayland-0`, and `/mnt/wslg` exists; no X server is needed. Run WSL GUI checks as `wsl -e sh -lc '...'` because a non-login shell may not inherit those variables.
 - The Windows deliverable must not depend on `SDL2.dll`; the Win32 GDI presenter is the chosen shape (`PLAN.md` §4.8). Static SDL2 was rejected for v1.
-- KRCompiler `e04b3b2` exports the KDBG v1.1 `krc::debug` pair; krdbg vendors the exact `kdbg.*` files under `third_party/krc-debug/` so a bare checkout and CI build without a KRCompiler install. The vendored copy carries the commit SHA and a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).
+- KRCompiler `e04b3b2` exports the KDBG v1.1 `krc::debug` pair; krdbg vendors the exact `kdbg.*` files under `third_party/krc-debug/` so a bare checkout builds without a KRCompiler install. The vendored copy carries the commit SHA and a parity test against `krc --dump-symbols --json` (`PLAN.md` §4.9).
 
 ## WSL builds
 

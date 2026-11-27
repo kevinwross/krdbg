@@ -1,7 +1,8 @@
 # krdbg — Implementation Plan
 
-**Status:** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross. Implementation may
-start; M0.1 is the next task.
+**Status:** APPROVED 2026-11-20T03:04:50-08:00 by kevinwross. M0–M6 are complete
+and released as 0.2.0; the kr216 and kr232 adapters are post-0.2.0 work on
+`main`.
 **Design of record:** [PLAN.md](PLAN.md). If this file and `PLAN.md` disagree,
 `PLAN.md` wins and this file is corrected.
 **Platforms:** Windows x64, Linux x64 (WSL), Linux ARM64 (Raspberry Pi).
@@ -45,7 +46,7 @@ it is not a GitHub Actions job.
 - Any change to `target.h`, `session.h`, `settings.h` or `surface.h` updates
   `PLAN.md` in the same change, before the code.
 - `krdbg_ui` depends on `krdbg_core`; never the reverse. Neither depends on a VM.
-- `src/ui` and `include/krdbg` contain no KR32/KR16 types, register numbers,
+- `src/ui` and `include/krdbg` contain no VM types, register numbers,
   instruction widths, address widths, or `if (target == …)`.
 - A UI change adds or updates a golden hash in the same change, from M0 onward.
 - `AGENTS.local.md` is updated with the real build/test/gate commands as soon as
@@ -58,7 +59,7 @@ it is not a GitHub Actions job.
 | Windows x64 | G0–G6 | `scripts/gate-windows.ps1` |
 | Linux x64 (WSL) | G0–G6 | `scripts/gate-linux.sh` |
 | Linux ARM64 (Pi) | G0 and G6 required; G1–G5 tracked | `scripts/gate-linux-arm64.sh`; `docs/arm64-test-log.md` |
-| CI (Windows/Ubuntu) | G0 and every gate after the matrix lands in M2 | `.github/workflows/ci.yml` |
+| Hosted CI | none | No GitHub Actions; the gate scripts above are the checks |
 | ARM64 tester session | G0 and G6 | `docs/arm64-tester.md`; `docs/arm64-test-log.md` |
 
 A gate fails if any required platform fails. ARM64 evidence between M0 and M6 is
@@ -73,10 +74,13 @@ recorded but does not block a milestone unless the gate says it does.
 | M0 — Skeleton, platforms, visual baseline | G0 | 1–2 weeks | `[x] done` |
 | M1 — Debug core and KDBG | G1 | 2 weeks | `[x] done` |
 | M2 — Full surface, settings, video, Windows presenter | G2 | 4–5 weeks | `[x] done` |
-| M3 — KR32 vertical slice | G3 | 2 weeks | `[ ] planned` |
-| M4 — KR16 second architecture | G4 | 2 weeks | `[ ] planned` |
-| M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[ ] planned` |
+| M3 — KR32 vertical slice | G3 | 2 weeks | `[x] done` |
+| M4 — KR16 second architecture | G4 | 2 weeks | `[x] done` |
+| M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[x] done` |
 | M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[x] done` |
+
+M6's release gate is closed. The post-v1 items in M6.6 remain open and do not
+block 0.2.0.
 
 Dependencies:
 
@@ -888,11 +892,11 @@ is post-v1 and does not block this gate.
 - [x] **M6.4.1** ARM64 tester entry required at G6.
   Evidence: `docs/arm64-test-log.md` entry 2026-11-20T22:48:28-08:00 @
   `68e56c6` records the 0.2.0 ARM64 package, smoke test and hashes.
-- [x] **M6.4.2** Release workflow produces Windows and Linux x64 artifacts; ARM64
+- [x] **M6.4.2** Release artifacts are produced for Windows and Linux x64; ARM64
       packaging is verified by the tester log.
-  Evidence: `.github/workflows/release.yml` runs on `v*` tags with Windows and
-  Ubuntu jobs, then attaches both artifacts to the GitHub release. First run
-  `44877925433` on `v0.2.0` (`228fd03`) completed success; no ARM64 job.
+  Evidence: the 0.2.0 artifacts were built and attached by release workflow
+  `44877925433` on `v0.2.0` (`228fd03`). That workflow was removed on 2026-11-23;
+  packaging is now run by hand with the scripts in `docs/release.md`.
 - [x] **M6.4.3** Checksums and release notes.
   Evidence: each artifact carries `SHA256SUMS`; the release uses
   `docs/release.md` as its notes; the attached assets are:
@@ -912,8 +916,11 @@ is post-v1 and does not block this gate.
 ### M6.6 Post-v1 (tracked, non-blocking)
 
 - [ ] **M6.6.1** DAP server from the same session.
-- [ ] **M6.6.2** Additional VM adapters.
+- [x] **M6.6.2** Additional VM adapters: kr216 and kr232.
 - [ ] **M6.6.3** Multi-core scheduler run.
+
+The kr232 adapter is full source-level coverage. The kr216 adapter is
+assembly/source-level with no devices and no in-tree fixture or test. See §8.1.
 
 ### Gate G6 — Release
 
@@ -927,11 +934,40 @@ is post-v1 and does not block this gate.
 - [x] **G6.6** Docs and checksums present.
 - [x] **G6.7** No open BLOCKS or FIX-BEFORE findings.
 
+### 8.1 Post-0.2.0 adapter status
+
+| Adapter | Level | Devices | Source build | In-tree tests | Golden |
+|---|---|---|---|---|---|
+| KR32 | full | COM, framebuffer, embedded OS | yes | `tests/test_kr32_adapter.cpp`, 7 cases | `goldens/kr32-loaded.hash` |
+| KR16 | full | COM; no framebuffer or kernel | yes | `tests/test_kr16_adapter.cpp`, 8 cases | `goldens/kr16-loaded.hash` |
+| KR216 | assembly/source | none | no | none | none |
+| KR232 | full | COM, framebuffer, kernel+user | yes | `tests/test_kr232_adapter.cpp`, 14 cases; 2 host-build cases in the same binary | `goldens/kr232-loaded.hash` |
+
+The default `windows-msvc` and `linux-wsl` presets build every adapter off.
+`scripts/check-two-adapters.ps1` configures kr216 and kr232 and builds
+`krdbg_tests`; the Linux gate builds the whole two-adapter tree and runs CTest,
+so it also builds `krdbg_kr232_tests`. No gate builds kr32 or kr16. One configure
+with all four adapters was built at `3c28e32`; no gate repeats it.
+
+Known gaps:
+
+- kr216 has no fixture, test file or golden. Its adapter is compiled by the
+  two-adapter configure but not exercised functionally.
+- The host build chain accepts kr32, kr16 and kr232 sources; it rejects kr216
+  sources (`src/host/build_chain.cpp`). A kr216 image loads directly. The demo's
+  `--target` help still lists kr216 (`apps/demo/main.cpp`).
+- `cmake/check-platform-boundary.cmake` scans for kr32, kr16 and krc, not for
+  kr216 or kr232. A VM header using either new prefix could enter the UI or core
+  without failing the boundary check.
+
 ---
 
 ## 9. Evidence log
 
 Record the real command and result. Do not pre-fill expected output.
+
+Rows that name a GitHub Actions workflow record the 0.2.0 release as it ran. The
+workflows were removed on 2026-11-23; the scripts are the current gate.
 
 | Gate | Platform | Command / script | Result | Commit |
 |---|---|---|---|---|
@@ -1235,6 +1271,8 @@ Recorded 2026-11-20T22:14:07-08:00.
   The local KR16 adapter run reports **116/0**. The KR32 adapter build was not
   rerun; its sibling checkout now requires `krc-toolchain`.
 
+- **2026-11-26T16:29:41-08:00** — Parallel jobs follow the processor count. `gate-linux.sh` keeps the x86_64 rows at two jobs because GCC 15 in this WSL image intermittently segfaults while garbage-collecting, and takes every processor on ARM64; `gate-windows.ps1` passes the count to `ctest`.
+
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
@@ -1242,11 +1280,11 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 tester session on `BitWhiz` (Raspberry Pi on the local network; polls `main`) | G0 / G6 | kevinwross | `[x]` The tester path is `docs/arm64-tester.md`; it runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`. There is no GitHub Actions runner and none is planned. The entry 2026-11-20T14:30:14-08:00 for main @ `81e1c31` records `krdbg_unit` 105 checks, 0 failures, plus the adapter-on 115-check extra run. |
-| `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout and CI never depend on a local KRCompiler install. |
+| ARM64 tester session on `BitWhiz` (Raspberry Pi on the local network) | G0 / G6 | kevinwross | `[x]` BitWhiz is driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh`. `docs/arm64-test-log.md` records runs made directly from this checkout. There is no GitHub Actions runner and none is planned. |
+| `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout never depends on a local KRCompiler install. |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
-| `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[ ]` |
-| `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[ ]` |
+| `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[x]` `write_kr16_image` carries `.kdbg` as an unallocated debug section; older images use the legacy parser. |
+| `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[x]` The installed `402cfaf` package provides `bin/krc`, `bin/krld` and the target sysroots; the 0.2.0 build and the host-build tests use it. |
 
 If a prerequisite is unavailable, use the documented fallback (vendored KDBG,
 legacy KR16 debug info, fake target) and mark the gate check `BLOCKED`; never
@@ -1263,9 +1301,9 @@ claim the prerequisite is met.
 - [x] The milestone order and estimates are acceptable.
 - [x] The first task to execute is M0.0.1.
 
-Approval is recorded at 2026-11-20T03:04:50-08:00; implementation starts at M0.1.
-The ARM64 verifier is the tester session `BitWhiz`, a Raspberry Pi on the local
-network owned by kevinwross, polling `main`; its protocol is
-`docs/arm64-tester.md` and its evidence is `docs/arm64-test-log.md`. It is a
-prerequisite for G0.3/G0.9 and G6; M0.8.5 is the tester path and G0 records the
-entry for the tested revision. There is no GitHub Actions runner.
+Approval is recorded at 2026-11-20T03:04:50-08:00. M0–M6 are complete and
+released as 0.2.0; post-0.2.0 adapter work is recorded in §8.1. The ARM64 verifier
+is the gate on `BitWhiz`, a Raspberry Pi on the local network owned by
+kevinwross, driven by `../kr232/scripts/check-arm64.ps1`. `docs/arm64-tester.md`
+is the direct-tester protocol and `docs/arm64-test-log.md` records those runs.
+There is no GitHub Actions runner.

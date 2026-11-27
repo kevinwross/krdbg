@@ -1,14 +1,31 @@
 # Release artifacts
 
-Version: `0.2.0`.
+Latest release: `0.2.0`. The tree also carries adapter work that no release tag
+covers yet; the artifact names below are the 0.2.0 names and follow the project
+version in `CMakeLists.txt`.
 
-## Release workflow
+## Release process
 
-Pushing a tag matching `v*` (for example `v0.2.0`) runs
-[.github/workflows/release.yml](../.github/workflows/release.yml). The workflow
-runs the Windows and Linux x64 gates, builds and packages both artifacts, and
-attaches them to the GitHub release. ARM64 is not a job: the tester session
-records its tarball and smoke test in `docs/arm64-test-log.md`.
+There is no release workflow and no hosted CI. Run the gate for the host, build
+the release preset, run the packaging script by hand, and attach the resulting
+archive to the tag. ARM64 packaging runs on the tester machine. The packaging
+scripts default to version `0.2.0`; pass `-Version` or `--version` when the
+project version changes.
+
+```powershell
+powershell -File scripts/gate-windows.ps1
+powershell -File scripts/package-windows.ps1 `
+    -BuildDir build/windows-msvc-release `
+    -Commit <40-character commit>
+```
+
+```sh
+./scripts/gate-linux.sh
+./scripts/package-linux-tarball.sh \
+    --arch x64 \
+    --build-dir build/linux-wsl-release \
+    --commit <40-character commit>
+```
 
 ## Licensing
 
@@ -35,18 +52,10 @@ krdbg-0.2.0-windows-x64.zip
   SHA256SUMS
 ```
 
-Build `windows-msvc-release`, then run:
-
-```powershell
-powershell -File scripts/package-windows.ps1 `
-    -BuildDir build/windows-msvc-release `
-    -Commit <40-character commit>
-```
-
-The script runs the executable from the staging directory, records its frame
-hash in `VERIFY.txt`, checks with `dumpbin` that no `SDL2.dll` dependency exists,
-scans for `SDL2.dll`, asserts the license payload, writes `SHA256SUMS`, and
-prints the zip size and SHA-256.
+The packaging script runs the executable from the staging directory, records its
+frame hash in `VERIFY.txt`, checks with `dumpbin` that no `SDL2.dll` dependency
+exists, scans for `SDL2.dll`, asserts the license payload, writes `SHA256SUMS`,
+and prints the zip size and SHA-256.
 
 ## Linux x64 tarball
 
@@ -68,18 +77,10 @@ krdbg-0.2.0-linux-x64.tar.gz
 ```
 
 SDL2 **2.32** is a system requirement; the tarball bundles no SDL2 library and
-therefore carries no SDL2 notice. Build `linux-wsl-release`, then run:
-
-```sh
-./scripts/package-linux-tarball.sh \
-    --arch x64 \
-    --build-dir build/linux-wsl-release \
-    --commit <40-character commit>
-```
-
-For ARM64 on the tester machine, use `--arch arm64`; the default build
-directory is `build/linux-arm64-release` and the artifact is
-`krdbg-0.2.0-linux-arm64.tar.gz`. Do not cross-build it on x64.
+therefore carries no SDL2 notice. For ARM64 on the tester machine, use
+`--arch arm64`; the default build directory is `build/linux-arm64-release` and
+the artifact is `krdbg-<version>-linux-arm64.tar.gz`. Do not cross-build it on
+x64.
 
 The script runs the binary from the staging directory, records its frame hash,
 asserts the license payload and the absence of bundled SDL2, writes
@@ -87,6 +88,6 @@ asserts the license payload and the absence of bundled SDL2, writes
 
 ## Linux ARM64
 
-ARM64 packaging waits for the tester machine and an ARM64 build. Do not
-substitute a cross-build. The artifact evidence is a
-`docs/arm64-test-log.md` entry for the release revision.
+ARM64 packaging runs on the tester machine from an ARM64 build. The artifact
+evidence is the packaged tarball and its smoke test, recorded with the release
+revision.
