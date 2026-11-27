@@ -479,8 +479,8 @@ tests, and the bare gate still passes.
 
 ### 7.1 Fixtures
 
-Put a small image's source under `tests/fixtures/<vm>/` and commit the source and
-a regeneration script, not the generated image. Include:
+Commit a small image and its source under `tests/fixtures/<vm>/`, plus a
+regeneration script. Include:
 
 - a program with `main`, a callee, a local scalar, a struct or array, and a
   global;
@@ -488,10 +488,9 @@ a regeneration script, not the generated image. Include:
 - optionally a second image with no debug information, and a malformed image
   for the error path.
 
-KR32, KR16 and KR232 pair the source with a `regenerate.ps1` that records the
-command and takes the tool paths from environment variables. Generate the image
-before running the adapter test; the test itself must not need a compiler.
-KR216 has no fixture or regeneration script yet.
+KR32, KR16 and KR232 pair the image with a `regenerate.ps1` that records the
+command and takes the tool paths from environment variables. The test itself
+must not need a compiler. KR216 has no fixture or regeneration script yet.
 
 ### 7.2 Required tests
 

@@ -19,9 +19,9 @@ The matching adapter must be built in (`KRDBG_KR32_ADAPTER`,
 `KRDBG_KR16_ADAPTER`, `KRDBG_KR216_ADAPTER`, `KRDBG_KR232_ADAPTER`). The default
 presets build with all four off.
 
-The image fixtures under `tests/fixtures/<vm>/` are generated, not tracked. Run
-the `regenerate.ps1` or `regenerate.py` in that directory before running the
-adapter tests; each directory's README names the inputs.
+The image fixtures under `tests/fixtures/<vm>/` are checked in. Rebuild them
+with the `regenerate.ps1` or `regenerate.py` in that directory when their source
+changes; each directory's README names the inputs.
 
 ## Pin
 

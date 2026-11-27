@@ -1,8 +1,7 @@
 # KR232 fixtures
 
-Five generated containers exercise the kr232 adapter. They are built by
-`regenerate.ps1` from KRCompiler and kr232 sources, not hand-made, and the
-images are not tracked; generate them before running the adapter tests:
+Five checked-in containers exercise the kr232 adapter. They are built by
+`regenerate.ps1` from KRCompiler and kr232 sources, not hand-made:
 
 | Fixture | Used for |
 |---|---|
