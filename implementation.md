@@ -9,9 +9,9 @@ and released as 0.2.0; the kr216 and kr232 adapters are post-0.2.0 work on
 **Golden policy:** Windows and Linux x64 must match the committed frame hash;
 ARM64 runs the functional checks and may keep a separate hash.
 **CI policy:** there is no hosted CI. The gates are `scripts/gate-windows.ps1` on Windows, `scripts/gate-linux.sh` in WSL, `scripts/gate-linux-arm64.sh` on BitWhiz, and `scripts/check-two-adapters.ps1` for the two-adapter tree; packaging is `scripts/package-windows.ps1` and `scripts/package-linux-tarball.sh`, run by hand at a tag.
-ARM64 is verified by the tester session documented in `docs/arm64-tester.md`,
-which runs `scripts/gate-linux-arm64.sh` and appends `docs/arm64-test-log.md`;
-it is not a GitHub Actions job.
+ARM64 is verified by the family gate on BitWhiz
+(`../kr232/scripts/check-arm64.ps1`), which runs `scripts/gate-linux-arm64.sh`
+and reports `ARM64 CHECKS`; it is not a GitHub Actions job.
 **Repository:** initialized and pushed in M0.0 (`6106cfe`); see §2.
 
 ---
@@ -58,9 +58,9 @@ it is not a GitHub Actions job.
 |---|---|---|
 | Windows x64 | G0–G6 | `scripts/gate-windows.ps1` |
 | Linux x64 (WSL) | G0–G6 | `scripts/gate-linux.sh` |
-| Linux ARM64 (Pi) | G0 and G6 required; G1–G5 tracked | `scripts/gate-linux-arm64.sh`; `docs/arm64-test-log.md` |
+| Linux ARM64 (Pi) | G0 and G6 required; G1–G5 tracked | `scripts/gate-linux-arm64.sh` via `../kr232/scripts/check-arm64.ps1` |
 | Hosted CI | none | No GitHub Actions; the gate scripts above are the checks |
-| ARM64 tester session | G0 and G6 | `docs/arm64-tester.md`; `docs/arm64-test-log.md` |
+| ARM64 family gate (BitWhiz) | G0 and G6 | `../kr232/scripts/check-arm64.ps1`; `docs/ci-arm64.md` |
 
 A gate fails if any required platform fails. ARM64 evidence between M0 and M6 is
 recorded but does not block a milestone unless the gate says it does.
@@ -78,20 +78,25 @@ recorded but does not block a milestone unless the gate says it does.
 | M4 — KR16 second architecture | G4 | 2 weeks | `[x] done` |
 | M5 — Compiler pipeline and tool settings | G5 | 2–3 weeks | `[x] done` |
 | M6 — Packaging, ARM64 release, post-v1 | G6 | 2+ weeks | `[x] done` |
+| M7 — Working kr232 debugger | G7 | 6–7 weeks | `[ ] in progress` |
 
 M6's release gate is closed. The post-v1 items in M6.6 remain open and do not
-block 0.2.0.
+block 0.2.0. M7 is the post-0.2.0 milestone that turns the M0–M6 surface into a
+working kr232 debugger; its plan is `docs/working-debugger-plan.md` and its tasks
+are §8.2.
 
 Dependencies:
 
 ```
-M0 ──► M1 ──► M2 ──► M3 ──► M4 ──► M5 ──► M6
+M0 ──► M1 ──► M2 ──► M3 ──► M4 ──► M5 ──► M6 ──► M7
               └─────► M5 (can start after M3)
 ```
 
 M1 needs `krc::debug` or the vendored bootstrap. M3 needs the KR32 adapter.
 M4 needs the KR16 adapter and the `.kr16` debug decision. M5 needs the build
-chain. M6 needs an ARM64 tester-log entry for the release revision.
+chain. M6 needs an ARM64 gate entry for the release revision. M7 needs the
+kr232 adapter, the compiler package and the `../kr232` tree; it does not need
+the DAP front end.
 
 ---
 
@@ -346,7 +351,7 @@ dependence on VM types.
 
 - [x] **M1.2.1** Integrate `krc::debug`; or the vendored `kdbg.*` bootstrap with
       a pinned commit and provenance note.
-  Evidence: `third_party/krc-debug/` holds the exact KRCompiler `kdbg.h`/`kdbg.cpp` from `797dfacf7bbbc3e7744a40e627e7777a1c63b9c9`, with the MIT licence and README provenance. `KRDBG_KDBG_VENDORED=OFF` with `CMAKE_PREFIX_PATH` at the KRCompiler install tree configures, builds and passes the tests against `krc::debug`.
+  Evidence: `third_party/krc-debug/` holds the exact KRCompiler `kdbg.h`/`kdbg.cpp` from `e04b3b27541d62d98d6779e66f4508c77e91a1f6`, with the MIT licence and README provenance. `KRDBG_KDBG_VENDORED=OFF` with `CMAKE_PREFIX_PATH` at the KRCompiler install tree configures, builds and passes the tests against `krc::debug`.
 - [x] **M1.2.2** Decode `.kdbg` from a `.kr32` section; clear errors for
       truncated, bad-CRC, missing-section and wrong-version input.
   Evidence: `read_section` uses `decode_kdbg_image` (section lookup plus image-base check); `read_payload` decodes a raw payload. Tests cover truncated header, bad magic, wrong major version, header CRC, section-table bounds, record length and a missing section, each returning a distinct error.
@@ -423,7 +428,7 @@ dependence on VM types.
 - [x] **G1.5** No VM include or type in `krdbg_core` or `krdbg_kdbg`.
   Evidence: the boundary check now scans `src/core` and `src/kdbg` for `kr32`/`kr16` includes and reports `14 UI/public files clean; 10 core/kdbg files VM-clean`.
 - [x] **G1.6** Vendored bootstrap, if used, carries provenance and passes parity.
-  Evidence: `third_party/krc-debug/README.md` pins `797dfacf`; the parity test decodes both and compares with the `krc` JSON.
+  Evidence: `third_party/krc-debug/README.md` pins `e04b3b2`; the parity test decodes both and compares with the `krc` JSON.
 - [x] **G1.7** `PLAN.md` unchanged or updated first for any interface change.
   Evidence: the interface changes are the optional `DebugSession::Clock` test seam and the two-argument `replace_target(target, info)` overload; both were added to PLAN.md §4.5 before `session.h`, and both are source-compatible.
 
@@ -830,7 +835,7 @@ temporary build directory.
 
 ---
 
-## 8. M6 — Packaging, ARM64 release, post-v1
+## 8. M6 — Packaging, ARM64 release, and post-0.2.0 work
 
 **Goal:** shippable artifacts on all three platforms and the release gate. DAP
 is post-v1 and does not block this gate.
@@ -959,6 +964,91 @@ Known gaps:
 - `cmake/check-platform-boundary.cmake` scans for kr32, kr16 and krc, not for
   kr216 or kr232. A VM header using either new prefix could enter the UI or core
   without failing the boundary check.
+
+### 8.2 M7 — Working kr232 debugger (G7, post-0.2.0)
+
+**Goal:** the surface debugs a real kr232 program rather than the fake target —
+load, source, breakpoints, run/step, inspection, COM/video, kernel+user, and the
+multi-file `startrekng` example — on Windows and Linux, headless-tested. Design
+and acceptance: `docs/working-debugger-plan.md`, A1–A20. Decisions D1–D6 are
+settled there and summarised in `PLAN.md` §8.2.
+
+P0 — the debugger runs:
+
+- [x] **M7.1** Adapter-enabled presets `windows-msvc-kr232` and `linux-wsl-kr232`
+      (plus release pairs) with `KRDBG_KR232_ADAPTER=ON`,
+      `KRDBG_KR232_ROOT=../kr232` and the compiler prefix.
+- [x] **M7.2** `scripts/build-debugger.ps1` / `.sh`: check the tree and the
+      package, configure, build, and run a headless smoke load.
+- [x] **M7.3** Startup chooser (D2): recent files and fixtures; the fake target
+      only under `--fake`; no loaded-looking surface when nothing is loaded.
+- [x] **M7.4** Target selection from the image extension, and an explicit target
+      for a source build (today it defaults to kr32).
+- [x] **M7.5** Keyboard contract: letter keys through `character`, `F9`,
+      `Shift+F11`, and the video-window forwarding path.
+- [x] **M7.6** Host services: clipboard on Win32 and SDL2, and a Linux file
+      dialog (`zenity`/`kdialog`), with a clear error when neither exists.
+- [x] **M7.7** Source roots in the load flow and settings; resolve against the
+      image directory, the roots and the working directory; show the unresolved
+      path instead of an empty pane.
+- [x] **M7.8** Ship the D1 artifact (kr232 linked); the adapter-free artifact
+      remains the UI-golden baseline.
+- [ ] **M7.9** `docs/debugging-kr232.md` and README: prerequisites, the one
+      command, the fixtures, the startrekng images and the source root.
+- [x] **M7.10** CTest smoke: configure with kr232, load `loaded.kr232` headless,
+      assert target, PC/line and one step.
+- [x] **M7.11** `--kr232` RESET keeps `loaded_image` and `ProgramInfo`, so the
+      title and path survive a restart.
+
+P1 — kr232 end to end:
+
+- [ ] **M7.12** kr232 kernel+user (D3): CLI pair, host `supports_kernel_load()`,
+      KERNEL button, and a RESET that restores both images. The adapter half is
+      done (reset preserves the pair, tested); the CLI, the host capability and
+      the KERNEL button remain.
+- [ ] **M7.13** Stop-at-main as a setting, implemented as an owned temporary
+      breakpoint on the first tick with a bounded run.
+- [ ] **M7.14** Run limits and distinct stop reasons (budget, halted, fault);
+      RUN stays responsive.
+- [ ] **M7.15** Breakpoints persist across RESET/rebuild, line breakpoints
+      re-resolve, enable/disable state survives, and the panel navigates.
+- [ ] **M7.16** Source model: multi-file list, follow vs pin, per-file cache,
+      unresolved markers, paths that survive a reload.
+- [ ] **M7.17** Inspection on all fixtures: locals/globals at frame N,
+      aggregates, two-frame unwind, kernel/user memory, variable-length
+      disassembly.
+- [ ] **M7.18** Devices: COM output/input and VIDEO on `session.kr232`, the tab
+      rule when both exist, screen focus and function-key forwarding.
+- [ ] **M7.19** Scripted fixture scenarios A1–A17, headless, in CTest.
+- [ ] **M7.20** kr232 step/unwind: synthetic frame at R13 = 0, `InstructionOver`
+      across the `ENTER`-updated chain, step-out guard as an explicit stop.
+- [x] **M7.21** A `GroupKind::Flags` group with per-bit Z/N/C/V/I/T/K read/write;
+      K and I read-only.
+- [ ] **M7.22** Stop reason in the status line and source autoscroll to the PC.
+- [ ] **M7.23** Unresolved line breakpoints are marked, not drawn as live.
+- [x] **M7.24** Honest kr232 COM status (RX/TX from the machine, overrun
+      reported).
+- [ ] **M7.25** startrekng (D6): script + scenario + golden in every gate.
+      Evidence: the script built both images on 2026-11-27 and krdbg loaded the
+      scripted image (see §9); the scenario and golden are pending.
+
+Evidence (2026-11-27): the kr232 presets configure from a clean tree;
+`scripts/build-debugger.ps1 -Clean` reports `BUILD DEBUGGER: PASS`; CTest is
+7/7 and the unit binary is 117 tests, 0 failures; the headless goldens are
+unchanged; the chooser launches with `--frames 3`; `--kr232 … --reset` and
+`--load kr232_min.c --target kr232` both exit 0. M7.7 resolves roots on the next
+load; an image reload does not re-resolve them until M7.16. M7.21/M7.24:
+`kr232_adapter_flags_are_per_bit`, `kr232_com_status_tracks_the_console` and
+`kr232_adapter_reset_restores_the_kernel_and_user_pair` pass (20 kr232 tests).
+
+Gate G7:
+
+- [ ] **G7.1** The kr232 presets configure and build on Windows and Linux.
+- [ ] **G7.2** A1–A20 pass headless in CTest on both platforms.
+- [ ] **G7.3** startrekng builds from a clean `build/` and its scenario passes.
+- [ ] **G7.4** The D1 artifact loads a kr232 image; the UI-golden artifact is
+      unchanged.
+- [ ] **G7.5** No open BLOCKS or FIX-BEFORE finding remains.
 
 ---
 
@@ -1277,6 +1367,13 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-26T23:38:18-08:00** — **The kr232 fixtures are host-independent.** `regenerate.ps1` and `CheckFixtureDrift.cmake` compiled with absolute source paths, which the image embeds in its debug data, so a fixture recorded on one machine could not be reproduced on another: the ARM64 host failed the drift row that the x64 host called clean. Both now run each compile from the root that owns its source and name the source relative to it, and the five containers are regenerated with those paths. The drift row passes on Windows and the images match byte for byte when built elsewhere.
 - **2026-11-26T23:48:58-08:00** — **The adapter expectations follow the regenerated fixtures.** With the fixtures rebuilt from today's compiler, `session.kr232` executes 1171 instructions (the floor was 2000) and the guarded local sits at `-12` rather than `-4` in both the unwind and the variable-location rows: the IR pass that stopped forwarding a computed store changed kr232's code for every target, so the recorded images and the numbers derived from them moved together. The three rows now assert the new values and the two-adapter suite is 28 of 28.
 - **2026-11-27T04:44:35-08:00** — The repository points at the family build guide. `AGENTS.local.md` now opens with a Family build guide section naming `docs/kr-build-instructions.md` (or the sibling path in a WSL mirror), so a session that starts a build finds the preset names, gate flags, prefixes and the generated test images before configuring. Documentation only: no build.
+- **2026-11-27T07:26:27-08:00** — **Documentation reviewed against the code.** `README.md` now gives the configure-time package prefix and names Developer PowerShell for VS 18; `docs/toolchain.md` records the same configure requirement; `krdbg-newtarget.md` gains kr232's `target_id 5`, the signed frame-offset rule and the link-a-core adapter pattern; `AGENTS.local.md` records the shell and the configure prefix and no longer claims the vendored KDBG copy makes a bare checkout build. Also noted: `scripts/gate-linux.sh:84-85` caps the x86_64 rows at eight jobs, not the two in the 2026-11-26T16:29:41 entry above. Documentation only: no build, no test run.
+- **2026-11-27T08:07:44-08:00** — **The approved formal edits are in.** `PLAN.md` now matches the headers and the surface: §4.2 calls `read_section(container, out, error)`, §4.3 carries `variable_instruction_length`, §4.8 takes `bool fit` and records the verified video-window opening rule, §4.9 states the `krc-debug`/`krc-toolchain` configure requirement, §6.1/§6.2/§6.6/§6.8 record the initial tab, implemented keys, video-window behaviour and settings footer, §7.4 records containers-only loading and copied frame offsets, and §12 records the kr216/kr232 status. `implementation.md` §3 pins the vendored pair at `e04b3b2`, and the `kr232_adapter.h` load comment matches the container-only check. Documentation only: no build, no test run.
+- **2026-11-27T08:17:10-08:00** — **ARM64 direct-tester path retired; handoff removed.** The family gate on BitWhiz (`../kr232/scripts/check-arm64.ps1`) runs `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS`; it never writes `docs/arm64-test-log.md` or commits, so the log and the tester protocol were retired: the log is deleted (its entries remain in git history), `docs/arm64-tester.md` is a pointer to `docs/ci-arm64.md`, and `docs/ci.md`, `docs/ci-arm64.md`, `docs/release.md`, `AGENTS.local.md`, `PLAN.md` and this file's current-state rows name the family gate. `handoff-2026-11-19.md` is deleted; it was superseded and named the old checkout path. Documentation only: no build, no test run.
+- **2026-11-27T09:27:01-08:00** — **startrekng builds for kr232 and loads in krdbg.** `scripts/build-startrekng-kr232.ps1` (and the `.sh` twin) built KRCompiler's `examples/startrekng` from `../krcompiler` without modifying that tree: twelve objects with `krc 0.2.0` / `krld 0.2.0` (revision `80960f0`), then `startrekng_script.kr232` (2,602,226 B) and `startrekng.kr232` (2,601,316 B) in `build/startrekng-kr232/`. The kr232 emulator ran the scripted image to completion (`--max-steps 200000000 --transcript`, exit 0, mission-end transcript). A kr232-enabled krdbg configure (`build/kr232-check`, `-DKRDBG_KR232_ADAPTER=ON`) loaded the scripted image headless with `--source-root ../krcompiler`: after 2,000 instructions the source followed to `galaxy.cpp`, VARIABLES held `this/i/x/y/s`, CALL STACK held `Galaxy::reset → Game::ctor_0_value → main → _start`, and disassembly and registers tracked `PC 0x32EA`. At the initial `main` stop the locals were empty because the frame is built by `ENTER` (M7.20). No gate ran.
+- **2026-11-27T09:36:48-08:00** — **G7 folded in as M7.** `PLAN.md` §8 gains M7 and §8.2; `implementation.md` §1, §8.2 and this log record it; decisions D1–D6 are settled in `docs/working-debugger-plan.md` §11. Documentation only: no build.
+
+- **2026-11-27T10:05:00-08:00** — **M7 P0 executed and the first P1 slice landed.** Commits: `c14d31d` (kr232 flags, COM status, reset pair), `1d95ef7` (letter shortcuts, clipboard, Linux picker), `7a255bd` (kr232 presets, build-debugger, package-debugger, app smoke), `3aef7cb` (target and source settings, RESET path), `0cec45e` (startup chooser). Verification: `scripts/build-debugger.ps1 -Clean` PASS; CTest 7/7; 117 unit tests 0 failures; headless goldens unchanged; chooser launches; `--kr232 startrekng_script.kr232 --reset` and `--load kr232_min.c --target kr232` exit 0. P1 remains open: kernel+user CLI, stop-at-main setting, limits and stop reasons, breakpoint persistence, source model, devices, A1–A17 scenarios, step/unwind, status/autoscroll, unresolved breakpoints, and the startrekng golden.
 
 ## 10. Blocked or external prerequisites
 
@@ -1285,8 +1382,8 @@ These are not krdbg implementation tasks. A gate that depends on one stays open.
 | Prerequisite | Needed by | Owner | Status |
 |---|---|---|---|
 | Git remote URL | M0.0 / G0 | User | `[x]` `https://github.com/kevinwross/krdbg.git`; origin configured, initial commit `6106cfe` pushed |
-| ARM64 tester session on `BitWhiz` (Raspberry Pi on the local network) | G0 / G6 | kevinwross | `[x]` BitWhiz is driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh`. `docs/arm64-test-log.md` records runs made directly from this checkout. There is no GitHub Actions runner and none is planned. |
-| `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `797dfacf` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair so a bare checkout never depends on a local KRCompiler install. |
+| ARM64 gate on `BitWhiz` (Raspberry Pi on the local network) | G0 / G6 | kevinwross | `[x]` BitWhiz is driven by `../kr232/scripts/check-arm64.ps1`, which invokes `scripts/gate-linux-arm64.sh` and reports `ARM64 CHECKS`. There is no in-repository test log. There is no GitHub Actions runner and none is planned. |
+| `krc::debug` export/install | M1 / G1 | KRCompiler | `[x]` KRCompiler at `e04b3b2` exports `krc::debug` (`include/krc/debug/kdbg.h`, `krc-debug.lib`, `krc-debug-config.cmake`); krdbg vendors the exact pair and still requires the installed package to configure (`PLAN.md` §4.9). |
 | KDBG v1.1 records (locations, base, arrays, scopes, 64-bit, target id) | G3 / G4 parity | KRCompiler | `[ ]` |
 | `.kdbg` in the KR16 `.kr16` writer or sidecar | M4 / G4 | KRCompiler | `[x]` `write_kr16_image` carries `.kdbg` as an unallocated debug section; older images use the legacy parser. |
 | `krc`/`krld` usable from the host | M5 / G5 | KRCompiler | `[x]` The installed `402cfaf` package provides `bin/krc`, `bin/krld` and the target sysroots; the 0.2.0 build and the host-build tests use it. |
@@ -1302,13 +1399,15 @@ claim the prerequisite is met.
 - [x] The user approves `implementation.md`.
 - [x] The user approves repository initialization and supplies a remote.
 - [x] The user approves the platform gate policy and golden policy.
+- [x] The user approves M7 and its G7 gate, folded in 2026-11-27.
 - [x] The user confirms the ARM64 tester path and its owner.
 - [x] The milestone order and estimates are acceptable.
 - [x] The first task to execute is M0.0.1.
 
 Approval is recorded at 2026-11-20T03:04:50-08:00. M0–M6 are complete and
-released as 0.2.0; post-0.2.0 adapter work is recorded in §8.1. The ARM64 verifier
+released as 0.2.0; post-0.2.0 adapter work is recorded in §8.1, and M7 (working
+kr232 debugger) was approved on 2026-11-27 and is open in §8.2. The ARM64 verifier
 is the gate on `BitWhiz`, a Raspberry Pi on the local network owned by
-kevinwross, driven by `../kr232/scripts/check-arm64.ps1`. `docs/arm64-tester.md`
-is the direct-tester protocol and `docs/arm64-test-log.md` records those runs.
+kevinwross, driven by `../kr232/scripts/check-arm64.ps1`; `docs/ci-arm64.md`
+describes the path and there is no in-repository test log.
 There is no GitHub Actions runner.
