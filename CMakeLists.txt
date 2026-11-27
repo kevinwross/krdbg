@@ -409,6 +409,14 @@ if(KRDBG_BUILD_TESTS)
         set(KRDBG_STARTREKNG_IMAGE
             "${CMAKE_CURRENT_SOURCE_DIR}/build/startrekng-kr232/startrekng_script.kr232")
         if(EXISTS "${KRDBG_STARTREKNG_IMAGE}")
+            # The image is compiler-built, so its debug payload can differ by
+            # host toolchain; record the rendered hash each platform's build
+            # produces for the same scripted image.
+            if(WIN32)
+                set(KRDBG_STARTREKNG_HASH "EAB8F6EEC580D84F")
+            else()
+                set(KRDBG_STARTREKNG_HASH "2AC8CBA5C069DE87")
+            endif()
             add_test(NAME krdbg_kr232_startrekng_golden
                 COMMAND krdbg_demo --headless
                     --kr232 "${KRDBG_STARTREKNG_IMAGE}"
@@ -416,7 +424,7 @@ if(KRDBG_BUILD_TESTS)
                     --no-stop-at-main)
             set_tests_properties(krdbg_kr232_startrekng_golden PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-                PASS_REGULAR_EXPRESSION "frame hash EAB8F6EEC580D84F")
+                PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_STARTREKNG_HASH}")
         endif()
     endif()
     if(KRDBG_KR216_ADAPTER)

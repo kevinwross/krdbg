@@ -104,8 +104,8 @@ echo "prefix: $prefix"
 echo "kr232: $kr232"
 echo "== configure linux-wsl-kr232 in $build"
 cmake --preset linux-wsl-kr232 -B "$build" "-DCMAKE_PREFIX_PATH=$prefix"
-echo "== build krdbg_demo"
-cmake --build "$build" --target krdbg_demo -j "$jobs"
+echo "== build the debugger, tests and the kr232 tools"
+cmake --build "$build" -j "$jobs"
 
 exe="$build/krdbg_demo"
 if [[ ! -x "$exe" ]]; then

@@ -97,8 +97,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "cmake configure failed (exit code $LASTEXITCODE)"
 }
 
-Write-Host '== build krdbg_demo'
-& cmake --build $build --target krdbg_demo -j $jobs
+Write-Host '== build the debugger, tests and the kr232 tools'
+& cmake --build $build -j $jobs
 if ($LASTEXITCODE -ne 0) {
     throw "cmake build failed (exit code $LASTEXITCODE)"
 }

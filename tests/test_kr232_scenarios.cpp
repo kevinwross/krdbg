@@ -285,6 +285,95 @@ KRDBG_TEST(kr232_scenario_startrekng) {
     const std::uint64_t before = session.pc();
     (void)session.step(krdbg::StepMode::Instruction);
     CHECK(session.pc() != before);
+
+    // A19: a breakpoint in another translation unit fires while the game runs.
+    const krdbg::LineInfo* galaxy_line = nullptr;
+    const krdbg::SourceFile* galaxy_source = nullptr;
+    for (const krdbg::LineInfo& candidate : session.info().lines) {
+        for (const krdbg::SourceFile& source : session.info().sources) {
+            if (source.id == candidate.source &&
+                source.path.find("galaxy.cpp") != std::string::npos) {
+                galaxy_line = &candidate;
+                galaxy_source = &source;
+                break;
+            }
+        }
+        if (galaxy_line != nullptr) {
+            break;
+        }
+    }
+    CHECK(galaxy_line != nullptr);
+    if (galaxy_line != nullptr && galaxy_source != nullptr) {
+        (void)session.add_line_breakpoint(
+            galaxy_source->path, static_cast<int>(galaxy_line->line));
+        const krdbg::StopResult in_galaxy = session.run(5000000);
+        CHECK(in_galaxy.kind == krdbg::StopKind::Retired);
+        const krdbg::LineInfo* stopped_at = session.line_at(session.pc());
+        CHECK(stopped_at != nullptr);
+        if (stopped_at != nullptr) {
+            for (const krdbg::SourceFile& source : session.info().sources) {
+                if (source.id == stopped_at->source) {
+                    CHECK(source.path.find("galaxy.cpp") != std::string::npos);
+                    break;
+                }
+            }
+        }
+    }
+
+    // A20: stepping into Console::line shows `this`, and the scripted session
+    // runs to completion with console output.
+    const krdbg::LineInfo* console_line = nullptr;
+    const krdbg::SourceFile* console_source = nullptr;
+    for (const krdbg::LineInfo& candidate : session.info().lines) {
+        for (const krdbg::SourceFile& source : session.info().sources) {
+            if (source.id == candidate.source &&
+                source.path.find("console.cpp") != std::string::npos) {
+                console_line = &candidate;
+                console_source = &source;
+                break;
+            }
+        }
+        if (console_line != nullptr) {
+            break;
+        }
+    }
+    CHECK(console_line != nullptr);
+    if (console_line != nullptr && console_source != nullptr) {
+        (void)session.add_line_breakpoint(
+            console_source->path, static_cast<int>(console_line->line));
+        const krdbg::StopResult in_console = session.run(5000000);
+        CHECK(in_console.kind == krdbg::StopKind::Retired ||
+              in_console.kind == krdbg::StopKind::Halted);
+        bool saw_this = false;
+        for (const krdbg::VariableView& local : session.locals(0)) {
+            if (local.name == "this") {
+                saw_this = true;
+            }
+        }
+        CHECK(saw_this);
+    }
+
+    // A separate session runs the scripted game to its halt and drains COM.
+    krdbg::kr232adapter::LoadedProgram again;
+    if (!krdbg::kr232adapter::load_image(image, {}, again, error)) {
+        CHECK(false);
+        return;
+    }
+    krdbg::DebugSession completion(std::move(again.target), again.info,
+                                   [](krdbg::IDebugTarget&, std::string&) {
+                                       return true;
+                                   });
+    const krdbg::StopResult finished = completion.run(20000000);
+    CHECK(finished.kind == krdbg::StopKind::Halted ||
+          finished.kind == krdbg::StopKind::Fault);
+    std::size_t output_bytes = 0;
+    if (completion.com_port() != nullptr) {
+        std::uint8_t byte = 0;
+        while (completion.com_port()->read_output(byte)) {
+            ++output_bytes;
+        }
+    }
+    CHECK(output_bytes > 0);
 }
 // A6: globals and aggregate expansion. The fixture has `struct Point
 // points[2]` and `int total`; krc emits the type records and sized G records, so

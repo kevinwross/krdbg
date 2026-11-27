@@ -12,7 +12,21 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $build = Join-Path $root 'build/two-adapters'
 
-cmake -S $root -B $build -G Ninja -DCMAKE_BUILD_TYPE=Debug `
+# Same prefix resolution as the gate: the bare configure needs the compiler
+# package for krc::debug, and the gate's environment is not inherited by this
+# script's explicit cmake call.
+$prefix = $env:KRG_PREFIX
+if (-not $prefix -and $env:KRG_KRC) {
+    $prefix = Split-Path -Parent (Split-Path -Parent $env:KRG_KRC)
+}
+if (-not $prefix) {
+    $family = Join-Path (Split-Path -Parent $root) 'build/family-prefix'
+    if (Test-Path $family) { $prefix = $family }
+}
+$prefixArgs = @()
+if ($prefix) { $prefixArgs = @("-DCMAKE_PREFIX_PATH=$prefix") }
+
+cmake -S $root -B $build -G Ninja -DCMAKE_BUILD_TYPE=Debug @prefixArgs `
     -DKRDBG_KR216_ADAPTER=ON -DKRDBG_KR232_ADAPTER=ON
 if ($LASTEXITCODE -ne 0) { throw "configuring two adapters failed" }
 
