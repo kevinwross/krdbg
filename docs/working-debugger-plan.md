@@ -249,6 +249,10 @@ it a gate case and fixing the frame and step behaviour.
 
 ### P2 — KR32 parity (4–6 weeks)
 
+Status: in progress after G7. Settings persistence and the kr232 state goldens
+land; the toolbar step/breakpoint buttons, Build action, tooltips and the full
+interaction golden set are M8.3–M8.8.
+
 Close every row in §5 that is not green, in this order: correctness, input, then
 polish. Add the toolbar step/over/out/breakpoint buttons KR32 has (the surface
 currently relies on panel buttons and keys), hover tooltips, the FPR/matrix
@@ -285,30 +289,30 @@ present, proved by P2 tests".
 |---|---|---|---|
 | Load an image | yes | adapter-dependent; no shipped adapter | P0 |
 | Load/build source | yes (krc in-process) | yes via build chain, target defaults kr32 | P0 |
-| File picker | native + zenity/kdialog | Windows yes, Linux no | P0 |
+| File picker | native + zenity/kdialog | yes on Windows, SDL2/zenity/kdialog on Linux | — |
 | Line/address breakpoints | yes | yes | — |
 | Enable/disable breakpoints | yes | yes | — |
-| `F9` current-line toggle | yes | no | P0 |
+| `F9` current-line toggle | yes | yes | — |
 | Run/pause/break | `F5`/`F6` | yes | — |
-| Instruction step over/in/out | keys + buttons | pane buttons; `F10` over can land inside a kr232 callee; `Shift+F11` missing | P1 |
+| Instruction step over/in/out | keys + buttons | keys, pane buttons, correct kr232 step-over and step-out | — |
 | Line step over/in/out | pane buttons | pane buttons (`src/ui/surface.cpp:1998-2008`) | — |
 | Run to line/address | yes | yes (context menus) | — |
-| Source follow / pin / file list | yes | yes (dropdown, PIN) | P1 polish |
-| Variables, aggregates, arrays/pages | yes | yes / verify arrays | P1 |
+| Source follow / pin / file list | yes | yes (dropdown, PIN, PC follow) | — |
+| Variables, aggregates, arrays/pages | yes | yes (aggregate test expands array of structs) | — |
 | Frame selection | display-only | yes (`selected_frame`) | — |
-| Register/flag edit | yes | GPR/FPR/flags word yes; no per-bit kr232 flag rows | P1 |
-| FPR/matrix edit | yes | yes on targets that expose them; kr232 has no matrix | P2 |
+| Register/flag edit | yes | GPR/FPR/flags word and per-bit kr232 Z/N/C/V/I/T/K rows | — |
+| FPR/matrix edit | yes | yes on targets that expose them; kr232 has no matrix | — |
 | Memory view/edit, ADDR/PTR | yes | yes (`write_memory` wired) | — |
 | Disassembly + PC follow | yes | yes | — |
-| Stop reason in status | yes | no ("paused at …" only) | P1 |
-| Source autoscroll to PC | yes | no | P1 |
+| Stop reason in status | yes | yes (breakpoint/halt/fault/budget) | — |
+| Source autoscroll to PC | yes | yes | — |
 | Hover tooltips | extensive | partial | P2 |
 | Variable inspector | yes | yes | — |
-| Console / COM | serial console | COM tab with input routing; status bits hardcoded | P1 |
+| Console / COM | serial console | COM tab with input routing and per-target status bits | — |
 | Screen / video | SCREEN tab | VIDEO tab + window | P1 |
-| Settings persistence | ini | JSON layer, demo does not save | P2 |
+| Settings persistence | ini | platform settings file, loaded at start, `--set` headless | — |
 | Build button | yes | no (LOAD/RESET rebuild) | P2 |
-| Kernel/OS load | yes (BIOS+kernel) | KR32 only | P1 (kr232) |
+| Kernel/OS load | yes (BIOS+kernel) | KR32 embedded pair and kr232 kernel+user | — |
 | Headless screenshot/hash | yes | yes | — |
 | DAP | KR32-only server | no | P3 |
 | Conditional/watchpoints | no | no | P3 |

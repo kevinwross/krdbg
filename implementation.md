@@ -1092,6 +1092,37 @@ Gate G7:
       unchanged.
 - [x] **G7.5** No open BLOCKS or FIX-BEFORE finding remains.
 
+### 8.3 M8 — KR32 parity (G8, post-M7)
+
+Close every row of the parity matrix in `docs/working-debugger-plan.md` §5 that
+is still short of KR32, and prove the interaction suite on both platforms.
+
+- [ ] **M8.1** Matrix audit: every §5 row marked yes only where a test or a gate
+      run proves it; the remaining rows named.
+- [x] **M8.2** Settings persistence: the demo host saves the merged settings to
+      the platform config path and loads them at start; `--set ID=VALUE` is the
+      headless route. CTest `krdbg_settings_persist`.
+- [ ] **M8.3** Toolbar step/over/out and breakpoint buttons, matching KR32's
+      toolbar; layout rects and all UI goldens updated.
+- [ ] **M8.4** A Build action: the toolbar BUILDs a source program and reloads
+      it, separate from RESET (which restarts the current image).
+- [ ] **M8.5** Hover tooltips for the controls that still lack them (stats,
+      toolbar buttons, breakpoint rows), with interaction assertions.
+- [ ] **M8.6** Interaction suite: synthesize click/key events for the new
+      toolbar/Build/tooltip paths, assert panel state and a frame hash.
+- [ ] **M8.7** kr232 state goldens: loaded (exists), breakpoint set (exists),
+      settings open (exists), variables expanded (pending).
+- [ ] **M8.8** G8 gate run on Windows and WSL: full CTest and the bare gates.
+
+Gate G8:
+
+- [ ] **G8.1** Every row of the §5 matrix is `yes` on Windows and Linux.
+- [ ] **G8.2** The interaction suite synthesizes events and asserts state and a
+      frame hash; it runs in the gate.
+- [ ] **G8.3** The four kr232 state goldens are recorded and stable.
+- [ ] **G8.4** The adapter-free goldens and the two-platform gate pass.
+- [ ] **G8.5** No open BLOCKS or FIX-BEFORE finding remains.
+
 ---
 
 ## 9. Evidence log
@@ -1437,6 +1468,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:27:58-08:00** — **startrekng scenario and golden; headless surface rows.** `819d0ae` adds `--no-stop-at-main` (a run makes the header's instruction rate time-dependent, so the loaded frame is the reproducible one), `kr232_scenario_startrekng`, the startrekng golden row and headless run/RESET/breakpoint rows. Verification: CTest 12/12 including `krdbg_kr232_startrekng_golden` (`EAB8F6EEC580D84F`); 28 kr232 tests, 0 failures. M7.25 is checked; M7.19 remains partial because A6 needs the KDBG type records tracked in §10.
 - **2026-11-27T10:40:00-08:00** — **KR232 KDBG types and globals.** KRCompiler `ff72fce` emits `.debug_type` T/C/M/A/R records and typed `.debug_var` names from the kr232 backend; the assembler forwards them, emits F only for text functions and G for data symbols with type/size. `a9e22a0` deduplicates merged members. The six fixtures were regenerated (`46ada06`), `members()` now stores array-element bytes, and `kr232_scenario_globals_and_members` passes. Verification: `krc_tests` 313/313; krdbg CTest 12/12, 117 and 29 unit tests, 0 failures; a rendered `aggregate.kr232` shows `GLOBALS (2)` with `points = [2]` and expands to `x`/`y`.
 - **2026-11-27T10:47:00-08:00** — **Status text and the last M7 task.** `cd303e4` adds `DebuggerSurface::status_text()` (read-only, documented in PLAN.md), a `--print-status` headless flag and the `krdbg_kr232_status_row` CTest row, plus `surface_status_text_names_the_stop`. Verification: CTest 13/13, `krdbg_tests` 118/0, `krdbg_kr232_tests` 29/0. M7.19 is checked; every M7 task M7.1–M7.25 is now checked. The G7 gate run itself (A1–A20 on Windows and Linux with the D1 artifact) is next.
+- **2026-11-27T10:51:06-08:00** — **P2 starts: settings persistence, kr232 state goldens.** `96d84a3` makes the demo host save the merged settings to `%APPDATA%\krdbg\settings.json` / `$XDG_CONFIG_HOME/krdbg/settings.json` and load them at start; `--set ID=VALUE` applies one typed value before loading. `krdbg_settings_persist` proves the write and reload. The `kr232-breakpoint` (`83932902B6DE5E18`) and `kr232-settings` (`C36315131719FBAE`) goldens are CTest rows; the parity matrix rows that M7 closed are marked yes. CTest 16/16. M8.2 is checked; M8.1 and M8.3–M8.8 remain.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
