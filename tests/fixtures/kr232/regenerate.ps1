@@ -4,9 +4,10 @@
 # compiler, but they are not hand-made: this script is how they are produced.
 # Set KR232_SOURCE to the kr232 checkout and KRC/KRLD to the compiler's tools.
 #
-# Every path handed to krc and krld uses forward slashes, because the source path
-# is embedded in the image: a recording made with backslashes produced an image
-# `CheckFixtureDrift.cmake`, which passes forward slashes, could not reproduce.
+# Every compile runs from the root that owns its source and names the source
+# relative to it, because the source path is embedded in the image's debug data:
+# an absolute path made the fixture reproducible only on the machine that
+# recorded it, and `CheckFixtureDrift.cmake` could not rebuild it elsewhere.
 $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -21,49 +22,55 @@ if (-not (Test-Path $krld)) { throw "krld not found at $krld; set KRLD" }
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 New-Item -ItemType Directory -Path $PSScriptRoot -Force | Out-Null
 
-# The spelling every tool sees, so a recording matches what the check builds.
-$sourcesText = (Resolve-Path $sources).Path -replace '\\', '/'
-$kr232Text = (Resolve-Path $kr232).Path -replace '\\', '/'
-$fixtureText = (Resolve-Path $PSScriptRoot).Path -replace '\\', '/'
+$sourcesRoot = (Resolve-Path $sources).Path
+$kr232Root = (Resolve-Path $kr232).Path
+$fixtureRoot = (Resolve-Path $PSScriptRoot).Path
 $workText = (Resolve-Path $work).Path -replace '\\', '/'
-$includeText = "$sourcesText/sysroot/kr232/include"
 
-# crt0 is the entry every fixture links with.
-& $krc -c --target kr232 "$sourcesText/targets/kr232/runtime/crt0.s" -o "$workText/crt0.o"
-if ($LASTEXITCODE -ne 0) { throw 'crt0 failed' }
-
-function Build-Fixture([string] $name, [string[]] $objects) {
-    $inputs = @("$workText/crt0.o") + $objects
-    & $krld "--source-root=$sourcesText" --entry=_start @inputs -o "$fixtureText/$name"
-    if ($LASTEXITCODE -ne 0) { throw "$name failed" }
-    Write-Host "wrote $name"
+function Compile-From([string] $root, [string] $source, [string] $output, [string[]] $extra = @()) {
+    Push-Location $root
+    try {
+        & $krc -c --target kr232 @extra $source -o $output
+        if ($LASTEXITCODE -ne 0) { throw "compiling $source failed" }
+    } finally {
+        Pop-Location
+    }
 }
 
+function Link-Fixture([string] $root, [string] $image, [string[]] $objects, [string[]] $extra = @()) {
+    Push-Location $root
+    try {
+        & $krld @extra --entry=_start @objects -o (Join-Path $fixtureRoot $image)
+        if ($LASTEXITCODE -ne 0) { throw "$image failed" }
+    } finally {
+        Pop-Location
+    }
+    Write-Host "wrote $image"
+}
+
+# crt0 is the entry every fixture links with.
+Compile-From $sourcesRoot 'targets/kr232/runtime/crt0.s' "$workText/crt0.o"
+
 # loaded.kr232: the two-instruction program the layout and memory tests use.
-& $krc -c --target kr232 "$sourcesText/tests/fixtures/c/kr232_min.c" -o "$workText/min.o"
-Build-Fixture 'loaded.kr232' @("$workText/min.o")
+Compile-From $sourcesRoot 'tests/fixtures/c/kr232_min.c' "$workText/min.o"
+Link-Fixture $sourcesRoot 'loaded.kr232' @("$workText/crt0.o", "$workText/min.o")
 
 # nested_frames.kr232: two frames on the stack for the unwind test.
-& $krc -c --target kr232 "$sourcesText/tests/fixtures/c/kr232_nested_frames.c" -o "$workText/nested.o"
-Build-Fixture 'nested_frames.kr232' @("$workText/nested.o")
+Compile-From $sourcesRoot 'tests/fixtures/c/kr232_nested_frames.c' "$workText/nested.o"
+Link-Fixture $sourcesRoot 'nested_frames.kr232' @("$workText/crt0.o", "$workText/nested.o")
 
 # session.kr232: a console byte and a committed frame for the device tests.
-& $krc -c --target kr232 -I $includeText "$sourcesText/tests/fixtures/c/kr232_session.c" -o "$workText/session.o"
-& $krc -c --target kr232 -I $includeText "$sourcesText/targets/kr232/runtime/cons.c" -o "$workText/cons.o"
-& $krc -c --target kr232 -I $includeText "$sourcesText/targets/kr232/runtime/gfx.c" -o "$workText/gfx.o"
-Build-Fixture 'session.kr232' @("$workText/session.o", "$workText/cons.o", "$workText/gfx.o")
+Compile-From $sourcesRoot 'tests/fixtures/c/kr232_session.c' "$workText/session.o" @('-I', 'sysroot/kr232/include')
+Compile-From $sourcesRoot 'targets/kr232/runtime/cons.c' "$workText/cons.o" @('-I', 'sysroot/kr232/include')
+Compile-From $sourcesRoot 'targets/kr232/runtime/gfx.c' "$workText/gfx.o" @('-I', 'sysroot/kr232/include')
+Link-Fixture $sourcesRoot 'session.kr232' @("$workText/crt0.o", "$workText/session.o", "$workText/cons.o", "$workText/gfx.o")
 
 # kernel.kr232 is the kernel the adapter runs user programs under, and
 # userprint.kr232 is a program that prints through it and exits 3.
-& $krc -c --target kr232 "$kr232Text/targets/kr232/kernel/kernel.s" -o "$workText/kernel.o"
-if ($LASTEXITCODE -ne 0) { throw 'kernel failed' }
-& $krld "--source-root=$kr232Text" --entry=_start "$workText/kernel.o" -o "$fixtureText/kernel.kr232"
-if ($LASTEXITCODE -ne 0) { throw 'kernel.kr232 failed' }
-Write-Host 'wrote kernel.kr232'
+Compile-From $kr232Root 'targets/kr232/kernel/kernel.s' "$workText/kernel.o"
+Link-Fixture $kr232Root 'kernel.kr232' @("$workText/kernel.o")
 
-& $krc -c --target kr232 "$fixtureText/userprint.s" -o "$workText/userprint.o"
-if ($LASTEXITCODE -ne 0) { throw 'userprint failed' }
-& $krld "--source-root=$fixtureText" --base=0x08000000 --entry=_start "$workText/userprint.o" -o "$fixtureText/userprint.kr232"
-if ($LASTEXITCODE -ne 0) { throw 'userprint.kr232 failed' }
-Write-Host 'wrote userprint.kr232'
+Compile-From $fixtureRoot 'userprint.s' "$workText/userprint.o"
+Link-Fixture $fixtureRoot 'userprint.kr232' @("$workText/userprint.o") @('--base=0x08000000')
+
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'

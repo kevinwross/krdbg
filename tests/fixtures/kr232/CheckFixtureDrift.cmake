@@ -4,6 +4,12 @@
 # against a program nobody has. `regenerate.ps1` is the regeneration path; this
 # is the check, and it runs anywhere CMake and the tools do.
 #
+# Every compile runs from the root that owns its source and names the source
+# relative to it. The source path is embedded in the image's debug data, so an
+# absolute path makes the fixture depend on the machine that recorded it: the
+# check could only pass on that machine, which is how the ARM64 host failed a
+# tree the x64 host called clean.
+#
 # Required: KRC, KRLD, SOURCES (krcompiler root), KR232 (kr232 root),
 #           FIXTURE_DIR, WORK
 
@@ -13,25 +19,27 @@ if(NOT DEFINED KRC OR NOT DEFINED KRLD OR NOT DEFINED SOURCES OR NOT DEFINED KR2
 endif()
 file(MAKE_DIRECTORY "${WORK}")
 
-function(compile out source)
+# compile(<output> <root> <source relative to root> [extra arguments...])
+function(compile out root source)
     execute_process(COMMAND "${KRC}" -c --target kr232 ${ARGN} "${source}" -o "${out}"
+                    WORKING_DIRECTORY "${root}"
                     RESULT_VARIABLE state ERROR_VARIABLE error)
     if(NOT state EQUAL 0)
         message(FATAL_ERROR "compiling ${source} failed:\n${error}")
     endif()
 endfunction()
 
-compile("${WORK}/crt0.o" "${SOURCES}/targets/kr232/runtime/crt0.s")
-compile("${WORK}/min.o" "${SOURCES}/tests/fixtures/c/kr232_min.c")
-compile("${WORK}/nested.o" "${SOURCES}/tests/fixtures/c/kr232_nested_frames.c")
-compile("${WORK}/session.o" "${SOURCES}/tests/fixtures/c/kr232_session.c"
-        -I "${SOURCES}/sysroot/kr232/include")
-compile("${WORK}/cons.o" "${SOURCES}/targets/kr232/runtime/cons.c"
-        -I "${SOURCES}/sysroot/kr232/include")
-compile("${WORK}/gfx.o" "${SOURCES}/targets/kr232/runtime/gfx.c"
-        -I "${SOURCES}/sysroot/kr232/include")
-compile("${WORK}/kernel.o" "${KR232}/targets/kr232/kernel/kernel.s")
-compile("${WORK}/userprint.o" "${FIXTURE_DIR}/userprint.s")
+compile("${WORK}/crt0.o" "${SOURCES}" "targets/kr232/runtime/crt0.s")
+compile("${WORK}/min.o" "${SOURCES}" "tests/fixtures/c/kr232_min.c")
+compile("${WORK}/nested.o" "${SOURCES}" "tests/fixtures/c/kr232_nested_frames.c")
+compile("${WORK}/session.o" "${SOURCES}" "tests/fixtures/c/kr232_session.c"
+        -I "sysroot/kr232/include")
+compile("${WORK}/cons.o" "${SOURCES}" "targets/kr232/runtime/cons.c"
+        -I "sysroot/kr232/include")
+compile("${WORK}/gfx.o" "${SOURCES}" "targets/kr232/runtime/gfx.c"
+        -I "sysroot/kr232/include")
+compile("${WORK}/kernel.o" "${KR232}" "targets/kr232/kernel/kernel.s")
+compile("${WORK}/userprint.o" "${FIXTURE_DIR}" "userprint.s")
 
 set(failures "")
 
@@ -48,7 +56,7 @@ foreach(fixture IN ITEMS "loaded.kr232;min.o" "nested_frames.kr232;nested.o"
         list(GET fields ${index} name)
         list(APPEND objects "${WORK}/${name}")
     endforeach()
-    execute_process(COMMAND "${KRLD}" "--source-root=${SOURCES}" --entry=_start
+    execute_process(COMMAND "${KRLD}" --entry=_start
                             "${WORK}/crt0.o" ${objects} -o "${WORK}/${image}"
                     RESULT_VARIABLE state ERROR_VARIABLE error)
     if(NOT state EQUAL 0)
@@ -62,13 +70,13 @@ foreach(fixture IN ITEMS "loaded.kr232;min.o" "nested_frames.kr232;nested.o"
 endforeach()
 
 # The kernel is a flat kernel-mode image; the user program sits at user RAM.
-execute_process(COMMAND "${KRLD}" "--source-root=${KR232}" --entry=_start
+execute_process(COMMAND "${KRLD}" --entry=_start
                         "${WORK}/kernel.o" -o "${WORK}/kernel.kr232"
                 RESULT_VARIABLE kernel_state ERROR_VARIABLE kernel_error)
 if(NOT kernel_state EQUAL 0)
     message(FATAL_ERROR "linking kernel.kr232 failed:\n${kernel_error}")
 endif()
-execute_process(COMMAND "${KRLD}" "--source-root=${FIXTURE_DIR}" --base=0x08000000
+execute_process(COMMAND "${KRLD}" --base=0x08000000
                         --entry=_start "${WORK}/userprint.o" -o "${WORK}/userprint.kr232"
                 RESULT_VARIABLE print_state ERROR_VARIABLE print_error)
 if(NOT print_state EQUAL 0)
