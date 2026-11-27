@@ -249,9 +249,9 @@ it a gate case and fixing the frame and step behaviour.
 
 ### P2 — KR32 parity (4–6 weeks)
 
-Status: in progress after G7. Settings persistence and the kr232 state goldens
-land; the toolbar step/breakpoint buttons, Build action, tooltips and the full
-interaction golden set are M8.3–M8.8.
+Status: complete, 2026-11-27. Settings persistence, the toolbar step/Build/
+breakpoint controls, tooltips, the interaction tests and the four kr232 state
+goldens all landed; G8 passed on Windows and WSL.
 
 Close every row in §5 that is not green, in this order: correctness, input, then
 polish. Add the toolbar step/over/out/breakpoint buttons KR32 has (the surface
@@ -306,12 +306,12 @@ present, proved by P2 tests".
 | Disassembly + PC follow | yes | yes | — |
 | Stop reason in status | yes | yes (breakpoint/halt/fault/budget) | — |
 | Source autoscroll to PC | yes | yes | — |
-| Hover tooltips | extensive | partial | P2 |
+| Hover tooltips | extensive | toolbar, state, disassembly, variables, breakpoints, call stack, memory and stats | — |
 | Variable inspector | yes | yes | — |
 | Console / COM | serial console | COM tab with input routing and per-target status bits | — |
 | Screen / video | SCREEN tab | VIDEO tab + window | P1 |
 | Settings persistence | ini | platform settings file, loaded at start, `--set` headless | — |
-| Build button | yes | no (LOAD/RESET rebuild) | P2 |
+| Build button | yes | yes (BUILD rebuilds source; RESET restarts the image) | — |
 | Kernel/OS load | yes (BIOS+kernel) | KR32 embedded pair and kr232 kernel+user | — |
 | Headless screenshot/hash | yes | yes | — |
 | DAP | KR32-only server | no | P3 |

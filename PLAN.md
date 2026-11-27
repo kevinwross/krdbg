@@ -2,9 +2,9 @@
 
 **Status:** approved 2026-11-20T03:04:50-08:00 by kevinwross. M0–M6 are released
 as 0.2.0 with the KR32 and KR16 adapters; `main` carries the unreleased kr216 and
-kr232 adapters. M7, the working kr232 debugger, is complete as of 2026-11-27:
-G7 passed on Windows and WSL with the adapter linked and the D1 artifact.
-`implementation.md` tracks current status.
+kr232 adapters. M7, the working kr232 debugger, and M8, KR32 parity, are complete
+as of 2026-11-27: G7 and G8 passed on Windows and WSL with the adapter linked and
+the D1 artifact. `implementation.md` tracks current status.
 **Decisions applied:** KR32 first; additive KDBG v1.1 owned by KRCompiler;
 typed register groups plus a reserved custom-state-panel hook; v1 includes core
 panels, register/flag editing, FPR/matrix, a separate video window and

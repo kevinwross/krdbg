@@ -1097,31 +1097,31 @@ Gate G7:
 Close every row of the parity matrix in `docs/working-debugger-plan.md` §5 that
 is still short of KR32, and prove the interaction suite on both platforms.
 
-- [ ] **M8.1** Matrix audit: every §5 row marked yes only where a test or a gate
-      run proves it; the remaining rows named.
+- [x] **M8.1** Matrix audit: every §5 row marked yes only where a test or a gate
+      run proves it; the P3-target rows are the only ones left as future work.
 - [x] **M8.2** Settings persistence: the demo host saves the merged settings to
       the platform config path and loads them at start; `--set ID=VALUE` is the
       headless route. CTest `krdbg_settings_persist`.
-- [ ] **M8.3** Toolbar step/over/out and breakpoint buttons, matching KR32's
+- [x] **M8.3** Toolbar step/over/out and breakpoint buttons, matching KR32's
       toolbar; layout rects and all UI goldens updated.
-- [ ] **M8.4** A Build action: the toolbar BUILDs a source program and reloads
+- [x] **M8.4** A Build action: the toolbar BUILDs a source program and reloads
       it, separate from RESET (which restarts the current image).
-- [ ] **M8.5** Hover tooltips for the controls that still lack them (stats,
+- [x] **M8.5** Hover tooltips for the controls that still lack them (stats,
       toolbar buttons, breakpoint rows), with interaction assertions.
-- [ ] **M8.6** Interaction suite: synthesize click/key events for the new
+- [x] **M8.6** Interaction suite: synthesize click/key events for the new
       toolbar/Build/tooltip paths, assert panel state and a frame hash.
-- [ ] **M8.7** kr232 state goldens: loaded (exists), breakpoint set (exists),
-      settings open (exists), variables expanded (pending).
-- [ ] **M8.8** G8 gate run on Windows and WSL: full CTest and the bare gates.
+- [x] **M8.7** kr232 state goldens: loaded, breakpoint set, settings open and
+      variables expanded (aggregate array and element).
+- [x] **M8.8** G8 gate run on Windows and WSL: full CTest and the bare gates.
 
 Gate G8:
 
-- [ ] **G8.1** Every row of the §5 matrix is `yes` on Windows and Linux.
-- [ ] **G8.2** The interaction suite synthesizes events and asserts state and a
+- [x] **G8.1** Every row of the §5 matrix is `yes` on Windows and Linux.
+- [x] **G8.2** The interaction suite synthesizes events and asserts state and a
       frame hash; it runs in the gate.
-- [ ] **G8.3** The four kr232 state goldens are recorded and stable.
-- [ ] **G8.4** The adapter-free goldens and the two-platform gate pass.
-- [ ] **G8.5** No open BLOCKS or FIX-BEFORE finding remains.
+- [x] **G8.3** The four kr232 state goldens are recorded and stable.
+- [x] **G8.4** The adapter-free goldens and the two-platform gate pass.
+- [x] **G8.5** No open BLOCKS or FIX-BEFORE finding remains.
 
 ---
 
@@ -1160,6 +1160,8 @@ workflows were removed on 2026-11-23; the scripts are the current gate.
 
 | G7 | Windows x64 | `scripts/build-debugger.ps1 -Clean`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-windows.ps1`; `scripts/build-startrekng-kr232.ps1 -Clean`; `scripts/package-debugger.ps1` | PASS — `BUILD DEBUGGER: PASS`; CTest **13/13** (A1–A20 rows and the startrekng golden `EAB8F6EEC580D84F`); `GATE WINDOWS: PASS` with empty `56BCC5339740DCA6`, loaded `3DAD6F9400E135E2` and no `SDL2.dll`; the staged D1 artifact reports `krdbg 0.2.0` and loads a kr232 image; startrekng rebuilds from a clean `build/` and its scenario passes | `902fa43` |
 | G7 | WSL x64 | mirror + `KRG_PREFIX=/home/kevinro/.local bash scripts/build-debugger.sh`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-linux.sh` | PASS — `BUILD DEBUGGER: PASS`; CTest **13/13** (Linux startrekng golden `2AC8CBA5C069DE87`); `GATE LINUX X64: PASS`, 35/35 unit checks, empty/loaded hashes match | `902fa43` |
+| G8 | Windows x64 | `scripts/build-debugger.ps1`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-windows.ps1`; kr32/kr16 adapter builds + full suites | PASS — `BUILD DEBUGGER: PASS`; CTest **17/17**; `GATE WINDOWS: PASS` with empty `423637A6E2C8795B`, loaded `B49CBBA4FF776D43`; kr32 adapter suite **129/129**, kr16 **129/129** | `a11666b` |
+| G8 | WSL x64 | mirror; `scripts/build-debugger.sh`; `ctest --test-dir build/kr232-debugger`; `scripts/gate-linux.sh`; kr32 adapter suite | PASS — `BUILD DEBUGGER: PASS`; CTest **17/17** (Linux startrekng `4DD52E2F73788C72`); `GATE LINUX X64: PASS`, 39/39 checks; kr32 adapter suite **129/129**, same goldens as Windows | `a11666b` |
 
 ### G7 evidence
 
@@ -1170,6 +1172,16 @@ Recorded 2026-11-27T10:55:00-08:00 on `902fa43`.
 - CTest rows: `krdbg_kr232_kernel_pair`, `running_row`, `reset_row`, `breakpoint_row`, `status_row` (`halted: halted with status 7`) and `startrekng_golden`; the per-platform golden hash is recorded in CMake because the compiler-built startrekng image differs by host toolchain.
 - A1–A20 map to: A1/A2 `krdbg_kr232_app_smoke` + status row; A3 `surface_run_tick_advances_until_the_target_stops`; A4 `surface_breakpoints_panel_toggles_and_opens_menu` + scenario breakpoint; A5/F10–F11 and line stepping in the scenario and surface tests; A6 aggregate scenario; A7 `kr232_adapter_unwinds_two_frames`; A8 `kr232_scenario_registers_memory_and_disassembly`; A9 same scenario; A10/A11 `kr232_scenario_devices`; A12 reset/breakpoint persistence; A13 kernel pair; A14 the CTest rows above; A15 `kr232_adapter_flags_are_per_bit`; A16 step-over/step-out tests; A17 `surface_status_text_names_the_stop` + status row; A18 `build-info.txt` from the clean script and unmodified KRCompiler sources; A19/A20 `kr232_scenario_startrekng`.
 - The D1 artifact is staged at `build/release-kr232/krdbg-0.2.0-windows-x64-kr232` (version and headless kr232 load verified); the adapter-free gate still renders `56BCC5339740DCA6` / `3DAD6F9400E135E2`.
+### G8 evidence (KR32 parity)
+
+Recorded 2026-11-27T11:01:12-08:00 on `a11666b`/`e389254`.
+
+- The toolbar gained `BUILD` and `OVER IN OUT BP` (hidden below 1100 px), with hover tooltips; BUILD calls the host reload so a source program is rebuilt while RESET restarts the loaded image.
+- Every UI golden was refreshed in one reviewed run with `KRDBG_UPDATE_GOLDENS`; Windows and WSL produce the same values: empty `423637A6E2C8795B`, loaded `B49CBBA4FF776D43`, kr32-loaded `5EB8A7A826F1646C`, kr16-loaded `929826FD64486D7F`.
+- Interaction tests: `surface_toolbar_build_steps_and_breakpoint` (BUILD calls reload, OVER steps, BP toggles, the group hides at 900 px) and `surface_toolbar_hover_shows_tooltips` (build/run/step/breakpoint/gear), alongside the existing panel tests.
+- Four kr232 state goldens: loaded, breakpoint set (`8CE7176F196F3DCD`), settings open (`C36315131719FBAE`) and variables expanded (`91D248C11CC709CA`).
+- The parity matrix rows are `yes` except the P3-target rows (DAP, conditional breakpoints/watchpoints, variable writes and expression evaluation), which belong to G9–G10.
+- CTest: kr232 preset **17/17** on Windows and WSL; bare gates `GATE WINDOWS: PASS` and `GATE LINUX X64: PASS`.
 ### G0.4 window captures
 
 - Windows: `shots/g0-4-windows.png` — 1456x939 including the frame (1440x900 client), PrintWindow, non-blank.
@@ -1469,6 +1481,7 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:40:00-08:00** — **KR232 KDBG types and globals.** KRCompiler `ff72fce` emits `.debug_type` T/C/M/A/R records and typed `.debug_var` names from the kr232 backend; the assembler forwards them, emits F only for text functions and G for data symbols with type/size. `a9e22a0` deduplicates merged members. The six fixtures were regenerated (`46ada06`), `members()` now stores array-element bytes, and `kr232_scenario_globals_and_members` passes. Verification: `krc_tests` 313/313; krdbg CTest 12/12, 117 and 29 unit tests, 0 failures; a rendered `aggregate.kr232` shows `GLOBALS (2)` with `points = [2]` and expands to `x`/`y`.
 - **2026-11-27T10:47:00-08:00** — **Status text and the last M7 task.** `cd303e4` adds `DebuggerSurface::status_text()` (read-only, documented in PLAN.md), a `--print-status` headless flag and the `krdbg_kr232_status_row` CTest row, plus `surface_status_text_names_the_stop`. Verification: CTest 13/13, `krdbg_tests` 118/0, `krdbg_kr232_tests` 29/0. M7.19 is checked; every M7 task M7.1–M7.25 is now checked. The G7 gate run itself (A1–A20 on Windows and Linux with the D1 artifact) is next.
 - **2026-11-27T10:51:06-08:00** — **P2 starts: settings persistence, kr232 state goldens.** `96d84a3` makes the demo host save the merged settings to `%APPDATA%\krdbg\settings.json` / `$XDG_CONFIG_HOME/krdbg/settings.json` and load them at start; `--set ID=VALUE` applies one typed value before loading. `krdbg_settings_persist` proves the write and reload. The `kr232-breakpoint` (`83932902B6DE5E18`) and `kr232-settings` (`C36315131719FBAE`) goldens are CTest rows; the parity matrix rows that M7 closed are marked yes. CTest 16/16. M8.2 is checked; M8.1 and M8.3–M8.8 remain.
+- **2026-11-27T11:01:12-08:00** — **G8 passed; P2 complete.** `a11666b` adds the toolbar BUILD/OVER/IN/OUT/BP controls, hover tooltips, the interaction tests and refreshed every golden (Windows and WSL agree). `e389254` completes the tooltip coverage and the Linux startrekng hash. CTest **17/17** on both platforms; `GATE WINDOWS: PASS`, `GATE LINUX X64: PASS`; kr32 adapter **129/129** on Windows and Linux; kr16 adapter **129/129** on Windows. The four kr232 state goldens are recorded. M8.1–M8.8 and G8.1–G8.5 are checked; P3 (G9–G10) remains.
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
