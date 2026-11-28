@@ -4287,10 +4287,11 @@ void DebuggerSurface::tick() {
     }
     // The screen updates once per frame, so this is how many instructions run
     // between updates. Ten thousand was hard-coded and made a long-running program
-    // look stuck; the slice is a setting now, beside the instruction limit.
+    // look stuck; the slice is a setting now, beside the instruction limit. The
+    // id is qualified like every other aggregated setting (`vm.time_slice`).
     std::int64_t slice = 100000;
     const SettingsSnapshot live = impl_->host->settings_values();
-    const auto found = live.values.find("time_slice");
+    const auto found = live.values.find("vm.time_slice");
     if (found != live.values.end()) {
         if (const auto* value = std::get_if<std::int64_t>(&found->second)) {
             if (*value > 0) {

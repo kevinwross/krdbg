@@ -1,6 +1,9 @@
 #pragma once
 
+#include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "krdbg/settings.h"
@@ -98,5 +101,65 @@ public:
 private:
     DebugSettings settings_;
 };
+
+// Debugger presentation preferences. They are app-level, so every descriptor is
+// Shared: the same COM scrollback and video pop-out size follow the user from VM
+// to VM. The values record today's built-in behaviour; the surface still uses
+// those constants until a follow-up reads the keys, so editing one changes the
+// stored preference without changing the current render yet.
+struct PresentationSettings {
+    std::int64_t com_scrollback = 5000;      // lines kept in the COM panel
+    std::int64_t com_input_cap = 4096;       // bytes buffered for the guest
+    std::int64_t video_popout_width = 640;   // popped-out video window, pixels
+    std::int64_t video_popout_height = 480;
+    std::string video_fit = "fit";           // "fit" or "one-to-one"
+};
+
+class PresentationSettingsProvider final : public ISettingsProvider {
+public:
+    explicit PresentationSettingsProvider(PresentationSettings initial = {});
+
+    std::string id() const override { return "ui"; }
+    SettingsSchema schema() const override;
+    SettingsSnapshot values() const override;
+    SettingsApplyResult apply(const SettingsSnapshot& values) override;
+
+    const PresentationSettings& settings() const { return settings_; }
+
+private:
+    PresentationSettings settings_;
+};
+
+// What a per-target default describes.
+enum class TargetDefaultClass {
+    // A guest-visible capability the VM fixes (console queue depth, keyboard
+    // FIFO, framebuffer aperture, default video mode). It is read-only: shown to
+    // the user, never written to a settings document.
+    Capability,
+    // An emulated-device setting the VM API lets the host change. Editable, and
+    // stored in the target's section when the setting exists.
+    Device,
+    // A default the host owns for this target (today: compiler optimization).
+    Setting,
+};
+
+struct TargetDefaultValue {
+    std::string setting_id;  // fully-qualified descriptor id, e.g. "cc.optimization"
+    SettingValue value;
+    TargetDefaultClass kind = TargetDefaultClass::Setting;
+    // Why the value is what it is; names a provisional owner where the evidence
+    // is not final. The VM's own code replaces the row when it owns its defaults.
+    std::string provenance;
+};
+
+// The per-target defaults table, keyed by the stable target id the compiler
+// publishes ("kr32", "kr16", "kr216", "kr232"). Only values that are known are
+// listed: a developer's source-tree path or a machine-specific memory size is
+// user/project configuration, never a baked default. An unknown target has no
+// rows; the descriptor defaults then apply.
+const std::vector<TargetDefaultValue>& target_defaults(std::string_view target_id);
+
+std::optional<SettingValue> target_default(std::string_view target_id,
+                                           std::string_view setting_id);
 
 } // namespace krdbg

@@ -12,6 +12,12 @@ enum class SettingType {
     Bool, Int, Float, String, Enum, Path, StringList, StringMap
 };
 
+// A setting whose correct value depends on the loaded VM belongs to that
+// target's section. Only the few app-level settings — the target selectors and
+// window/recent state — are shared by every target. An unset scope is Target,
+// so a new VM setting cannot silently become global.
+enum class SettingScope { Shared, Target };
+
 struct SettingDescriptor {
     std::string id;            // "vm.ram_mb", "run.instruction_limit"
     std::string group;         // "vm.memory", "run", "env"
@@ -29,6 +35,7 @@ struct SettingDescriptor {
     bool secret = false;
     bool read_only = false;
     bool requires_restart = false;
+    SettingScope scope = SettingScope::Target;
 };
 
 struct SettingsGroup {

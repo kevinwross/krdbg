@@ -198,55 +198,136 @@ public:
     krdbg::SettingsSchema schema() const override {
         krdbg::SettingsSchema schema;
         schema.groups = {
-            krdbg::SettingsGroup{"memory", "Memory", "Guest memory", 10},
+            krdbg::SettingsGroup{"device", "Capabilities",
+                                 "Guest-visible facts the target fixes", 15},
             krdbg::SettingsGroup{"run", "Run", "Execution limits", 20},
             krdbg::SettingsGroup{"environment", "Environment",
                                  "Guest environment", 30},
         };
-        krdbg::SettingDescriptor ram_setting;
-        ram_setting.id = "ram_mb";
-        ram_setting.group = "memory";
-        ram_setting.label = "RAM";
-        ram_setting.description = "Guest RAM size. Requires reload.";
-        ram_setting.type = krdbg::SettingType::Int;
-        ram_setting.default_json = "128";
-        ram_setting.has_range = true;
-        ram_setting.min = 16;
-        ram_setting.max = 2048;
-        ram_setting.step = 16;
-        ram_setting.unit = "MiB";
-        ram_setting.requires_restart = true;
-        schema.settings.push_back(ram_setting);
+        // Guest-visible capabilities. They are read-only: the target fixes them
+        // in its own headers, so they are shown but never saved. 0/false/empty is
+        // the conservative "this target does not report it" value; no hardware
+        // number is invented here.
+        const auto capability = [](std::string id, std::string label,
+                                   krdbg::SettingType type,
+                                   std::string default_json,
+                                   std::string description,
+                                   std::string unit = {}) {
+            krdbg::SettingDescriptor setting;
+            setting.id = std::move(id);
+            setting.group = "device";
+            setting.label = std::move(label);
+            setting.description = std::move(description) +
+                                  " Read-only target capability.";
+            setting.type = type;
+            setting.default_json = std::move(default_json);
+            setting.unit = std::move(unit);
+            setting.read_only = true;
+            return setting;
+        };
+        schema.settings.push_back(capability(
+            "console_input", "Console input", krdbg::SettingType::Bool, "false",
+            "Whether the guest console accepts input at all."));
+        schema.settings.push_back(capability(
+            "console_queue", "Console input queue", krdbg::SettingType::Int, "0",
+            "Depth of a bounded console input queue; 0 = no queue or not "
+            "reported (see the console input capability).",
+            "bytes"));
+        schema.settings.push_back(capability(
+            "console_rx_buffer_bytes", "Console RX buffer",
+            krdbg::SettingType::Int, "0",
+            "Serial-terminal receive buffer; 0 = not reported. A serial RX "
+            "buffer is not a console input queue.",
+            "bytes"));
+        schema.settings.push_back(capability(
+            "console_ports", "Console ports",
+            krdbg::SettingType::String, "\"\"",
+            "Guest-visible console register addresses; empty = not reported."));
+        schema.settings.push_back(capability(
+            "keyboard_fifo", "Keyboard FIFO", krdbg::SettingType::Int, "0",
+            "Keyboard FIFO depth; 0 = not reported.", "keys"));
+        schema.settings.push_back(capability(
+            "framebuffer_aperture_mb", "Framebuffer aperture",
+            krdbg::SettingType::Int, "0",
+            "Guest-visible framebuffer aperture; 0 = not reported or no "
+            "framebuffer.",
+            "MiB"));
+        schema.settings.push_back(capability(
+            "framebuffer_default_mode", "Default video mode",
+            krdbg::SettingType::String, "\"\"",
+            "Guest-visible reset mode; empty = not reported or no framebuffer."));
+        schema.settings.push_back(capability(
+            "has_video", "Video device", krdbg::SettingType::Bool, "false",
+            "Whether the target reports a video device."));
+        schema.settings.push_back(capability(
+            "terminal_scrollback", "Terminal scrollback",
+            krdbg::SettingType::Int, "0",
+            "Guest terminal scrollback; 0 = not reported.", "lines"));
+        schema.settings.push_back(capability(
+            "pointer_bits", "Pointer width", krdbg::SettingType::Int, "0",
+            "Target address width; 0 = not reported.", "bits"));
+        schema.settings.push_back(capability(
+            "memory_kb", "Address space", krdbg::SettingType::Int, "0",
+            "Guest-visible address space; 0 = not reported.", "KiB"));
+        schema.settings.push_back(capability(
+            "ram_kb", "Usable RAM", krdbg::SettingType::Int, "0",
+            "Usable guest RAM inside the address space; 0 = not reported.",
+            "KiB"));
+        schema.settings.push_back(capability(
+            "ram_mb", "RAM", krdbg::SettingType::Int, "0",
+            "Guest RAM fixed by the target's memory map; 0 = not reported. A "
+            "target with a fixed small RAM reports usable RAM in KiB instead.",
+            "MiB"));
+        schema.settings.push_back(capability(
+            "framebuffer_default_stride", "Frame stride",
+            krdbg::SettingType::Int, "0",
+            "Bytes per scanline of the default frame; 0 = not reported.",
+            "bytes"));
+        schema.settings.push_back(capability(
+            "framebuffer_pixel_format", "Frame pixel format",
+            krdbg::SettingType::String, "\"\"",
+            "Pixel format of the guest framebuffer; empty = not reported."));
+        schema.settings.push_back(capability(
+            "framebuffer_max_mode", "Maximum video mode",
+            krdbg::SettingType::String, "\"\"",
+            "Largest guest-visible video mode; empty = not reported."));
+        schema.settings.push_back(capability(
+            "terminal_size", "Terminal size", krdbg::SettingType::String, "\"\"",
+            "Default guest terminal size, columns x rows; empty = not "
+            "reported."));
+        schema.settings.push_back(capability(
+            "video_presentation", "Video presentation",
+            krdbg::SettingType::String, "\"\"",
+            "How the guest exposes frames; empty = not reported."));
+        schema.settings.push_back(capability(
+            "cycles_per_instruction", "Cycles per instruction",
+            krdbg::SettingType::Int, "0",
+            "Cycles charged per retired instruction; 0 = not reported.",
+            "cycles"));
+        schema.settings.push_back(capability(
+            "device_set", "Device set", krdbg::SettingType::String, "\"\"",
+            "Guest devices the target guarantees; empty = not reported."));
         krdbg::SettingDescriptor slice_setting;
-    slice_setting.id = "time_slice";
-    slice_setting.group = "run";
-    slice_setting.label = "Time slice";
-    slice_setting.description = "Instructions between screen updates while running.";
-    slice_setting.type = krdbg::SettingType::Int;
-    slice_setting.default_json = "100000";
-    slice_setting.has_range = true;
-    slice_setting.min = 1000;
-    slice_setting.max = 100000000;
-    slice_setting.step = 1000;
-    slice_setting.unit = "instructions";
-    krdbg::SettingDescriptor limit_setting;
-        limit_setting.id = "limit";
-        limit_setting.group = "run";
-        limit_setting.label = "Instruction limit";
-        limit_setting.description = "Maximum instructions per run slice.";
-        limit_setting.type = krdbg::SettingType::Int;
-        limit_setting.default_json = "1000000";
-        limit_setting.has_range = true;
-        limit_setting.min = 1000;
-        limit_setting.max = 100000000;
-        schema.settings.push_back(limit_setting);
-    schema.settings.push_back(slice_setting);
+        slice_setting.id = "time_slice";
+        slice_setting.group = "run";
+        slice_setting.label = "Time slice";
+        slice_setting.description =
+            "Instructions between screen updates while running.";
+        slice_setting.type = krdbg::SettingType::Int;
+        slice_setting.default_json = "100000";
+        slice_setting.has_range = true;
+        slice_setting.min = 1000;
+        slice_setting.max = 100000000;
+        slice_setting.step = 1000;
+        slice_setting.unit = "instructions";
+        schema.settings.push_back(slice_setting);
         krdbg::SettingDescriptor env_setting;
         env_setting.id = "env";
         env_setting.group = "environment";
         env_setting.label = "Environment";
         env_setting.description = "KEY=VALUE entries passed to the guest.";
         env_setting.type = krdbg::SettingType::StringMap;
+        env_setting.default_json = "{}";
         schema.settings.push_back(env_setting);
         krdbg::SettingDescriptor target_setting;
         target_setting.id = "target";
@@ -255,18 +336,18 @@ public:
         target_setting.description =
             "Build target for a source loaded with LOAD.";
         target_setting.type = krdbg::SettingType::String;
-        target_setting.default_json = "kr32";
+        target_setting.default_json = "\"kr32\"";
+        // The build-target selector is app-level: every target shares it.
+        target_setting.scope = krdbg::SettingScope::Shared;
         schema.settings.push_back(target_setting);
         return schema;
     }
 
     krdbg::SettingsSnapshot values() const override {
         krdbg::SettingsSnapshot snapshot;
-        snapshot.values["ram_mb"] = ram;
-        snapshot.values["limit"] = limit;
+        snapshot.values["time_slice"] = time_slice;
         snapshot.values["env"] = env;
         snapshot.values["target"] = target;
-        snapshot.origins["ram_mb"] = krdbg::SettingOrigin::User;
         return snapshot;
     }
 
@@ -275,8 +356,7 @@ public:
         krdbg::SettingsApplyResult result;
         const krdbg::SettingsSchema current = schema();
         for (const auto& [id, value] : next.values) {
-            if (id != "ram_mb" && id != "limit" && id != "env" &&
-                id != "target") {
+            if (id != "time_slice" && id != "env" && id != "target") {
                 continue;
             }
             const auto found = std::find_if(
@@ -293,10 +373,8 @@ public:
                 result.errors[id] = error;
                 continue;
             }
-            if (id == "ram_mb") {
-                ram = std::get<std::int64_t>(value);
-            } else if (id == "limit") {
-                limit = std::get<std::int64_t>(value);
+            if (id == "time_slice") {
+                time_slice = std::get<std::int64_t>(value);
             } else if (id == "target") {
                 target = std::get<std::string>(value);
             } else {
@@ -307,8 +385,7 @@ public:
         return result;
     }
 
-    std::int64_t ram = 128;
-    std::int64_t limit = 1000000;
+    std::int64_t time_slice = 100000;
     std::string target = "kr32";
     std::map<std::string, std::string> env = {{"PATH", "/bin"},
                                              {"TERM", "dumb"}};
@@ -316,7 +393,7 @@ public:
 
 class DemoHost final : public krdbg::IHostServices {
 public:
-    DemoHost() : aggregator_({&vm_, &cc_, &ld_, &as_, &dbg_}) {}
+    DemoHost() : aggregator_({&vm_, &ui_, &cc_, &ld_, &as_, &dbg_}) {}
 
     bool choose_and_load(std::string& error) override {
         if (!load_callback) {
@@ -360,19 +437,146 @@ public:
     krdbg::SettingsApplyResult apply_settings(const krdbg::SettingsSnapshot& next,
                                               krdbg::SettingsLayer layer) override {
         krdbg::SettingsApplyResult result = aggregator_.apply(next, layer);
-        if (result.ok && !settings_path_.empty()) {
-            std::string save_error;
-            if (!krdbg::settings_json::save_snapshot_file(
-                    settings_path_, aggregator_.schema(), aggregator_.values(),
-                    save_error)) {
-                show_error("cannot save settings: " + save_error);
-            }
+        if (!result.ok) {
+            return result;
+        }
+        if (layer == krdbg::SettingsLayer::Project) {
+            // The project file configures a checkout; it is read-only in this
+            // design, so the change applies to the session and is not written.
+            show_error("project settings are read-only; the change applies to "
+                       "this session only");
+            return result;
+        }
+        remember_user_values();
+        std::string save_error;
+        if (!save_user_document(save_error)) {
+            show_error("cannot save settings: " + save_error);
         }
         return result;
     }
 
     // The host owns the settings file; the surface only asks for a layer.
-    void set_settings_path(std::string path) { settings_path_ = std::move(path); }
+    void set_settings_path(std::string path) {
+        settings_path_ = std::move(path);
+    }
+
+    // The path whose ancestors are searched for `.krdbg/settings.json` before a
+    // load has happened (a command-line image or the configured workspace).
+    void set_project_seed_path(std::string path) {
+        project_seed_path_ = std::move(path);
+    }
+
+    void set_active_target(std::string target_id) {
+        active_target_ = std::move(target_id);
+    }
+    const std::string& active_target() const { return active_target_; }
+
+    // Reads the user document and the project document the seed path names. A
+    // missing file is not an error; a malformed one is.
+    bool load_documents(std::string& error) {
+        user_document_ = {};
+        if (!settings_path_.empty() &&
+            std::filesystem::exists(settings_path_)) {
+            if (!krdbg::settings_json::load_document_file(
+                    settings_path_, aggregator_.schema(), user_document_,
+                    error)) {
+                return false;
+            }
+        }
+        return load_project_document(project_seed_path_, error);
+    }
+
+    // The target the user last selected, from the shared section the layers
+    // resolve first. Empty when no document names one.
+    std::string last_used_target() const {
+        const auto from = [](const krdbg::SettingsSnapshot& section,
+                             std::string& out) {
+            for (const char* id : {"vm.target", "cc.target"}) {
+                const auto found = section.values.find(id);
+                if (found == section.values.end()) {
+                    continue;
+                }
+                if (const auto* text =
+                        std::get_if<std::string>(&found->second);
+                    text != nullptr && !text->empty()) {
+                    out = *text;
+                    return;
+                }
+            }
+        };
+        std::string target;
+        from(user_document_.shared, target);
+        // Project shared outranks user shared, so it wins as the last selection.
+        std::string project;
+        from(project_document_.shared, project);
+        return project.empty() ? target : project;
+    }
+
+    // Applies the documents for the active target: user shared, user target,
+    // project shared, project target over the code and target defaults.
+    bool apply_layers(std::string& error) {
+        aggregator_.set_active_target(active_target_);
+        const krdbg::SettingsApplyResult result =
+            aggregator_.apply_layer_documents(&user_document_,
+                                               &project_document_);
+        if (!result.ok) {
+            error = result.errors.empty() ? "settings apply failed"
+                                          : result.errors.begin()->second;
+            return false;
+        }
+        return true;
+    }
+
+    // Switches to `target_id`, re-discovers the project file from the path being
+    // loaded, and re-resolves the layers. An empty path is a load with no file
+    // behind it (an embedded kernel), so the previous project document goes.
+    bool activate_target(const std::string& target_id,
+                         const std::string& loaded_path, std::string& error) {
+        active_target_ = target_id;
+        return load_project_document(loaded_path, error) && apply_layers(error);
+    }
+
+    // `--set ID=VALUE`: updates the user document's section for the setting and
+    // persists it. A Target setting goes to the active target's section when one
+    // is known, otherwise to shared (where it applies to every target).
+    bool set_setting(const std::string& id, const krdbg::SettingValue& value,
+                     std::string& error) {
+        const krdbg::SettingDescriptor* descriptor = nullptr;
+        for (const krdbg::SettingDescriptor& candidate :
+             aggregator_.schema().settings) {
+            if (candidate.id == id) {
+                descriptor = &candidate;
+                break;
+            }
+        }
+        if (descriptor == nullptr) {
+            error = "unknown setting '" + id + "'";
+            return false;
+        }
+        if (descriptor->read_only) {
+            error = "'" + id + "' is a read-only target capability";
+            return false;
+        }
+        krdbg::SettingsSnapshot* home = &user_document_.shared;
+        if (descriptor->scope == krdbg::SettingScope::Target &&
+            !active_target_.empty()) {
+            home = &user_document_.targets[active_target_];
+        } else if (descriptor->scope == krdbg::SettingScope::Shared) {
+            // A Shared setting has one home; drop a stale target copy so it
+            // cannot shadow the shared value.
+            for (auto& [target, section] : user_document_.targets) {
+                (void)target;
+                section.values.erase(id);
+                section.origins.erase(id);
+            }
+        }
+        home->values[id] = value;
+        home->origins[id] = krdbg::SettingOrigin::User;
+        if (!apply_layers(error)) {
+            return false;
+        }
+        return save_user_document(error);
+    }
 
     std::function<bool(const std::string&, std::string&)> load_callback;
     std::function<bool(std::string&)> reload_callback;
@@ -381,11 +585,85 @@ public:
     bool last_load_source = false;
     std::string settings_path_;
     DemoVmProvider vm_;
+    krdbg::PresentationSettingsProvider ui_;
     krdbg::CompilerSettingsProvider cc_;
     krdbg::LinkerSettingsProvider ld_;
     krdbg::AssemblerSettingsProvider as_;
     krdbg::DebugSettingsProvider dbg_;
     krdbg::SettingsAggregator aggregator_;
+
+private:
+    bool load_project_document(const std::string& path, std::string& error) {
+        project_document_ = {};
+        if (path.empty()) {
+            return true;
+        }
+        const std::string project_path =
+            krdbg::settings_json::discover_project_file(path);
+        if (project_path.empty()) {
+            return true;
+        }
+        if (!krdbg::settings_json::load_document_file(
+                project_path, aggregator_.schema(), project_document_, error)) {
+            error = project_path + ": " + error;
+            return false;
+        }
+        return true;
+    }
+
+    // Writes the user document: the values whose effective origin is User go to
+    // their scope's section, a value back at Default loses the user override,
+    // and a Project-shadowed value keeps whatever the user file already held.
+    void remember_user_values() {
+        const krdbg::SettingsSnapshot snapshot = aggregator_.values();
+        for (const krdbg::SettingDescriptor& descriptor :
+             aggregator_.schema().settings) {
+            if (descriptor.read_only) {
+                continue;
+            }
+            krdbg::SettingOrigin origin = krdbg::SettingOrigin::Default;
+            if (const auto found = snapshot.origins.find(descriptor.id);
+                found != snapshot.origins.end()) {
+                origin = found->second;
+            }
+            const bool shared_scope =
+                descriptor.scope == krdbg::SettingScope::Shared;
+            krdbg::SettingsSnapshot* home =
+                shared_scope || active_target_.empty()
+                    ? &user_document_.shared
+                    : &user_document_.targets[active_target_];
+            if (shared_scope) {
+                for (auto& [target, section] : user_document_.targets) {
+                    (void)target;
+                    section.values.erase(descriptor.id);
+                    section.origins.erase(descriptor.id);
+                }
+            }
+            if (origin == krdbg::SettingOrigin::User) {
+                const auto value = snapshot.values.find(descriptor.id);
+                if (value != snapshot.values.end()) {
+                    home->values[descriptor.id] = value->second;
+                    home->origins[descriptor.id] = krdbg::SettingOrigin::User;
+                }
+            } else if (origin == krdbg::SettingOrigin::Default) {
+                home->values.erase(descriptor.id);
+                home->origins.erase(descriptor.id);
+            }
+        }
+    }
+
+    bool save_user_document(std::string& error) {
+        if (settings_path_.empty()) {
+            return true;  // no user configuration directory: session-only
+        }
+        return krdbg::settings_json::save_document_file(
+            settings_path_, aggregator_.schema(), user_document_, error);
+    }
+
+    std::string project_seed_path_;
+    std::string active_target_;
+    krdbg::SettingsDocument user_document_;
+    krdbg::SettingsDocument project_document_;
 };
 
 struct Options {
@@ -467,7 +745,8 @@ void print_usage() {
         "                         needs --toolchain\n"
         "  --toolchain DIR        krc installation prefix for building sources\n"
         "                         (default: KRDBG_KRC_PREFIX)\n"
-        "  --target NAME          Build target for a source loaded with --load:\n"
+        "  --target NAME          Build target for a source loaded with --load\n"
+        "                         (also selects the settings target section):\n"
         "                         kr32, kr16, kr216, or kr232 (default kr32)\n"
         "  --source-root DIR      Root for source paths in debug information\n"
         "  --kernel               Load the embedded KR32 OS kernel\n"
@@ -479,6 +758,7 @@ void print_usage() {
         "  --no-stop-at-main      Do not run to main on the first frame\n"
         "  --print-status         Headless: print the status-bar text\n"
         "  --set ID=VALUE         Apply and persist one setting before loading\n"
+        "                         (the active target's section for a VM setting)\n"
         "  --click X,Y            Synthesize a click before the frame renders\n"
         "  --version              Print the version\n"
         "  --help, -h             Print this help\n"
@@ -664,6 +944,136 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    // The settings host resolves the user document and the project document
+    // before any load. The user file is `%APPDATA%\krdbg\settings.json` (or the
+    // XDG equivalent); the project file is `.krdbg/settings.json` in the nearest
+    // ancestor of the path named on the command line.
+    DemoHost host;
+    const std::string settings_path = settings_file_path();
+    host.set_settings_path(settings_path);
+
+    std::string project_seed;
+    if (!options.load_path.empty()) {
+        project_seed = options.load_path;
+    } else if (!options.kr232_program_path.empty()) {
+        project_seed = options.kr232_program_path;
+    } else if (!options.kr232_image.empty()) {
+        project_seed = options.kr232_image;
+    } else if (!options.kr216_image.empty()) {
+        project_seed = options.kr216_image;
+    } else if (!options.kr16_image.empty()) {
+        project_seed = options.kr16_image;
+    } else if (!options.kr32_image.empty()) {
+        project_seed = options.kr32_image;
+    } else if (options.source_root_set) {
+        project_seed = options.source_root;
+    }
+    host.set_project_seed_path(project_seed);
+
+    std::string settings_error;
+    if (!host.load_documents(settings_error)) {
+        host.show_error("settings: " + settings_error);
+    }
+    // Before a load the active target is the command-line build target, the
+    // image the command line names, or the target the user last selected. After
+    // a load that target switches to what the loaded program actually is.
+    const auto command_line_image_target = [&options]() -> std::string {
+        if (!options.kr232_image.empty() || !options.kr232_program_path.empty()) {
+            return "kr232";
+        }
+        if (!options.kr216_image.empty()) {
+            return "kr216";
+        }
+        if (!options.kr16_image.empty()) {
+            return "kr16";
+        }
+        if (options.kr32_os || !options.kr32_image.empty()) {
+            return "kr32";
+        }
+        return {};
+    };
+    std::string startup_target = options.build_target_set
+                                     ? options.build_target
+                                     : command_line_image_target();
+    if (startup_target.empty()) {
+        startup_target = host.last_used_target();
+    }
+    host.set_active_target(startup_target);
+    if (!host.apply_layers(settings_error)) {
+        host.show_error("settings: " + settings_error);
+    }
+
+    // Source roots for an adapter load: the command-line root plus the settings'
+    // extra roots, unless the command line named a root itself.
+    const auto configured_source_roots = [&host, &options]() {
+        std::vector<std::string> roots{options.source_root};
+        if (options.source_root_set) {
+            return roots;
+        }
+        const krdbg::SettingsSnapshot live = host.settings_values();
+        const auto found = live.values.find("dbg.source_roots");
+        if (found != live.values.end()) {
+            if (const auto* list =
+                    std::get_if<std::vector<std::string>>(&found->second)) {
+                for (const std::string& root : *list) {
+                    if (!root.empty()) {
+                        roots.push_back(root);
+                    }
+                }
+            }
+        }
+        return roots;
+    };
+
+    // `dbg.stop_at_main` gates the automatic run into the loaded program,
+    // including the kernel+user pair (which otherwise runs to the user entry and
+    // would ignore the setting).
+    const auto stop_at_main_enabled = [&host]() {
+        const krdbg::SettingsSnapshot live = host.settings_values();
+        const auto found = live.values.find("dbg.stop_at_main");
+        if (found != live.values.end()) {
+            if (const auto* flag = std::get_if<bool>(&found->second)) {
+                return *flag;
+            }
+        }
+        return true;
+    };
+
+    // `--set ID=VALUE` applies and persists one settings edit before any load.
+    // A Target setting goes to the active target's section; a Shared setting to
+    // the document's shared section.
+    for (const std::string& assignment : options.set_values) {
+        const std::size_t equals = assignment.find('=');
+        if (equals == std::string::npos || equals == 0) {
+            std::fprintf(stderr, "krdbg: --set needs ID=VALUE\n");
+            return 2;
+        }
+        const std::string id = assignment.substr(0, equals);
+        const std::string text = assignment.substr(equals + 1);
+        const krdbg::SettingsSchema schema = host.settings_schema();
+        const auto found = std::find_if(
+            schema.settings.begin(), schema.settings.end(),
+            [&id](const krdbg::SettingDescriptor& candidate) {
+                return candidate.id == id;
+            });
+        if (found == schema.settings.end()) {
+            std::fprintf(stderr, "krdbg: unknown setting '%s'\n", id.c_str());
+            return 2;
+        }
+        krdbg::SettingValue value;
+        std::string value_error;
+        if (!parse_setting_value(*found, text, value, value_error)) {
+            std::fprintf(stderr, "krdbg: --set %s: %s\n", id.c_str(),
+                         value_error.c_str());
+            return 2;
+        }
+        if (!host.set_setting(id, value, settings_error)) {
+            std::fprintf(stderr, "krdbg: --set %s: %s\n", id.c_str(),
+                         settings_error.c_str());
+            return 2;
+        }
+    }
+
     std::unique_ptr<krdbg::DebugSession> session;
     krdbg::FakeTarget* fake_target = nullptr;
     std::optional<krdbg::ProgramInfo> real_program;
@@ -672,12 +1082,26 @@ int main(int argc, char** argv) {
     std::string loaded_kernel;
     std::string loaded_program;
     std::uint64_t pending_initial_stop = 0;
+
+    // A command-line image load knows its target before the adapter runs, so the
+    // settings sections and the project file are switched first.
+    const auto activate_for_load = [&host](const std::string& target,
+                                           const std::string& path) {
+        std::string error;
+        if (!host.activate_target(target, path, error)) {
+            std::fprintf(stderr, "krdbg: settings: %s\n", error.c_str());
+            return false;
+        }
+        return true;
+    };
 #if defined(KRDBG_HAVE_KR32)
     if (options.kr32_os || !options.kr32_image.empty()) {
+        if (!activate_for_load("kr32", options.kr32_image)) {
+            return 1;
+        }
         krdbg::kr32adapter::LoadedProgram loaded;
         krdbg::kr32adapter::Options adapter_options;
-        adapter_options.source_roots = {
-            options.source_root};
+        adapter_options.source_roots = configured_source_roots();
         std::string error;
         if (options.kr32_os) {
             if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
@@ -708,16 +1132,19 @@ int main(int argc, char** argv) {
         } else {
             // The first frame runs to main when the stop-at-main setting is on;
             // headless renders apply the same pending stop before drawing.
-            pending_initial_stop = first_line_of_main(session->info());
+            pending_initial_stop =
+            stop_at_main_enabled() ? first_line_of_main(session->info()) : 0;
         }
     }
 #endif
 #if defined(KRDBG_HAVE_KR16)
     if (!session && !options.kr16_image.empty()) {
+        if (!activate_for_load("kr16", options.kr16_image)) {
+            return 1;
+        }
         krdbg::kr16adapter::LoadedProgram loaded;
         krdbg::kr16adapter::Options adapter_options;
-        adapter_options.source_roots = {
-            options.source_root};
+        adapter_options.source_roots = configured_source_roots();
         std::string error;
         if (!krdbg::kr16adapter::load_image(options.kr16_image,
                                             adapter_options, loaded, error)) {
@@ -732,14 +1159,18 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        pending_initial_stop = first_line_of_main(session->info());
+        pending_initial_stop =
+            stop_at_main_enabled() ? first_line_of_main(session->info()) : 0;
     }
 #endif
 #if defined(KRDBG_HAVE_KR216)
     if (!session && !options.kr216_image.empty()) {
+        if (!activate_for_load("kr216", options.kr216_image)) {
+            return 1;
+        }
         krdbg::kr216adapter::LoadedProgram loaded;
         krdbg::kr216adapter::Options adapter_options;
-        adapter_options.source_roots = {options.source_root};
+        adapter_options.source_roots = configured_source_roots();
         std::string error;
         if (!krdbg::kr216adapter::load_image(options.kr216_image,
                                              adapter_options, loaded, error)) {
@@ -755,14 +1186,18 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        pending_initial_stop = first_line_of_main(session->info());
+        pending_initial_stop =
+            stop_at_main_enabled() ? first_line_of_main(session->info()) : 0;
     }
 #endif
 #if defined(KRDBG_HAVE_KR232)
     if (!session && !options.kr232_image.empty()) {
+        if (!activate_for_load("kr232", options.kr232_image)) {
+            return 1;
+        }
         krdbg::kr232adapter::LoadedProgram loaded;
         krdbg::kr232adapter::Options adapter_options;
-        adapter_options.source_roots = {options.source_root};
+        adapter_options.source_roots = configured_source_roots();
         std::string error;
         if (!krdbg::kr232adapter::load_image(options.kr232_image,
                                              adapter_options, loaded, error)) {
@@ -780,13 +1215,17 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        pending_initial_stop = first_line_of_main(session->info());
+        pending_initial_stop =
+            stop_at_main_enabled() ? first_line_of_main(session->info()) : 0;
     }
     if (!session && !options.kr232_kernel_path.empty() &&
         !options.kr232_program_path.empty()) {
+        if (!activate_for_load("kr232", options.kr232_program_path)) {
+            return 1;
+        }
         krdbg::kr232adapter::LoadedProgram loaded;
         krdbg::kr232adapter::Options adapter_options;
-        adapter_options.source_roots = {options.source_root};
+        adapter_options.source_roots = configured_source_roots();
         std::string error;
         if (!krdbg::kr232adapter::load_kernel(
                 options.kr232_kernel_path, options.kr232_program_path,
@@ -805,9 +1244,10 @@ int main(int argc, char** argv) {
         session = std::make_unique<krdbg::DebugSession>(
             std::move(loaded.target), loaded.info,
             std::function<bool(krdbg::IDebugTarget&, std::string&)>{});
-        // The pair starts at the kernel entry with the user entry in R2; run
-        // until the user program is entered so the source view is the program.
-        if (loaded.entry != 0) {
+        // The pair starts at the kernel entry with the user entry in R2. With
+        // stop-at-main on, run until the user program is entered so the source
+        // view is the program; with it off, stay at the kernel entry.
+        if (stop_at_main_enabled() && loaded.entry != 0) {
             session->run_to_address(loaded.entry);
             real_program->entry = session->pc();
         }
@@ -843,58 +1283,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    DemoHost host;
-    // The host owns the settings file; load it before a source load so
-    // `vm.target` and `dbg.source_roots` take effect (P2 persistence).
-    const std::string settings_path = settings_file_path();
-    host.set_settings_path(settings_path);
-    if (!settings_path.empty() && std::filesystem::exists(settings_path)) {
-        krdbg::SettingsSnapshot stored;
-        std::string settings_error;
-        if (krdbg::settings_json::load_snapshot_file(
-                settings_path, host.settings_schema(), stored, settings_error)) {
-            (void)host.apply_settings(stored, krdbg::SettingsLayer::User);
-        } else {
-            host.show_error("settings: " + settings_error);
-        }
-    }
-    for (const std::string& assignment : options.set_values) {
-        const std::size_t equals = assignment.find('=');
-        if (equals == std::string::npos || equals == 0) {
-            std::fprintf(stderr, "krdbg: --set needs ID=VALUE\n");
-            return 2;
-        }
-        const std::string id = assignment.substr(0, equals);
-        const std::string text = assignment.substr(equals + 1);
-        const krdbg::SettingsSchema schema = host.settings_schema();
-        const auto found = std::find_if(
-            schema.settings.begin(), schema.settings.end(),
-            [&id](const krdbg::SettingDescriptor& candidate) {
-                return candidate.id == id;
-            });
-        if (found == schema.settings.end()) {
-            std::fprintf(stderr, "krdbg: unknown setting '%s'\n", id.c_str());
-            return 2;
-        }
-        krdbg::SettingValue value;
-        std::string value_error;
-        if (!parse_setting_value(*found, text, value, value_error)) {
-            std::fprintf(stderr, "krdbg: --set %s: %s\n", id.c_str(),
-                         value_error.c_str());
-            return 2;
-        }
-        krdbg::SettingsSnapshot snapshot;
-        snapshot.values[id] = value;
-        const krdbg::SettingsApplyResult applied =
-            host.apply_settings(snapshot, krdbg::SettingsLayer::User);
-        if (!applied.ok) {
-            for (const auto& [setting, message] : applied.errors) {
-                std::fprintf(stderr, "krdbg: --set %s: %s\n", setting.c_str(),
-                             message.c_str());
-            }
-            return 2;
-        }
-    }
     krdbg::DebuggerSurface surface(*session, host);
     surface.resize(1440, 900);
 
@@ -958,8 +1346,43 @@ int main(int argc, char** argv) {
                             lower.ends_with(".s");
         std::string image_path = path;
 
-        // The host's settings are the GUI's way to pick a build target and
-        // source roots; a command-line flag still wins.
+        // Which target does this load use? A source uses the last selected
+        // target (command line first); an image its extension when the compiler
+        // table knows it. The settings sections switch to that target before the
+        // values this load reads.
+        const krdbg::SettingsSnapshot picked = host.settings_values();
+        const auto picked_string = [&picked](std::string_view id) {
+            const auto found = picked.values.find(std::string(id));
+            if (found != picked.values.end()) {
+                if (const auto* text = std::get_if<std::string>(&found->second)) {
+                    return *text;
+                }
+            }
+            return std::string{};
+        };
+        std::string target_name;
+        if (source) {
+            target_name = options.build_target_set ? options.build_target
+                                                   : picked_string("vm.target");
+            if (target_name.empty()) {
+                target_name = picked_string("cc.target");
+            }
+            if (target_name.empty()) {
+                target_name = options.build_target;
+            }
+        } else if (const auto named = krc::target::target_for_extension(
+                       std::filesystem::path(lower).extension().string());
+                   named.has_value()) {
+            // One table, owned by the compiler: a new VM needs no row here, and
+            // an unknown suffix falls back to the configured build target.
+            target_name = std::string(krc::target::get_target(*named).name);
+        } else {
+            target_name = options.build_target;
+        }
+        if (!host.activate_target(target_name, path, error)) {
+            return false;
+        }
+
         const krdbg::SettingsSnapshot live = host.settings_values();
         const auto setting_string = [&live](std::string_view id,
                                             std::string fallback) {
@@ -985,17 +1408,7 @@ int main(int argc, char** argv) {
         const std::vector<std::string> settings_roots =
             options.source_root_set ? std::vector<std::string>{}
                                     : setting_list("dbg.source_roots");
-        std::vector<std::string> source_roots{options.source_root};
-        for (const std::string& root : settings_roots) {
-            if (!root.empty()) {
-                source_roots.push_back(root);
-            }
-        }
-        std::string target_name =
-            options.build_target_set
-                ? options.build_target
-                : (source ? setting_string("vm.target", options.build_target)
-                          : options.build_target);
+        const std::vector<std::string> source_roots = configured_source_roots();
         if (source) {
             if (build_chain == nullptr) {
                 error = "source loading needs --toolchain <krc-install-prefix> "
@@ -1004,6 +1417,9 @@ int main(int argc, char** argv) {
             }
             krdbg::host::BuildOptions build_options;
             build_options.target = target_name;
+            // The target defaults set -O1 for the promoting VMs and -O2 for
+            // kr232; a user or project value overrides it.
+            build_options.optimization = setting_string("cc.optimization", "-O0");
             build_options.source_root =
                 options.source_root_set
                     ? options.source_root
@@ -1019,12 +1435,6 @@ int main(int argc, char** argv) {
                 return false;
             }
             image_path = built.image.string();
-        } else if (const auto named = krc::target::target_for_extension(
-                       std::filesystem::path(lower).extension().string());
-                   named.has_value()) {
-            // One table, owned by the compiler: a new VM needs no row here, and
-            // an unknown suffix leaves target_name alone rather than guessing.
-            target_name = std::string(krc::target::get_target(*named).name);
         }
 
         if (target_name == "kr16") {
@@ -1113,23 +1523,12 @@ int main(int argc, char** argv) {
     const auto load_kr232_pair = [&](const std::string& kernel_path,
                                      const std::string& program_path,
                                      std::string& error) {
+        if (!host.activate_target("kr232", program_path, error)) {
+            return false;
+        }
         krdbg::kr232adapter::LoadedProgram loaded;
         krdbg::kr232adapter::Options adapter_options;
-        adapter_options.source_roots = {options.source_root};
-        const krdbg::SettingsSnapshot live = host.settings_values();
-        if (!options.source_root_set) {
-            const auto found = live.values.find("dbg.source_roots");
-            if (found != live.values.end()) {
-                if (const auto* list =
-                        std::get_if<std::vector<std::string>>(&found->second)) {
-                    for (const std::string& root : *list) {
-                        if (!root.empty()) {
-                            adapter_options.source_roots.push_back(root);
-                        }
-                    }
-                }
-            }
-        }
+        adapter_options.source_roots = configured_source_roots();
         if (!krdbg::kr232adapter::load_kernel(kernel_path, program_path,
                                               adapter_options, loaded, error)) {
             return false;
@@ -1140,10 +1539,12 @@ int main(int argc, char** argv) {
         loaded_image = program_path;
         loaded_source.clear();
         host.last_load_source = false;
-        // The pair starts at the kernel entry with the user entry in R2; run to
-        // the user entry so the source pane shows the program under debug.
+        // The pair starts at the kernel entry with the user entry in R2. With
+        // stop-at-main on, run to the user entry so the source pane shows the
+        // program under debug; with it off, stay at the kernel entry.
+        pending_initial_stop = 0;
         std::uint64_t entry = loaded.entry;
-        if (entry != 0) {
+        if (stop_at_main_enabled() && entry != 0) {
             session->run_to_address(entry);
             entry = session->pc();
         }
@@ -1182,9 +1583,12 @@ int main(int argc, char** argv) {
     if (!host.kernel_supported) {
         host.kernel_supported = true;
         host.kernel_callback = [&](std::string& error) {
+            if (!host.activate_target("kr32", "", error)) {
+                return false;
+            }
             krdbg::kr32adapter::LoadedProgram loaded;
             krdbg::kr32adapter::Options adapter_options;
-            adapter_options.source_roots = {options.source_root};
+            adapter_options.source_roots = configured_source_roots();
             if (!krdbg::kr32adapter::load_embedded_os(adapter_options, loaded,
                                                        error)) {
                 return false;

@@ -1,13 +1,11 @@
 # Backend debug symbols: the guide a new KR virtual machine follows
 
-**Status:** reference and porting guide, 2026-11-27. It describes the present
-tree; it is not a plan and it changes no code. Written against KRCompiler
-`a9e22a0` plus the uncommitted `.debug_line`/`.debug_line`-directive work in
-`src/backend/kr232_backend.cpp` and `src/asm/kr232_assembler.cpp`, and krdbg
-`71e4591` plus the uncommitted `P`/`Location` consumer and function-identity work
-in `src/kdbg/kdbg.cpp`, `include/krdbg/debug_info.h` and `src/core/session.cpp`.
-The kr232 and promotion work is mid-flight; every statement that depends on the
-working tree is marked as such, and the general sections do not depend on it.
+**Status:** reference and porting guide, 2026-11-27; updated after the kr232
+producer (`923bca2`, `fcbf8f7`) and krdbg consumer (`e71fabf`, `883e328`) landed,
+and after the kr216 producer parity work (`e2dd57c`). It describes the present
+tree; it is not a plan and it changes no code. The kr232 and promotion work is
+implemented; statements that depend on a particular producer policy name the
+target explicitly, and the general sections do not assume kr232.
 
 **Who this is for.** The engineer who has to give a KR virtual machine (kr216
 first, then a new architecture) the debug symbols krdbg needs, without
@@ -854,14 +852,19 @@ pointer, and put any negation explicitly in the adapter with a comment.
 
 ### 4.5 Promotion at `-O2` and the `P`/`Locations` option
 
-The driver enables promotion of recorded allocas at `-O2` only
-(`promote_recorded = options.optimize >= 2`,
-`KC/src/toolchain/toolchain.cpp:685-686`; the pass's refusal is
-`KC/src/ir/passes.cpp:326-341`). At `-O0`/`-O1` every named variable keeps its
-home, which is exactly why the current KR32 and kr216 debug data is correct
-without any range record. At `-O2` a promoted `<name>.addr` disappears, and with
-it the only `V` record for that variable; a debugger then shows nothing (or, on
-a backend that records a slot that is no longer written, a stale value).
+Promotion of recorded allocas is a **per-target policy**, not a level-only rule
+(`KC/src/toolchain/toolchain.cpp:686-699`; the pass's refusal is
+`KC/src/ir/passes.cpp:331-353,585-605`). kr232 and kr216 pass `false` at every
+level, so a named variable keeps its home slot and the peephole/dead-store passes
+keep stores to a recorded slot. kr32 and kr16 still enable it at `-O2`: a
+promoted `<name>.addr` disappears and with it the only `V` record for that
+variable, so a debugger shows nothing or, on a backend that records a slot no
+longer written, a stale value. krdbg's per-target defaults are `-O2` for kr232,
+`-O1` for kr32/kr16, and `-O0` for kr216 at bring-up. kr232's `-O2` caveat is
+inlining rather than variable loss: small internal single-block helpers are
+inlined, so an inlined helper has no frame/F record and its locals are absent;
+`-O1` is the faithful-stepping override. At `-O0`/`-O1` every named variable
+keeps its home on every current target.
 
 The format's answer is `P`/`Location` (v1.1, additive; ADR 0009's amendment at
 `KC/docs/decisions/0009-kdbg-v1-freeze.md:43-64`, ADR 0052). The policy

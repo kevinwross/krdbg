@@ -598,13 +598,16 @@ skipped). Those same records are emitted at every optimisation level because
 the result is one slot per named variable for the whole function, so `V`'s frame
 offset is true at every pc and the Variables window needs no range: verified at
 both levels on the same C++ probe — the same four `V` records existed and
-`locations` was empty in both (`--dump-symbols --json`). krdbg's host chain builds
-sources at `-O0` by default (`KD/src/host/build_chain.h:21-23`,
-`KD/src/core/tool_settings.h:15`). At `-O2` single-block promotion may move a
-named local out of its slot (`KC/src/toolchain/toolchain.cpp:685-686`), and its
+`locations` was empty in both (`--dump-symbols --json`). krdbg's host chain now
+resolves a per-target default: `-O2` for kr232 and `-O1` for kr32/kr16 (kr216
+`-O0` at bring-up). kr232 and kr216 never promote recorded allocas at any level,
+so their named locals keep home slots even at `-O2`; kr232's remaining `-O2`
+caveat is that small internal helpers are inlined and lose their frames/local
+records. KR32 and KR16 still promote at `-O2`: single-block promotion can move a
+named local out of its slot (`KC/src/toolchain/toolchain.cpp:685-699`), and its
 `V` record then names a slot nothing writes — the gap ADR 0052 describes and the
-reason a `P` record or an "optimized out" row is required before `-O2` debug info
-is trustworthy (`KC/docs/decisions/0052-kdbg-variable-scope-ranges.md:27-41`).
+reason a `P` record or an "optimized out" row is required for those targets at
+`-O2` (`KC/docs/decisions/0052-kdbg-variable-scope-ranges.md:27-41`).
 
 ### 5.3 The `P` record and KDBG `Location`
 

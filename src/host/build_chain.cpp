@@ -83,6 +83,16 @@ BuildResult BuildChain::build(const std::filesystem::path& source,
         result.error = "unsupported target '" + options.target + "'";
         return result;
     }
+    // `-O2` is a real level: kr232 keeps recorded allocas in their frame slots at
+    // -O2 (slot protection), while the promoting backends stay at -O1 for
+    // inspectable locals. Validate here so a bad settings file names the field
+    // instead of failing inside krc.
+    if (options.optimization != "-O0" && options.optimization != "-O1" &&
+        options.optimization != "-O2") {
+        result.error = "unsupported optimization '" + options.optimization +
+                       "' (expected -O0, -O1 or -O2)";
+        return result;
+    }
 
     std::error_code code;
     const std::filesystem::path output_directory =

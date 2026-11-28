@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "settings_validation.h"
+#include "tool_settings.h"
 
 namespace krdbg {
 namespace {
@@ -58,6 +59,11 @@ SettingsSnapshot local_values(const SettingsSnapshot& values,
     return local;
 }
 
+SettingOrigin layer_origin(SettingsLayer layer) {
+    return layer == SettingsLayer::User ? SettingOrigin::User
+                                        : SettingOrigin::Project;
+}
+
 } // namespace
 
 SettingsAggregator::SettingsAggregator(
@@ -74,7 +80,37 @@ void SettingsAggregator::set_providers(
     (void)refresh(error);
 }
 
+void SettingsAggregator::set_active_target(std::string target_id) {
+    active_target_ = std::move(target_id);
+}
+
+bool SettingsAggregator::default_value(const SettingDescriptor& descriptor,
+                                       SettingValue& value,
+                                       std::string& error) const {
+    if (const std::optional<SettingValue> target =
+            target_default(active_target_, descriptor.id);
+        target.has_value()) {
+        value = *target;
+        if (!settings_validation::validate(descriptor, value, error)) {
+            error = "target default for '" + descriptor.id + "': " + error;
+            return false;
+        }
+        return true;
+    }
+    if (!settings_json::default_value(descriptor, value)) {
+        error = "descriptor default for '" + descriptor.id +
+                "' is not canonical JSON";
+        return false;
+    }
+    if (!settings_validation::validate(descriptor, value, error)) {
+        error = "descriptor default for '" + descriptor.id + "': " + error;
+        return false;
+    }
+    return true;
+}
+
 bool SettingsAggregator::refresh(std::string& error) {
+    const SettingsSnapshot previous = values_;
     schema_ = {};
     values_ = {};
     error_.clear();
@@ -129,11 +165,6 @@ bool SettingsAggregator::refresh(std::string& error) {
                 return false;
             }
             values_.values[qualified_id] = value;
-            const auto origin = local_values_snapshot.origins.find(id);
-            values_.origins[qualified_id] =
-                origin == local_values_snapshot.origins.end()
-                    ? SettingOrigin::Default
-                    : origin->second;
         }
         schema_.version = std::max(schema_.version, local.version);
     }
@@ -153,20 +184,44 @@ bool SettingsAggregator::refresh(std::string& error) {
                          }
                          return left.id < right.id;
                      });
+
+    // Every setting the dialog can show has a value: a provider's current one,
+    // or the canonical default (the target's default where it has one). A value
+    // with no recorded origin is a code default.
+    for (const SettingDescriptor& descriptor : schema_.settings) {
+        SettingOrigin origin = SettingOrigin::Default;
+        if (const auto recorded = resolved_origins_.find(descriptor.id);
+            recorded != resolved_origins_.end()) {
+            origin = recorded->second;
+        } else if (values_.values.count(descriptor.id) != 0) {
+            const auto previous_origin = previous.origins.find(descriptor.id);
+            if (previous_origin != previous.origins.end()) {
+                origin = previous_origin->second;
+            }
+        }
+        if (values_.values.count(descriptor.id) == 0) {
+            SettingValue value;
+            if (!default_value(descriptor, value, error)) {
+                error_ = error;
+                return false;
+            }
+            values_.values[descriptor.id] = std::move(value);
+        }
+        values_.origins[descriptor.id] = origin;
+    }
+
     if (schema_.version == 0) {
         schema_.version = 1;
     }
     return true;
 }
 
-SettingsApplyResult SettingsAggregator::apply(
-    const SettingsSnapshot& values, SettingsLayer layer) {
-    SettingsApplyResult result;
-    result.written_to = layer;
+bool SettingsAggregator::apply_resolved(const SettingsSnapshot& values,
+                                        SettingsApplyResult& result) {
     if (!error_.empty()) {
         result.ok = false;
         result.errors[""] = error_;
-        return result;
+        return false;
     }
 
     std::map<ISettingsProvider*, SettingsSnapshot> local;
@@ -198,7 +253,7 @@ SettingsApplyResult SettingsAggregator::apply(
         local[provider].origins[local_id] = SettingOrigin::Default;
     }
     if (!result.ok) {
-        return result;
+        return false;
     }
 
     const SettingsSnapshot before = values_;
@@ -221,14 +276,166 @@ SettingsApplyResult SettingsAggregator::apply(
             }
             (void)provider->apply(local_values(before, *provider));
         }
+        return false;
+    }
+    return true;
+}
+
+SettingsApplyResult SettingsAggregator::apply(const SettingsSnapshot& values,
+                                              SettingsLayer layer) {
+    SettingsApplyResult result;
+    result.written_to = layer;
+    if (!error_.empty()) {
+        result.ok = false;
+        result.errors[""] = error_;
+        return result;
+    }
+    // An explicit origin on a value wins: the surface marks the fields the user
+    // edited, and leaves untouched defaults at Default so they are not persisted
+    // as if the user had chosen them.
+    std::map<std::string, SettingOrigin> origins = [&] {
+        std::map<std::string, SettingOrigin> out;
+        for (const auto& [id, value] : values.values) {
+            (void)value;
+            const auto found = values.origins.find(id);
+            out[id] = found == values.origins.end() ? layer_origin(layer)
+                                                    : found->second;
+        }
+        return out;
+    }();
+    // The dialog applies its whole snapshot, so a field the user cleared is
+    // absent from it. Reset a previously set field to its canonical default so
+    // the layer override is removed instead of keeping the old live value.
+    SettingsSnapshot effective = values;
+    for (const SettingDescriptor& descriptor : schema_.settings) {
+        if (values.values.count(descriptor.id) != 0) {
+            continue;
+        }
+        const auto recorded = resolved_origins_.find(descriptor.id);
+        if (recorded == resolved_origins_.end() ||
+            recorded->second == SettingOrigin::Default) {
+            continue;
+        }
+        SettingValue fallback;
+        std::string default_error;
+        if (!default_value(descriptor, fallback, default_error)) {
+            continue;
+        }
+        effective.values[descriptor.id] = std::move(fallback);
+        origins[descriptor.id] = SettingOrigin::Default;
+    }
+    if (!apply_resolved(effective, result)) {
+        return result;
+    }
+    const std::map<std::string, SettingOrigin> before_origins = resolved_origins_;
+    for (const auto& [id, origin] : origins) {
+        resolved_origins_[id] = origin;
+    }
+    std::string refresh_error;
+    if (!refresh(refresh_error)) {
+        resolved_origins_ = before_origins;
+        result.ok = false;
+        result.errors[""] = refresh_error;
+    }
+    return result;
+}
+
+SettingsApplyResult SettingsAggregator::apply_layer_documents(
+    const SettingsDocument* user, const SettingsDocument* project) {
+    SettingsApplyResult result;
+    if (!error_.empty()) {
+        result.ok = false;
+        result.errors[""] = error_;
         return result;
     }
 
+    const auto descriptor_for =
+        [this](const std::string& id) -> const SettingDescriptor* {
+        for (const SettingDescriptor& descriptor : schema_.settings) {
+            if (descriptor.id == id) {
+                return &descriptor;
+            }
+        }
+        return nullptr;
+    };
+
+    SettingsSnapshot resolved;
+    for (const SettingDescriptor& descriptor : schema_.settings) {
+        SettingValue value;
+        std::string error;
+        if (!default_value(descriptor, value, error)) {
+            result.ok = false;
+            result.errors[descriptor.id] = error;
+            return result;
+        }
+        resolved.values[descriptor.id] = std::move(value);
+        resolved.origins[descriptor.id] = SettingOrigin::Default;
+    }
+    const auto overlay = [&](const SettingsSnapshot& section,
+                             SettingOrigin origin) {
+        for (const auto& [id, value] : section.values) {
+            const SettingDescriptor* descriptor = descriptor_for(id);
+            if (descriptor == nullptr) {
+                continue;  // unknown id: ignored, as on the flat file
+            }
+            if (descriptor->read_only) {
+                continue;  // a target capability is not a user setting
+            }
+            resolved.values[id] = value;
+            resolved.origins[id] = origin;
+        }
+    };
+    if (user != nullptr) {
+        overlay(user->shared, SettingOrigin::User);
+        if (!active_target_.empty()) {
+            if (const auto section = user->targets.find(active_target_);
+                section != user->targets.end()) {
+                overlay(section->second, SettingOrigin::User);
+            }
+        }
+    }
+    if (project != nullptr) {
+        overlay(project->shared, SettingOrigin::Project);
+        if (!active_target_.empty()) {
+            if (const auto section = project->targets.find(active_target_);
+                section != project->targets.end()) {
+                overlay(section->second, SettingOrigin::Project);
+            }
+        }
+    }
+    for (const auto& [id, value] : resolved.values) {
+        const SettingDescriptor* descriptor = descriptor_for(id);
+        if (descriptor == nullptr) {
+            continue;
+        }
+        std::string error;
+        if (!settings_validation::validate(*descriptor, value, error)) {
+            result.ok = false;
+            result.errors[id] = error;
+        }
+    }
+    if (!result.ok) {
+        return result;
+    }
+
+    const SettingsSnapshot before = values_;
+    const std::map<std::string, SettingOrigin> before_origins = resolved_origins_;
+    const bool applied = apply_resolved(resolved, result);
+    if (!applied) {
+        return result;
+    }
+    resolved_origins_ = resolved.origins;
     std::string refresh_error;
     if (!refresh(refresh_error)) {
+        resolved_origins_ = before_origins;
+        for (ISettingsProvider* provider : providers_) {
+            if (provider == nullptr) {
+                continue;
+            }
+            (void)provider->apply(local_values(before, *provider));
+        }
         result.ok = false;
         result.errors[""] = refresh_error;
-        return result;
     }
     return result;
 }

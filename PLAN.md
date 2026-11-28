@@ -971,6 +971,12 @@ enum class SettingType {
     Bool, Int, Float, String, Enum, Path, StringList, StringMap
 };
 
+// A setting whose correct value depends on the loaded VM belongs to that
+// target's section. Only the few app-level settings — the target selectors and
+// window/recent state — are shared by every target. An unset scope is Target,
+// so a new VM setting cannot silently become global.
+enum class SettingScope { Shared, Target };
+
 struct SettingDescriptor {
     std::string id;            // "vm.ram_mb", "run.instruction_limit"
     std::string group;         // "vm.memory", "run", "env"
@@ -988,6 +994,7 @@ struct SettingDescriptor {
     bool secret = false;
     bool read_only = false;
     bool requires_restart = false;
+    SettingScope scope = SettingScope::Target;
 };
 
 struct SettingsGroup {
@@ -1038,6 +1045,12 @@ prefixed (`vm.`, `cc.`, `ld.`, `as.`, `dbg.`) so a form can show every component
 without collisions. The schema is refreshed after a load because a target or
 toolchain may expose different settings.
 
+The host also tracks the **active target**: the compiler's stable target name
+(`kr32`, `kr16`, `kr216`, `kr232`). A source load uses its build target, an image
+load the target its extension or loader names. The active target selects which
+per-target section the settings document applies and receives. It is host state,
+not surface state, so `ProgramInfo` keeps only what the surface displays.
+
 #### JSON is the interchange format
 
 `SettingsSchema` and `SettingsSnapshot` serialize to JSON. JSON is the template
@@ -1075,17 +1088,33 @@ C++ structs.
 }
 ```
 
-Values serialize separately. A user file stores values; a project file stores
-only overrides:
+Values are stored as one document with a shared section and one section per
+target. A user document holds the values the user chose; a project document holds
+the project's overrides in the same shape:
 
 ```json
-{"version": 1, "values": {"vm.ram_mb": 128, "run.instruction_limit": 0,
- "env.vars": {"PATH": "C:/tools/bin"}}}
+{
+  "version": 2,
+  "shared": {
+    "values": {"cc.target": "kr232"},
+    "origins": {"cc.target": "user"}
+  },
+  "targets": {
+    "kr232": {
+      "values": {"cc.optimization": "-O2", "dbg.source_roots": ["../krcompiler"]},
+      "origins": {"cc.optimization": "user", "dbg.source_roots": "user"}
+    }
+  }
+}
 ```
 
-```json
-{"version": 1, "overrides": {"vm.ram_mb": 256}}
-```
+`shared` carries the `scope == Shared` settings; each `targets.<id>` section
+carries the `scope == Target` settings for the stable target id `id`. The origins
+are informational — the layer a document is loaded as (user or project) decides
+the badge, not the string in the file. A version-1 flat file
+`{"version": 1, "values": ...}` loads as the shared section and is rewritten in
+document form on the next save. An unknown target section is retained as loaded;
+a value id no descriptor owns is ignored.
 
 External tools can expose the same contract with `--describe-settings` (JSON
 schema) and `--settings FILE` (JSON values). In-process components implement
@@ -1095,35 +1124,83 @@ schema) and `--settings FILE` (JSON values). In-process components implement
 
 Settings are layered, lowest precedence first:
 
-1. **Schema defaults** — supplied by the provider.
-2. **User settings** — one file in the user's configuration directory:
-   `%APPDATA%\krdbg\settings.json` on Windows,
+1. **Code defaults** — each provider's `default_json`, overlaid by that target's
+   defaults (below).
+2. **User shared** — the `shared` section of the user settings document in the
+   user's configuration directory: `%APPDATA%\krdbg\settings.json` on Windows,
    `$XDG_CONFIG_HOME/krdbg/settings.json` or `~/.config/krdbg/settings.json` on
    Linux, `~/Library/Application Support/krdbg/settings.json` on macOS.
-3. **Project settings** — a sparse overlay at
-   `<project>/.krdbg/settings.json`. Only values the project overrides are
-   stored.
+3. **User target** — the active target's section of the user document.
+4. **Project shared** — the `shared` section of the project document at
+   `<project>/.krdbg/settings.json`.
+5. **Project target** — the active target's section of the project document.
+6. **Command line and environment** — where a flag or variable exists, it wins
+   (`--target`, `--source-root`, `KRDBG_KRC_PREFIX`, ...).
 
-The host resolves the project root (the loaded source/image or a configured
-workspace directory), merges the layers, and returns the effective
+The host resolves the project root from the loaded source/image path (or a
+configured workspace directory) by walking its ancestors for
+`.krdbg/settings.json`, merges the layers, and returns the effective
 `SettingsSnapshot` with each value's `SettingOrigin` so the dialog can show a
-`default`/`user`/`project` badge.
+`default`/`user`/`project` badge. A value missing from every layer is synthesised
+from its descriptor's canonical default, so the dialog shows the real default
+rather than an empty placeholder. Switching targets re-resolves the layers: the
+new target's sections replace the previous target's, and the target defaults
+replace the global ones.
 
 Saving:
 
-- The dialog has a `SAVE: USER` / `SAVE: PROJ` layer selector. It defaults to
-  `User`.
-- Apply writes only the fields the user changed to the selected layer; existing
-  overrides in the other layer are preserved.
-- Clearing a field removes that layer's override and falls back to the next
-  layer; it does not necessarily write the schema default as an explicit value.
-- `IMPORT`/`EXPORT` names the layer it writes. A project export contains only
-  overrides; a user export contains the user values.
-- `secret` fields default to the `User` layer; saving one to a project file
-  warns before writing.
+- The user document is the only file krdbg writes. The project document is
+  read-only: it configures a checkout, it is not edited through the dialog.
+- Apply writes the user document with its `shared` and `targets` sections split
+  by `scope`. Sections for targets other than the active one are preserved.
+  Values still at their default are not written, so a later change to a target
+  default reaches an existing profile.
+- Clearing a field removes the user value and falls back to the next layer; it
+  does not write the default as an explicit value.
+- The file is created lazily on the first successful Apply or `--set`, including
+  its parent directories; startup never creates it.
+- A `--set ID=VALUE` writes to the active target's section for a `Target` setting
+  and to `shared` for a `Shared` setting (or when no target is known yet).
 
-Schema and values are versioned; the host migrates older files and preserves
-unknown ids so a component upgrade does not silently discard user intent.
+Schema and values are versioned; the host migrates older files on save.
+
+#### Per-target defaults
+
+A default whose correct value depends on the VM comes from a table keyed by the
+stable target id. The table is the host-side placeholder for the design's D
+layer: a VM owns its own defaults eventually, and the table therefore carries
+only values that are known, never guesses about hardware. A developer's source
+tree path or a machine-specific memory size is user or project configuration, not
+a baked default. Each row names one of three classes:
+
+- **Capability** — a guest-visible fact the target fixes (address width, memory,
+  console/keyboard/video contract). The descriptor is read-only: shown in the
+  dialog, never saved and never overridable by a settings document.
+- **Device** — an emulated-device setting the VM API can change. Editable and
+  stored per target when a VM exposes one; none does today.
+- **Setting** — a default the host owns for the target (compiler level, linker
+  base, instruction slice).
+
+`cc.optimization` demonstrates the class the host owns:
+
+- `kr232` defaults to `-O2`. It keeps a recorded alloca in its frame slot even at
+  `-O2` (slot protection), so a named local stays inspectable; `-O2` may inline
+  small internal functions and change call stacks.
+- `kr32` and `kr16` default to `-O1`: those backends promote locals at `-O2`, so
+  the frame-slot guarantee holds only at `-O1`.
+- `kr216` stays at `-O0` during bring-up; the kr216 owner confirms any move.
+
+`-O2` is a valid compiler optimization choice; the host build chain passes the
+resolved level to `krc`, so a per-target default affects a source build.
+
+Capability rows are the guest-visible contract an adapter reports (console
+queue depth, keyboard FIFO, framebuffer aperture/mode/stride/pixel format,
+terminal size, RAM, video presence). They are presentation and diagnostics, not
+user controls; the current table fills them from each target's own repository
+evidence and leaves unreported values at `0`/`false`/empty.
+
+Debugger presentation preferences (`com.scrollback`, `com.input_cap`, video
+pop-out size, video fit) are `Shared` descriptors, never per-target.
 
 #### Apply semantics
 
@@ -1137,8 +1214,8 @@ unknown ids so a component upgrade does not silently discard user intent.
 - **Secrets:** `secret` fields are masked in the form and omitted or redacted in
   exported JSON.
 - **Persistence:** the host owns the user and project files, resolves the merge,
-  and writes the selected layer. krdbg asks the host to load/save values; it
-  never writes a settings file itself.
+  and writes the user document. krdbg asks the host to load/save values; it never
+  writes a settings file itself, and the project document is read-only.
 
 #### What this replaces
 
@@ -1889,9 +1966,12 @@ estimate is 6–7 weeks. Tasks and the gate checklist are in `implementation.md`
   edits correctly; min/max/step and enum validation reject bad input; a
   `string_map` edits environment pairs; Apply is transactional; a
   `requires_restart` field sets `reload_required`; Reset restores defaults;
-  user and project layers merge with project winning; `SAVE TO` writes only the
-  selected layer; clearing an override falls back; secret fields are masked; an
-  unknown id is ignored or reported, never crashes.
+  the shared/target document round-trips with its sections, a version-1 flat
+  file loads as shared, an unknown target section survives a save, and an
+  unknown value id is ignored; defaults are synthesised per descriptor and
+  per target (`kr232` `-O2`, the others `-O1`); user shared, user target,
+  project shared and project target merge in that order; clearing an override
+  falls back; secret fields are masked.
 - **Statistics tests:** a fake target with a known instruction count; `CLR`
   moves the baseline and leaves PC and breakpoints untouched; step and run add
   exact instruction deltas; a fake clock makes `run_seconds` and `ips`

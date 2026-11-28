@@ -392,6 +392,17 @@ SettingOrigin parse_origin(std::string_view text) {
     return SettingOrigin::Default;
 }
 
+std::string scope_name(SettingScope scope) {
+    return scope == SettingScope::Shared ? "shared" : "target";
+}
+
+SettingScope parse_scope(std::string_view text) {
+    if (text == "shared") return SettingScope::Shared;
+    if (text == "target") return SettingScope::Target;
+    // An unknown scope must not make a VM setting global by accident.
+    return SettingScope::Target;
+}
+
 Json value_json(const SettingValue& value) {
     Json out;
     if (const auto* boolean = std::get_if<bool>(&value)) {
@@ -561,6 +572,8 @@ std::string schema_to_json(const SettingsSchema& schema) {
         restart.type = Json::Type::Bool;
         restart.boolean = setting.requires_restart;
         item.object["requires_restart"] = restart;
+        item.object["scope"] =
+            Json{Json::Type::String, false, 0.0, scope_name(setting.scope), {}, {}};
         settings.array.push_back(std::move(item));
     }
     root.object["settings"] = std::move(settings);
@@ -621,27 +634,25 @@ bool schema_from_json(std::string_view json, SettingsSchema& schema,
             setting.read_only = bool_field(item, "read_only", false);
             setting.requires_restart =
                 bool_field(item, "requires_restart", false);
+            setting.scope = parse_scope(string_field(item, "scope", "target"));
             schema.settings.push_back(std::move(setting));
         }
     }
     return true;
 }
 
-std::string snapshot_to_json(const SettingsSchema& schema,
-                             const SettingsSnapshot& snapshot) {
-    Json root;
-    root.type = Json::Type::Object;
-    Json version;
-    version.type = Json::Type::Number;
-    version.number = schema.version;
-    root.object["version"] = version;
+namespace {
 
+// Appends a snapshot's values and origins to an object that will be written as
+// a settings section. Shared by the flat snapshot form and document sections so
+// both stay in one format.
+void append_snapshot(Json& object, const SettingsSnapshot& snapshot) {
     Json values;
     values.type = Json::Type::Object;
     for (const auto& [id, value] : snapshot.values) {
         values.object[id] = value_json(value);
     }
-    root.object["values"] = std::move(values);
+    object.object["values"] = std::move(values);
 
     Json origins;
     origins.type = Json::Type::Object;
@@ -649,48 +660,51 @@ std::string snapshot_to_json(const SettingsSchema& schema,
         origins.object[id] =
             Json{Json::Type::String, false, 0.0, origin_name(origin), {}, {}};
     }
-    root.object["origins"] = std::move(origins);
-    return dump(root);
+    object.object["origins"] = std::move(origins);
 }
 
-bool snapshot_from_json(std::string_view json, const SettingsSchema& schema,
-                        SettingsSnapshot& snapshot, std::string& error) {
-    Json root;
-    if (!Parser(json).parse(root, error)) {
-        return false;
-    }
-    if (root.type != Json::Type::Object) {
-        error = "snapshot root must be an object";
-        return false;
-    }
+// Reads `values`/`origins` from an object into a snapshot. Values the schema
+// does not know are ignored. `require_values` is the flat-file contract: a
+// snapshot without a values object is malformed, while a document section may
+// be empty.
+bool fill_snapshot(const Json& object, const SettingsSchema& schema,
+                   SettingsSnapshot& snapshot, bool require_values,
+                   std::string& error) {
     snapshot = {};
-    const Json* values = field(root, "values");
-    if (values == nullptr || values->type != Json::Type::Object) {
-        error = "snapshot needs a values object";
-        return false;
-    }
-    for (const auto& [id, json_value] : values->object) {
-        const SettingDescriptor* descriptor = nullptr;
-        for (const SettingDescriptor& candidate : schema.settings) {
-            if (candidate.id == id) {
-                descriptor = &candidate;
-                break;
-            }
-        }
-        if (descriptor == nullptr) {
-            continue;
-        }
-        SettingValue value;
-        if (!parse_value_for(*descriptor, json_value, value)) {
-            error = "bad value for " + id;
+    const Json* values = field(object, "values");
+    if (values == nullptr) {
+        if (require_values) {
+            error = "snapshot needs a values object";
             return false;
         }
-        snapshot.values[id] = std::move(value);
+    } else if (values->type != Json::Type::Object) {
+        error = "snapshot values must be an object";
+        return false;
+    } else {
+        for (const auto& [id, json_value] : values->object) {
+            const SettingDescriptor* descriptor = nullptr;
+            for (const SettingDescriptor& candidate : schema.settings) {
+                if (candidate.id == id) {
+                    descriptor = &candidate;
+                    break;
+                }
+            }
+            if (descriptor == nullptr) {
+                continue;
+            }
+            SettingValue value;
+            if (!parse_value_for(*descriptor, json_value, value)) {
+                error = "bad value for " + id;
+                return false;
+            }
+            snapshot.values[id] = std::move(value);
+        }
     }
-    if (const Json* origins = field(root, "origins");
+    if (const Json* origins = field(object, "origins");
         origins != nullptr && origins->type == Json::Type::Object) {
         for (const auto& [id, value] : origins->object) {
-            if (value.type == Json::Type::String) {
+            if (value.type == Json::Type::String &&
+                snapshot.values.count(id) != 0) {
                 snapshot.origins[id] = parse_origin(value.text);
             }
         }
@@ -703,20 +717,15 @@ bool snapshot_from_json(std::string_view json, const SettingsSchema& schema,
     return true;
 }
 
-bool load_snapshot_file(const std::string& path, const SettingsSchema& schema,
-                        SettingsSnapshot& snapshot, std::string& error) {
-    std::ifstream input(path);
-    if (!input) {
-        error = "cannot open " + path;
-        return false;
-    }
-    std::string json((std::istreambuf_iterator<char>(input)),
-                     std::istreambuf_iterator<char>());
-    return snapshot_from_json(json, schema, snapshot, error);
+Json section_json(const SettingsSnapshot& snapshot) {
+    Json section;
+    section.type = Json::Type::Object;
+    append_snapshot(section, snapshot);
+    return section;
 }
 
-bool save_snapshot_file(const std::string& path, const SettingsSchema& schema,
-                        const SettingsSnapshot& snapshot, std::string& error) {
+bool write_json_file(const std::string& path, const std::string& json,
+                     std::string& error) {
     std::error_code code;
     const std::filesystem::path target(path);
     if (target.has_parent_path()) {
@@ -731,12 +740,191 @@ bool save_snapshot_file(const std::string& path, const SettingsSchema& schema,
         error = "cannot write " + path;
         return false;
     }
-    output << snapshot_to_json(schema, snapshot) << '\n';
+    output << json << '\n';
     if (!output) {
         error = "write failed for " + path;
         return false;
     }
     return true;
+}
+
+std::string read_json_file(const std::string& path, std::string& error) {
+    std::ifstream input(path);
+    if (!input) {
+        error = "cannot open " + path;
+        return {};
+    }
+    return std::string((std::istreambuf_iterator<char>(input)),
+                       std::istreambuf_iterator<char>());
+}
+
+} // namespace
+
+std::string snapshot_to_json(const SettingsSchema& schema,
+                             const SettingsSnapshot& snapshot) {
+    Json root;
+    root.type = Json::Type::Object;
+    Json version;
+    version.type = Json::Type::Number;
+    version.number = schema.version;
+    root.object["version"] = version;
+    append_snapshot(root, snapshot);
+    return dump(root);
+}
+
+bool snapshot_from_json(std::string_view json, const SettingsSchema& schema,
+                        SettingsSnapshot& snapshot, std::string& error) {
+    Json root;
+    if (!Parser(json).parse(root, error)) {
+        return false;
+    }
+    if (root.type != Json::Type::Object) {
+        error = "snapshot root must be an object";
+        return false;
+    }
+    return fill_snapshot(root, schema, snapshot, true, error);
+}
+
+bool default_value(const SettingDescriptor& descriptor, SettingValue& value) {
+    Json json;
+    std::string error;
+    if (!Parser(descriptor.default_json).parse(json, error)) {
+        return false;
+    }
+    return parse_value_for(descriptor, json, value);
+}
+
+std::string document_to_json(const SettingsSchema& schema,
+                             const SettingsDocument& document) {
+    (void)schema;
+    Json root;
+    root.type = Json::Type::Object;
+    Json version;
+    version.type = Json::Type::Number;
+    version.number = kSettingsDocumentVersion;
+    root.object["version"] = version;
+    root.object["shared"] = section_json(document.shared);
+    Json targets;
+    targets.type = Json::Type::Object;
+    for (const auto& [target, section] : document.targets) {
+        targets.object[target] = section_json(section);
+    }
+    root.object["targets"] = std::move(targets);
+    return dump(root);
+}
+
+bool document_from_json(std::string_view json, const SettingsSchema& schema,
+                        SettingsDocument& document, std::string& error) {
+    Json root;
+    if (!Parser(json).parse(root, error)) {
+        return false;
+    }
+    if (root.type != Json::Type::Object) {
+        error = "settings document root must be an object";
+        return false;
+    }
+    document = {};
+    document.version = static_cast<std::uint32_t>(
+        number_field(root, "version", kSettingsDocumentVersion));
+
+    const Json* shared = field(root, "shared");
+    const Json* targets = field(root, "targets");
+    const bool flat_values = field(root, "values") != nullptr;
+    if (shared == nullptr && targets == nullptr) {
+        if (!flat_values) {
+            error = "settings document has no values";
+            return false;
+        }
+        document.legacy_flat = true;
+        return fill_snapshot(root, schema, document.shared, true, error);
+    }
+    if (flat_values) {
+        error = "settings document mixes flat values with sections";
+        return false;
+    }
+    if (shared != nullptr) {
+        if (shared->type != Json::Type::Object) {
+            error = "settings document shared section must be an object";
+            return false;
+        }
+        if (!fill_snapshot(*shared, schema, document.shared, false, error)) {
+            return false;
+        }
+    }
+    if (targets != nullptr) {
+        if (targets->type != Json::Type::Object) {
+            error = "settings document targets must be an object";
+            return false;
+        }
+        for (const auto& [target, section] : targets->object) {
+            if (section.type != Json::Type::Object) {
+                error = "target '" + target + "' section must be an object";
+                return false;
+            }
+            SettingsSnapshot parsed;
+            if (!fill_snapshot(section, schema, parsed, false, error)) {
+                error = "target '" + target + "': " + error;
+                return false;
+            }
+            document.targets[target] = std::move(parsed);
+        }
+    }
+    return true;
+}
+
+bool load_document_file(const std::string& path, const SettingsSchema& schema,
+                        SettingsDocument& document, std::string& error) {
+    const std::string json = read_json_file(path, error);
+    if (json.empty() && !error.empty()) {
+        return false;
+    }
+    return document_from_json(json, schema, document, error);
+}
+
+bool save_document_file(const std::string& path, const SettingsSchema& schema,
+                        const SettingsDocument& document, std::string& error) {
+    return write_json_file(path, document_to_json(schema, document), error);
+}
+
+bool load_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        SettingsSnapshot& snapshot, std::string& error) {
+    const std::string json = read_json_file(path, error);
+    if (json.empty() && !error.empty()) {
+        return false;
+    }
+    return snapshot_from_json(json, schema, snapshot, error);
+}
+
+bool save_snapshot_file(const std::string& path, const SettingsSchema& schema,
+                        const SettingsSnapshot& snapshot, std::string& error) {
+    return write_json_file(path, snapshot_to_json(schema, snapshot), error);
+}
+
+std::string discover_project_file(const std::string& loaded_path) {
+    if (loaded_path.empty()) {
+        return {};
+    }
+    std::error_code code;
+    std::filesystem::path path = std::filesystem::absolute(loaded_path, code);
+    if (code) {
+        path = std::filesystem::path(loaded_path);
+    }
+    if (!std::filesystem::is_directory(path, code)) {
+        path = path.parent_path();
+    }
+    while (!path.empty()) {
+        const std::filesystem::path candidate =
+            path / ".krdbg" / "settings.json";
+        if (std::filesystem::is_regular_file(candidate, code)) {
+            return candidate.string();
+        }
+        const std::filesystem::path parent = path.parent_path();
+        if (parent == path) {
+            break;
+        }
+        path = parent;
+    }
+    return {};
 }
 
 } // namespace krdbg::settings_json

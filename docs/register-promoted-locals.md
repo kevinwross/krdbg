@@ -1,6 +1,15 @@
 # Register-promoted locals and the Variables window
 
-**Status:** audit and design proposal, 2026-11-27. No code was changed to write it.
+**Status:** audit and design proposal, 2026-11-27. The historical statements
+below describe the tree before the implementation; the implemented state is:
+Track A landed for kr232 (recorded allocas are never promoted, recorded stores
+survive the peepholes, V/W/K and function records are complete), the krdbg
+Location consumer landed (`LocationInfo`, range selection, `<optimized out>`,
+caller-frame unavailability), and no backend emits `P` yet. kr232's debug default
+is now `-O2`; named locals keep home slots, but small internal helpers may be
+inlined and lose their frames. The `-O2` paragraphs below record the pre-fix
+audit and are not current behaviour.
+
 **Question.** KR32 and its compilers coped with register promotion so a promoted local
 still appears in the debugger's Variables window. How did that work end to end, what do
 kr232 and krdbg do today, and what is the kr232 equivalent?

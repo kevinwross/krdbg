@@ -4,18 +4,22 @@
 #include "settings_json.h"
 #include "tool_settings.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "krdbg/session.h"
 #include "krdbg/surface.h"
+#include "build_chain.h"
 #include "fake_debug_info.h"
 #include "fake_target.h"
 
@@ -162,6 +166,71 @@ std::unique_ptr<DebugSession> make_session() {
         std::function<bool(IDebugTarget&, std::string&)>{});
 }
 
+// Publishes a schema but no values, so the aggregator has to synthesise each
+// canonical default.
+class DefaultsOnlyProvider final : public ISettingsProvider {
+public:
+    std::string id() const override { return "dflt"; }
+    SettingsSchema schema() const override {
+        SettingsSchema schema;
+        schema.groups = {SettingsGroup{"main", "Main", "", 10}};
+        SettingDescriptor level;
+        level.id = "level";
+        level.group = "main";
+        level.label = "Level";
+        level.type = SettingType::Enum;
+        level.default_json = "\"fast\"";
+        level.choices = {"fast", "slow"};
+        SettingDescriptor count;
+        count.id = "count";
+        count.group = "main";
+        count.label = "Count";
+        count.type = SettingType::Int;
+        count.default_json = "7";
+        count.has_range = true;
+        count.min = 0;
+        count.max = 100;
+        count.step = 1;
+        schema.settings = {level, count};
+        return schema;
+    }
+    SettingsSnapshot values() const override { return {}; }
+    SettingsApplyResult apply(const SettingsSnapshot& next) override {
+        SettingsApplyResult result;
+        for (const auto& [id, value] : next.values) {
+            stored[id] = value;
+        }
+        return result;
+    }
+
+    std::map<std::string, SettingValue> stored;
+};
+
+// Declares a read-only capability but never publishes a value for it: the value
+// has to come from the active target's defaults, not from a settings document.
+class CapabilityProvider final : public ISettingsProvider {
+public:
+    std::string id() const override { return "vm"; }
+    SettingsSchema schema() const override {
+        SettingsSchema schema;
+        schema.groups = {SettingsGroup{"device", "Device", "", 10}};
+        SettingDescriptor queue;
+        queue.id = "console_queue";
+        queue.group = "device";
+        queue.label = "Console queue";
+        queue.type = SettingType::Int;
+        queue.default_json = "0";
+        queue.read_only = true;
+        schema.settings = {queue};
+        return schema;
+    }
+    SettingsSnapshot values() const override { return {}; }
+    SettingsApplyResult apply(const SettingsSnapshot& next) override {
+        (void)next;
+        return {};
+    }
+};
+
 } // namespace
 
 KRDBG_TEST(settings_aggregator_prefixes_tool_groups_and_settings) {
@@ -200,7 +269,9 @@ KRDBG_TEST(settings_aggregator_prefixes_tool_groups_and_settings) {
         values.values.at("vm.ram_mb")));
     CHECK_EQ(std::get<std::string>(values.values.at("cc.target")),
              std::string("kr32"));
-    CHECK_EQ(values.origins.at("vm.ram_mb"), SettingOrigin::User);
+    // A provider's current value is not an origin: without a layer naming it,
+    // every value is a code default.
+    CHECK_EQ(values.origins.at("vm.ram_mb"), SettingOrigin::Default);
 }
 
 KRDBG_TEST(settings_aggregator_applies_valid_changes_and_reloads) {
@@ -331,4 +402,286 @@ KRDBG_TEST(settings_tool_fields_render_in_the_existing_dialog) {
     std::string expected;
     std::getline(input, expected);
     CHECK_EQ(std::string(hash), expected);
+}
+
+KRDBG_TEST(settings_aggregator_synthesises_descriptor_defaults) {
+    DefaultsOnlyProvider provider;
+    SettingsAggregator aggregator({&provider});
+    const SettingsSnapshot& values = aggregator.values();
+    CHECK_EQ(values.values.size(), 2U);
+    CHECK_EQ(std::get<std::string>(values.values.at("dflt.level")),
+             std::string("fast"));
+    CHECK_EQ(std::get<std::int64_t>(values.values.at("dflt.count")), 7);
+    CHECK(values.origins.at("dflt.level") == SettingOrigin::Default);
+    CHECK(values.origins.at("dflt.count") == SettingOrigin::Default);
+}
+
+KRDBG_TEST(settings_aggregator_resolves_per_target_optimization_defaults) {
+    CompilerSettingsProvider cc;
+    SettingsAggregator aggregator({&cc});
+    // The table itself is the contract: explicit values with provenance.
+    const auto kr232 = target_defaults("kr232");
+    CHECK(!kr232.empty());
+    bool optimization_found = false;
+    bool capability_found = false;
+    for (const TargetDefaultValue& row : kr232) {
+        CHECK(!row.provenance.empty());
+        optimization_found = optimization_found ||
+                             (row.setting_id == "cc.optimization" &&
+                              row.kind == TargetDefaultClass::Setting);
+        capability_found = capability_found ||
+                           row.kind == TargetDefaultClass::Capability;
+    }
+    CHECK(optimization_found);
+    CHECK(capability_found);
+
+    const auto expect_optimization = [&aggregator](const std::string& target,
+                                                   const std::string& level) {
+        aggregator.set_active_target(target);
+        const SettingsApplyResult result =
+            aggregator.apply_layer_documents(nullptr, nullptr);
+        CHECK(result.ok);
+        CHECK_EQ(std::get<std::string>(
+                     aggregator.values().values.at("cc.optimization")),
+                 level);
+        CHECK_EQ(aggregator.active_target(), target);
+    };
+    expect_optimization("kr232", "-O2");
+    expect_optimization("kr32", "-O1");
+    expect_optimization("kr16", "-O1");
+    expect_optimization("kr216", "-O0");
+    // A target with no defaults row keeps the descriptor default.
+    expect_optimization("kr64", "-O0");
+}
+
+KRDBG_TEST(settings_layer_documents_resolve_in_precedence_order) {
+    FakeVmProvider vm;
+    CompilerSettingsProvider cc;
+    SettingsAggregator aggregator({&vm, &cc});
+    aggregator.set_active_target("kr232");
+
+    SettingsDocument user;
+    user.shared.values["vm.ram_mb"] = std::int64_t{1024};
+    user.shared.origins["vm.ram_mb"] = SettingOrigin::User;
+    user.targets["kr232"].values["vm.ram_mb"] = std::int64_t{512};
+    user.targets["kr232"].origins["vm.ram_mb"] = SettingOrigin::User;
+    user.targets["kr232"].values["cc.optimization"] = std::string("-O0");
+    user.targets["kr232"].origins["cc.optimization"] = SettingOrigin::User;
+
+    SettingsDocument project;
+    project.shared.values["vm.ram_mb"] = std::int64_t{256};
+    project.shared.origins["vm.ram_mb"] = SettingOrigin::Project;
+    project.targets["kr232"].values["vm.ram_mb"] = std::int64_t{2048};
+    project.targets["kr232"].origins["vm.ram_mb"] = SettingOrigin::Project;
+
+    SettingsApplyResult result =
+        aggregator.apply_layer_documents(&user, &project);
+    CHECK(result.ok);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             2048);
+    CHECK_EQ(aggregator.values().origins.at("vm.ram_mb"),
+             SettingOrigin::Project);
+    // The user target section beats the kr232 target default.
+    CHECK_EQ(std::get<std::string>(
+                 aggregator.values().values.at("cc.optimization")),
+             std::string("-O0"));
+    CHECK_EQ(aggregator.values().origins.at("cc.optimization"),
+             SettingOrigin::User);
+
+    project.targets.clear();
+    result = aggregator.apply_layer_documents(&user, &project);
+    CHECK(result.ok);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             256);
+    CHECK_EQ(aggregator.values().origins.at("vm.ram_mb"),
+             SettingOrigin::Project);
+
+    project = {};
+    result = aggregator.apply_layer_documents(&user, &project);
+    CHECK(result.ok);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             512);
+    CHECK_EQ(aggregator.values().origins.at("vm.ram_mb"),
+             SettingOrigin::User);
+
+    result = aggregator.apply_layer_documents(nullptr, nullptr);
+    CHECK(result.ok);
+    // kr232's capability row reports 256 MiB of fixed guest RAM.
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             256);
+    CHECK(aggregator.values().origins.at("vm.ram_mb") ==
+          SettingOrigin::Default);
+    CHECK_EQ(std::get<std::string>(
+                 aggregator.values().values.at("cc.optimization")),
+             std::string("-O2"));
+}
+
+KRDBG_TEST(settings_layer_documents_apply_only_the_active_target_section) {
+    FakeVmProvider vm;
+    CompilerSettingsProvider cc;
+    SettingsAggregator aggregator({&vm, &cc});
+    SettingsDocument user;
+    user.targets["kr232"].values["vm.ram_mb"] = std::int64_t{512};
+    user.targets["kr232"].origins["vm.ram_mb"] = SettingOrigin::User;
+
+    aggregator.set_active_target("kr32");
+    CHECK(aggregator.apply_layer_documents(&user, nullptr).ok);
+    // kr232's section is invisible: kr32 sees the descriptor default.
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             128);
+
+    aggregator.set_active_target("kr232");
+    CHECK(aggregator.apply_layer_documents(&user, nullptr).ok);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             512);
+}
+
+KRDBG_TEST(settings_layer_documents_reject_invalid_values_transactionally) {
+    FakeVmProvider vm;
+    SettingsAggregator aggregator({&vm});
+    aggregator.set_active_target("kr232");
+    SettingsDocument project;
+    project.targets["kr232"].values["vm.ram_mb"] = std::int64_t{4};
+    project.targets["kr232"].origins["vm.ram_mb"] = SettingOrigin::Project;
+    const SettingsApplyResult result =
+        aggregator.apply_layer_documents(nullptr, &project);
+    CHECK(!result.ok);
+    CHECK(result.errors.count("vm.ram_mb") == 1U);
+    CHECK_EQ(vm.ram, 128);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             128);
+}
+
+KRDBG_TEST(settings_read_only_capabilities_come_from_target_defaults) {
+    CapabilityProvider provider;
+    SettingsAggregator aggregator({&provider});
+    aggregator.set_active_target("kr232");
+    SettingsDocument project;
+    // A document cannot override a fixed capability.
+    project.targets["kr232"].values["vm.console_queue"] = std::int64_t{99};
+    project.targets["kr232"].origins["vm.console_queue"] = SettingOrigin::Project;
+    CHECK(aggregator.apply_layer_documents(nullptr, &project).ok);
+    const auto queue = aggregator.values().values.at("vm.console_queue");
+    const auto* queue_number = std::get_if<std::int64_t>(&queue);
+    CHECK(queue_number != nullptr);
+    CHECK_EQ(queue.index(), 1U);
+    CHECK_EQ(queue_number != nullptr ? *queue_number : -1, 16);
+    CHECK(aggregator.values().origins.at("vm.console_queue") ==
+          SettingOrigin::Default);
+
+    // And the target defaults table carries the read-only device contract for
+    // each audited target. The typed readers avoid throwing on a wrong variant so
+    // a mismatch shows up as a CHECK failure.
+    const auto target_int = [](const std::string& target,
+                               const std::string& id) -> std::int64_t {
+        const std::optional<SettingValue> value = target_default(target, id);
+        if (!value.has_value()) {
+            return -1;
+        }
+        const auto* number = std::get_if<std::int64_t>(&*value);
+        return number != nullptr ? *number : -1;
+    };
+    const auto target_bool = [](const std::string& target,
+                                const std::string& id) -> int {
+        const std::optional<SettingValue> value = target_default(target, id);
+        if (!value.has_value()) {
+            return -1;
+        }
+        const auto* flag = std::get_if<bool>(&*value);
+        return flag == nullptr ? -1 : (*flag ? 1 : 0);
+    };
+    CHECK_EQ(target_int("kr32", "vm.keyboard_fifo"), 64);
+    CHECK_EQ(target_int("kr16", "vm.keyboard_fifo"), 64);
+    CHECK_EQ(target_int("kr232", "vm.console_queue"), 16);
+    CHECK_EQ(target_bool("kr16", "vm.has_video"), 0);
+    CHECK_EQ(target_bool("kr232", "vm.has_video"), 1);
+    CHECK_EQ(target_int("kr32", "vm.pointer_bits"), 32);
+    CHECK_EQ(target_int("kr16", "vm.pointer_bits"), 16);
+    CHECK_EQ(target_int("kr216", "vm.memory_kb"), 64);
+}
+
+KRDBG_TEST(settings_presentation_preferences_are_shared) {
+    PresentationSettingsProvider presentation;
+    SettingsAggregator aggregator({&presentation});
+    const SettingsSchema& schema = aggregator.schema();
+    for (const SettingDescriptor& descriptor : schema.settings) {
+        CHECK(descriptor.scope == SettingScope::Shared);
+    }
+    // Every key is synthesised from its canonical default: the current built-in
+    // behaviour, not an empty placeholder.
+    const SettingsSnapshot& defaults = aggregator.values();
+    CHECK_EQ(std::get<std::int64_t>(
+                 defaults.values.at("ui.com_scrollback")),
+             5000);
+    CHECK_EQ(std::get<std::int64_t>(defaults.values.at("ui.com_input_cap")),
+             4096);
+    CHECK_EQ(std::get<std::int64_t>(defaults.values.at("ui.video_popout_width")),
+             640);
+    CHECK_EQ(std::get<std::int64_t>(defaults.values.at("ui.video_popout_height")),
+             480);
+    CHECK_EQ(std::get<std::string>(defaults.values.at("ui.video_fit")),
+             std::string("fit"));
+
+    SettingsSnapshot next = aggregator.values();
+    next.values["ui.com_scrollback"] = std::int64_t{2000};
+    next.origins["ui.com_scrollback"] = SettingOrigin::User;
+    CHECK(aggregator.apply(next, SettingsLayer::User).ok);
+    CHECK_EQ(presentation.settings().com_scrollback, 2000);
+    CHECK_EQ(aggregator.values().origins.at("ui.com_scrollback"),
+             SettingOrigin::User);
+}
+
+KRDBG_TEST(settings_optimization_choice_includes_o2) {
+    CompilerSettingsProvider cc;
+    SettingsAggregator aggregator({&cc});
+    const auto found = std::find_if(
+        aggregator.schema().settings.begin(),
+        aggregator.schema().settings.end(),
+        [](const SettingDescriptor& descriptor) {
+            return descriptor.id == "cc.optimization";
+        });
+    CHECK(found != aggregator.schema().settings.end());
+    CHECK(std::find(found->choices.begin(), found->choices.end(), "-O2") !=
+          found->choices.end());
+}
+
+KRDBG_TEST(settings_apply_clears_an_absent_field_back_to_its_default) {
+    FakeVmProvider vm;
+    SettingsAggregator aggregator({&vm});
+    SettingsSnapshot next = aggregator.values();
+    next.values["vm.ram_mb"] = std::int64_t{256};
+    next.origins["vm.ram_mb"] = SettingOrigin::User;
+    CHECK(aggregator.apply(next, SettingsLayer::User).ok);
+    CHECK_EQ(vm.ram, 256);
+    CHECK_EQ(aggregator.values().origins.at("vm.ram_mb"),
+             SettingOrigin::User);
+
+    // The dialog sends the whole snapshot; a cleared field is absent from it.
+    SettingsSnapshot cleared = aggregator.values();
+    cleared.values.erase("vm.ram_mb");
+    cleared.origins.erase("vm.ram_mb");
+    CHECK(aggregator.apply(cleared, SettingsLayer::User).ok);
+    CHECK_EQ(vm.ram, 128);
+    CHECK_EQ(std::get<std::int64_t>(
+                 aggregator.values().values.at("vm.ram_mb")),
+             128);
+    CHECK(aggregator.values().origins.at("vm.ram_mb") ==
+          SettingOrigin::Default);
+}
+
+KRDBG_TEST(build_chain_rejects_an_unknown_optimization_level) {
+    host::BuildChain chain(host::ToolchainPaths{});
+    host::BuildOptions options;
+    options.target = "kr32";
+    options.optimization = "-O3";
+    const host::BuildResult result = chain.build("example.c", options);
+    CHECK(!result.ok);
+    CHECK(result.error.find("optimization") != std::string::npos);
 }

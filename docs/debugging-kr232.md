@@ -55,11 +55,14 @@ build\kr232-debugger\krdbg_demo.exe tests\fixtures\kr232\session.kr232 `
 | `promoted_o1.kr232` | the `-O1` home-slot guarantee for a promotion-shaped local |
 
 `tests/fixtures/kr232/README.md` gives each fixture's source and build recipe;
-`tests/test_kr232_symbols.cpp` is the end-to-end symbol verification. Names and
-values at the default `-O1` come from each named variable's frame slot; `-O2`
-is not a supported debug level for kr232 until a register-location producer
-exists (ADR 0052), so do not expect a `-O2` build's named locals to be
-inspectable.
+`tests/test_kr232_symbols.cpp` is the end-to-end symbol verification. Named
+variables at the default `-O2` keep their frame home: kr232 does not promote a
+recorded alloca at any level, and the kr232 peepholes keep stores to recorded
+slots. The `-O2` caveat is inlining, not variable loss: kr232 inlines small
+internal single-block helpers, so an inlined helper has no frame or F record
+and its locals are absent, and the line table is coarser. Select `cc.optimization
+= -O1` for faithful stepping and call stacks, or `-O0` for the most literal
+mapping. `P`/register-location records are still not produced by any backend.
 
 Stepping: with the source pane focused, `F10`/`F11` step over/into one source
 line, and the source pane's `OVER`/`IN`/`OUT` buttons do the same. With the

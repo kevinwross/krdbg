@@ -91,7 +91,8 @@ public:
         : host(kernel_supported) {
         // The scenes assert on interaction, so each tick advances the same small
         // slice they were written against; the application's default is larger.
-        host.values.values["time_slice"] = std::int64_t{10000};
+        // The id is qualified like every aggregated setting.
+        host.values.values["vm.time_slice"] = std::int64_t{10000};
         auto target = std::make_unique<FakeTarget>(has_com, has_video);
         fake_target = target.get();
         session = std::make_unique<DebugSession>(

@@ -1,13 +1,15 @@
 # kr232 debug-symbol gaps
 
-**Status 2026-11-27T17:05 — resolved through phase 2.** The BLOCKS and
+**Status 2026-11-27T20:45 — resolved through phase 2.** The BLOCKS and
 FIX-BEFORE findings G1–G8 are fixed in KRCompiler `923bca2` and `fcbf8f7`
 (truthful per-file lines including prologues, F for every function with display
 names and per-object labels, internal-linkage G, dedupe, V/W/K and home-slot
 protection); the ERRATA G9–G12 (line-table size, column 0, unused function
-source/line) remain quality notes, and `-O2` variable inspection is still
-unsupported until a Location producer exists (ADR 0052). The statements below
-describe the tree at audit time and are kept as the record.
+source/line) remain quality notes. kr232 now builds at `-O2` by default: named
+locals keep their home slots because recorded allocas are never promoted, while
+small internal helpers may be inlined and their frames/locals disappear (choose
+`-O1` for faithful stepping). No backend emits a `P`/Location record yet. The
+statements below describe the tree at audit time and are kept as the record.
 
 Audit of debug-symbol emission for the kr232 backend against the KR32 reference,
 against the current working tree of `C:\Users\kevin\repos\krcompiler` (HEAD
