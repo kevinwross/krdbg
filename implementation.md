@@ -1145,9 +1145,11 @@ globals; call stacks; a reusable guide; fixtures and cross-platform verification
       (register in frame 0, unavailable in callers, home slot outside ranges,
       `<optimized out>`), members through the resolved location, register display,
       duplicate V rows collapsed.
-- [ ] **S1.4** kr232 producer, phase 2: F for every function including
-      static/internal, debug_name, per-object unique labels, G for internal
-      globals, and linker dedupe (task-13).
+- [x] **S1.4** kr232 producer, phase 2 (KRCompiler `fcbf8f7`): `.debug_function`
+      for every lowered function (display name, symbol, frame, result type),
+      assembler-emitted F records with per-object hashed range/scope labels,
+      G for every `.debug_global` including internal linkage, and shared-linker
+      dedupe of repeated F/V/W/G records; epilogue rule documented.
 - [ ] **S1.5** Symbol fixtures F1–F6 and the session-level CTest matrix
       (task-14).
 - [ ] **S1.6** Windows and WSL verification: line stepping, locals/params,
@@ -1533,6 +1535,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T10:51:06-08:00** — **P2 starts: settings persistence, kr232 state goldens.** `96d84a3` makes the demo host save the merged settings to `%APPDATA%\krdbg\settings.json` / `$XDG_CONFIG_HOME/krdbg/settings.json` and load them at start; `--set ID=VALUE` applies one typed value before loading. `krdbg_settings_persist` proves the write and reload. The `kr232-breakpoint` (`83932902B6DE5E18`) and `kr232-settings` (`C36315131719FBAE`) goldens are CTest rows; the parity matrix rows that M7 closed are marked yes. CTest 16/16. M8.2 is checked; M8.1 and M8.3–M8.8 remain.
 - **2026-11-27T11:01:12-08:00** — **G8 passed; P2 complete.** `a11666b` adds the toolbar BUILD/OVER/IN/OUT/BP controls, hover tooltips, the interaction tests and refreshed every golden (Windows and WSL agree). `e389254` completes the tooltip coverage and the Linux startrekng hash. CTest **17/17** on both platforms; `GATE WINDOWS: PASS`, `GATE LINUX X64: PASS`; kr32 adapter **129/129** on Windows and Linux; kr16 adapter **129/129** on Windows. The four kr232 state goldens are recorded. M8.1–M8.8 and G8.1–G8.5 are checked; P3 (G9–G10) remains.
 - **2026-11-27T16:40:00-08:00** — **Debug symbols phase 1 and the krdbg consumer.** KRCompiler `923bca2` emits truthful kr232 source lines (definition line before the prologue, per-file/per-line directives, `.debug_line 0`), filters V to named source variables, adds W/K, protects recorded slots from dead-store passes and never promotes recorded allocas. krdbg `e71fabf` adds function display-name/symbol identity from K, KDBG Location ranges with PC-aware register/home/optimized-out selection, register display, duplicate-row collapse and tests. Verification: krc_tests 318/318 (4230 assertions); krdbg_tests 126/0; krdbg_kr232_tests 29/0; CTest 17/17 with the standard startrekng image. The fixed-compiler startrekng image (hash `54AF0EB34AADA0B9`) is kept at `build/startrekng-kr232-fixed` for manual line-stepping tests; the committed golden still follows the installed family prefix. S1.2/S1.3 are checked; S1.4–S1.7 and GS.1–GS.5 remain.
+
+- **2026-11-27T16:52:23-08:00** — **Debug symbols phase 2.** KRCompiler `fcbf8f7` emits `.debug_function` for every lowered function, assembler-emitted F records with per-object hashed range/scope labels, G records for internal-linkage globals, shared F/V/W/G dedupe, and the documented inline-epilogue range rule. Rebuilt startrekng: 373 functions with 0 missing F, 0 inverted/overlapping ranges, static functions named and their line records retained, 67 G symbols including internal globals; two-TU static helper/counter have distinct ranges and addresses. Verification: krc_tests 321/321 (4358 assertions); krdbg_kr232_tests 58/58 and krdbg_tests 126/126 with the concurrent fixture work; the new startrekng image renders `811261FE3A1C2871`. S1.4 is checked; S1.5–S1.7 and GS.1–GS.5 remain.
 
 ## 10. Blocked or external prerequisites
 
