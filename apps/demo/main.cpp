@@ -79,6 +79,19 @@ std::string environment_value(const char* name) {
     return 0;
 }
 
+std::string window_title(const std::string& target, const std::string& image) {
+    std::string title = "krdbg";
+    if (!target.empty()) {
+        title += " " + target;
+    }
+    if (!image.empty()) {
+        // The window manager and screenshot tooling identify the window by its
+        // title, so use the loaded module's name rather than its full path.
+        title += " " + std::filesystem::path(image).filename().string();
+    }
+    return title;
+}
+
 // The host-owned settings file: `%APPDATA%\krdbg\settings.json` on Windows and
 // `$XDG_CONFIG_HOME/krdbg/settings.json` (or `~/.config/...`) elsewhere. An
 // empty result means the environment names no home directory.
@@ -1739,8 +1752,18 @@ int main(int argc, char** argv) {
     int rendered = 0;
     int canvas_width = 0;
     int canvas_height = 0;
+    std::string last_window_title;
     std::unique_ptr<krdbg::Canvas> canvas;
     while (running) {
+        // The title follows the active target and the last loaded image, so a
+        // LOAD or a target switch renames the window without reopening it. The
+        // path is absolute: two images with the same filename are still
+        // distinguishable.
+        const std::string title = window_title(host.active_target(), loaded_image);
+        if (title != last_window_title) {
+            window->set_title(title);
+            last_window_title = title;
+        }
         krdbg::platform::Event event;
         while (window->poll(event)) {
             if (!surface.handle_event(event)) {
