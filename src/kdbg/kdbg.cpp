@@ -287,6 +287,7 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
                          }
                          return left.start < right.start;
                      });
+    deduplicate_sources(out);
 }
 
 } // namespace

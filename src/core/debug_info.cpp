@@ -30,6 +30,43 @@ std::size_t function_index(const DebugInfo& info, const FunctionInfo* function) 
 
 } // namespace
 
+void deduplicate_sources(DebugInfo& info) {
+    std::map<std::string, std::uint32_t> id_by_path;
+    std::map<std::uint32_t, std::uint32_t> remap;
+    std::vector<SourceFile> unique;
+    unique.reserve(info.sources.size());
+    for (const SourceFile& source : info.sources) {
+        const std::string key = normalize_path(source.path);
+        const auto existing = id_by_path.find(key);
+        std::uint32_t id = 0;
+        if (existing != id_by_path.end()) {
+            id = existing->second;
+        } else {
+            id = static_cast<std::uint32_t>(unique.size());
+            SourceFile copy = source;
+            copy.id = id;
+            unique.push_back(std::move(copy));
+            id_by_path.emplace(key, id);
+        }
+        remap.emplace(source.id, id);
+    }
+    for (FunctionInfo& function : info.functions) {
+        if (const auto found = remap.find(function.source); found != remap.end()) {
+            function.source = found->second;
+        } else {
+            function.source = 0;
+        }
+    }
+    for (LineInfo& line : info.lines) {
+        if (const auto found = remap.find(line.source); found != remap.end()) {
+            line.source = found->second;
+        } else {
+            line.source = 0;
+        }
+    }
+    info.sources = std::move(unique);
+}
+
 void merge_debug_info(DebugInfo& into, const DebugInfo& other) {
     if (&into == &other) {
         return;

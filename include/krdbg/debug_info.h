@@ -153,6 +153,13 @@ struct DebugInfo {
 // their own debug info.
 void merge_debug_info(DebugInfo& into, const DebugInfo& other);
 
+// Collapses source records with the same normalized path, keeping the first
+// record's order and display name, and renumbers every line/function source
+// reference to the surviving id. Linkers that concatenate per-object debug
+// payloads legitimately repeat a header or a source file once per object; the
+// debugger's source list should show it once.
+void deduplicate_sources(DebugInfo& info);
+
 // Resolved views returned by DebugSession. A VariableView carries the location
 // actually in effect at the current PC; members() reads through that storage.
 struct FrameView {

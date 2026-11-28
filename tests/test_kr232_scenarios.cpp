@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -310,6 +311,12 @@ KRDBG_TEST(kr232_scenario_startrekng) {
     }
     CHECK(loaded.info->sources.size() >= 8U);
     CHECK(loaded.info->functions.size() >= 20U);
+    {
+        std::set<std::string> paths;
+        for (const krdbg::SourceFile& source : loaded.info->sources) {
+            CHECK(paths.insert(source.path).second);
+        }
+    }
 
     krdbg::DebugSession session(std::move(loaded.target), loaded.info,
                                 [](krdbg::IDebugTarget&, std::string&) {

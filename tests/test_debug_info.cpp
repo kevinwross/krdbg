@@ -8,8 +8,29 @@ using krdbg::TypeKind;
 using krdbg::VariableGlobal;
 using krdbg::VariableInfo;
 
-KRDBG_TEST(fake_debug_info_covers_sources_lines_and_functions) {
-    const DebugInfo info = krdbg::make_fake_debug_info();
+KRDBG_TEST(duplicate_source_paths_are_collapsed_and_references_remapped) {
+    DebugInfo info;
+    info.sources = {{1, "examples/game.cpp", "game.cpp"},
+                    {2, "examples/game.cpp", "game.cpp"},
+                    {3, "examples/console.cpp", "console.cpp"},
+                    {4, "examples/game.cpp", "game.cpp"}};
+    krdbg::FunctionInfo function;
+    function.source = 4;
+    info.functions.push_back(function);
+    info.lines = {{0x1000, 2, 10, 0}, {0x1004, 3, 20, 0}};
+
+    krdbg::deduplicate_sources(info);
+
+    CHECK_EQ(info.sources.size(), 2U);
+    CHECK_EQ(info.sources[0].id, 0U);
+    CHECK_EQ(info.sources[0].path, "examples/game.cpp");
+    CHECK_EQ(info.sources[1].id, 1U);
+    CHECK_EQ(info.lines[0].source, 0U);
+    CHECK_EQ(info.lines[1].source, 1U);
+    CHECK_EQ(info.functions[0].source, 0U);
+}
+
+KRDBG_TEST(fake_debug_info_covers_sources_lines_and_functions) {    const DebugInfo info = krdbg::make_fake_debug_info();
     CHECK_EQ(info.sources.size(), 2U);
     CHECK_EQ(info.functions.size(), 2U);
     CHECK_EQ(info.lines.size(), 7U);
