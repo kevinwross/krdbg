@@ -296,43 +296,40 @@ public:
         return true;
     }
     std::vector<RawFrame> unwind() const override {
+        // The frame chain ENTER builds is [FP] = saved caller FP and
+        // [FP + 4] = return address into the caller. Frame zero is where the
+        // machine is; each frame above it is the caller whose FP is the saved
+        // word of the frame below, so a frame's PC and its frame_base must come
+        // from the same link. Reading [FP + 4] while publishing FP as the base
+        // of the caller paired one frame's return address with the next frame's
+        // base, which named the grandcaller and showed the wrong locals for
+        // frame 1.
         std::vector<RawFrame> frames;
-        std::uint32_t efp = machine_.reg(kFramePointer);
-        while (efp != 0 && frames.size() < 64) {
-            // Read both words before publishing the frame: a frame whose return
-            // address cannot be read is not a frame, and pushing it with pc 0 is
-            // how the caller looked absent.
+        std::uint32_t fp = machine_.reg(kFramePointer);
+        RawFrame current;
+        current.frame_base = fp != 0 ? fp : machine_.reg(kSp);
+        current.pc = machine_.pc();
+        frames.push_back(current);
+        while (fp != 0 && frames.size() < 64) {
             std::uint32_t pc = 0;
             std::uint32_t next = 0;
-            if (machine_.memory().read32(efp + 4, pc) != kr232::Access::Ok ||
-                machine_.memory().read32(efp, next) != kr232::Access::Ok) {
+            if (machine_.memory().read32(fp + 4, pc) != kr232::Access::Ok ||
+                machine_.memory().read32(fp, next) != kr232::Access::Ok) {
                 break;
             }
-            RawFrame frame;
-            frame.frame_base = efp;
-            frame.pc = pc;
-            frames.push_back(frame);
-            if (next == efp) {
+            // The outermost ENTER-built frame saves FP 0 and may have no return
+            // address (the reset entry does not call it); it names no caller.
+            if (pc == 0) {
                 break;
             }
-            efp = next;
-        }
-        if (frames.empty()) {
-            // No ENTER-built frame yet (reset, kernel entry, or the first
-            // instructions of a program). Publish the current position as frame
-            // zero so the stack panel still names where the machine is; the
-            // session treats a single frame as "no caller" for step-out.
-            RawFrame frame;
-            frame.frame_base = machine_.reg(kSp);
-            frame.pc = machine_.pc();
-            frames.push_back(frame);
-        } else {
-            // Frame zero is where the program is, not where it will return to.
-            // Each chained frame stores a return address, so publishing those
-            // alone names the caller for the innermost frame: the panel said
-            // `main` while the program was inside a function main had called, and
-            // the locals it showed were the caller's.
-            frames.front().pc = machine_.pc();
+            RawFrame caller;
+            caller.frame_base = next;
+            caller.pc = pc;
+            frames.push_back(caller);
+            if (next == fp) {
+                break;
+            }
+            fp = next;
         }
         return frames;
     }

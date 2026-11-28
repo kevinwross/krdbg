@@ -134,8 +134,14 @@ KRDBG_TEST(kr232_scenario_inspection_frames_and_locals) {
         return;
     }
     krdbg::DebugSession session = make_session(loaded);
+    // Stop inside `inner`, the frame that owns `x`; the caller's frame is
+    // published as well. A correct unwind publishes main's caller (_start)
+    // earlier than that, so waiting only for two frames could stop before the
+    // nested call has been made.
     for (int step = 0; step < 20000; ++step) {
-        if (session.call_stack().size() >= 2) {
+        const std::vector<krdbg::FrameView> current = session.call_stack();
+        if (current.size() >= 2 && !current.empty() &&
+            current.front().function == "inner") {
             break;
         }
         const krdbg::StopResult result =
@@ -149,6 +155,7 @@ KRDBG_TEST(kr232_scenario_inspection_frames_and_locals) {
     CHECK(!frames.empty());
     if (!frames.empty()) {
         CHECK(!frames.front().function.empty());
+        CHECK_EQ(frames.front().function, std::string("inner"));
     }
     const std::vector<krdbg::VariableView> locals = session.locals(0);
     CHECK(!locals.empty());
