@@ -87,8 +87,8 @@ which KDBG tag it becomes and where krdbg reads it.
 | `G` | `emit` `:1062-1081` | `<name> <label> <type> <size>` | `:851-859` | `Symbol`, tag 4, `.kdbg_sym` | `:140-148`, then `:189-217` |
 | `V` | params `:1535-1537`, locals `:1580-1582` | `<function> <name> <frame-offset> <type> <size>` | `:860-864` | `Variable`, tag 5, `.kdbg_var` | `:156-187` |
 | `W` | params `:1538-1539`, locals `:1583-1584` | `<function> <name> <kind> <scope> <flags>` | `:921-937` | `VarInfo`, tag 11, `.kdbg_var` | `:150-154`, `:170-185` |
-| `K` | `:1511-1515` | `<symbol> <symbol> - <symbol> .L<symbol>.end` | `:904-920` | `Scope`, tag 10, `.kdbg_scope` | not read (dropped at `:62-218`) |
-| `P` | never emitted (see §5) | `<function> <name> <reg> <start> <end>` | `:884-903` | `Location`, tag 9, `.kdbg_loc` | not read (dropped at `:62-218`) |
+| `K` | `:1511-1515` | `<symbol> <symbol> - <symbol> .L<symbol>.end` | `:904-920` | `Scope`, tag 10, `.kdbg_scope` | function-scope `K` supplies `FunctionInfo::symbol` (§2.7) |
+| `P` | never emitted (see §5) | `<function> <name> <reg> <start> <end>` | `:884-903` | `Location`, tag 9, `.kdbg_loc` | `DebugInfo::locations` (§2.8) |
 | `T` | `add_debug_type` `:824` | `<name> <size>` | `:865-869` | `Type`, tag 6, `.kdbg_type` | `:82-89` |
 | `C` | `:838-840` | `<name> <size> <base-or-minus>` | `:870-883` | `Type` kind `struct` + `Base`, tag 12 | `:82-89`, `:97` |
 | `M` | `:841-866` | `<type> <field> <offset> <field-type> <field-size>` | `:954-970` | `Member`, tag 7 | `:101-107` |
@@ -198,8 +198,12 @@ name, start, end, frame and type (`KC/src/debug/kdbg.cpp:292-308`); for KR32 the
 
 krdbg translates name, start, end and frame; it sets `FunctionInfo::source` and
 `::line` to zero and ignores the return type (`KD/src/kdbg/kdbg.cpp:110-124`),
-then stable-sorts functions by start (`:121-124`). `F` is what makes the rest of
-the debugger work:
+then stable-sorts functions by start (`:121-124`). It also fills
+`FunctionInfo::symbol`, the identity the payload's `V`/`W` records name the
+function by: the function-scope `K` record supplies it when the variable records
+use that name (KR32/KR16 C++), otherwise the F name is the identity (§2.7). The
+call stack and Variables rows show `FunctionInfo::name`, the display name.
+`F` is what makes the rest of the debugger work:
 
 - `function_at(pc)` finds the function whose `[begin, end)` contains the pc
   (`KD/src/core/debug_info.cpp:154-173`); line-at clamping and line-over stepping
@@ -285,13 +289,15 @@ it in `.kdbg_var` as `Variable` (`KC/src/debug/kdbg.cpp:324-332`). krdbg sets
 `function` is empty and `VariableLocal` otherwise (`KD/src/kdbg/kdbg.cpp:156-169`).
 `W` then overrides the kind and supplies the scope (`:170-185`).
 
-The variable is listed by `locals(frame)` only when `variable.function` equals the
-enclosing `FunctionInfo::name` and the variable is not global
-(`KD/src/core/session.cpp:660-667`). **`V.function` and `F.name` must therefore be
-the same string.** KR32 writes the mangled symbol in `V` and the display name in
-`F`, so C++ member-function parameters and locals are not listed by krdbg — see
-§6.1. Values are read from `frame_base + frame_offset`
-(`KD/src/core/variables.cpp:78-83`).
+The variable is listed by `locals(frame)` only when `VariableInfo::function`
+equals the enclosing `FunctionInfo::identity()` and the variable is not global
+(`KD/src/core/session.cpp`). `identity()` is the mangled symbol when the payload
+distinguishes one (§2.7) and the F name otherwise, so `V.function` must match
+`FunctionInfo::symbol` — not the display name. KR32's `V` records use the
+mangled symbol and the function-scope `K` record carries it, which is how krdbg
+now lists C++ member-function parameters and locals (§6.1). Values are read from
+`frame_base + frame_offset`, or from the live-range register inside a `P` range
+(§5.3).
 
 ### 2.6 `W` — variable kind, scope and flags
 
@@ -310,10 +316,13 @@ record, and it parses `flags` with `strtoul(..., 0)` so `0x0` is decimal 0
 krdbg builds a `(function, name) -> VarInfo` map and applies the kind as the
 `VariableFlag` (`KD/src/kdbg/kdbg.cpp:150-154,170-185`): `Parameter` becomes
 `VariableParam`, `Static` becomes `VariableStatic`, `Local` becomes `VariableLocal`;
-the scope string is copied into `VariableInfo::scope` (`:173`) and the W flags word
-is **not read at all**. Without `W` every `V` is listed as a local
-(`:169`), which is what a backend that omits `W` should expect. KR32's own reader
-does not parse `W` at all (`KR32/src/debug/debug.cpp:150-243`; stated
+the scope string is copied into `VariableInfo::scope` (`:173`). The `W` flags word
+is read only for bit 2 (`0x4`), which becomes `VariableSlotUnusable`: the home slot
+is not maintained, so outside every `P` range the value is `<optimized out>`.
+Bits 0 (address-taken) and 1 (read-only) are still ignored. Without `W` every `V`
+is listed as a local (`:169`), which is what a backend that omits `W` should
+expect. KR32's own reader does not parse `W` at all
+(`KR32/src/debug/debug.cpp:150-243`; stated
 `KC/docs/symbols.md:148-150`), so `W` exists for KDBG consumers such as krdbg.
 
 ### 2.7 `K` — lexical scope
@@ -329,16 +338,25 @@ The linker resolves both labels and drops the record when either is unknown
 (`KC/src/linker/linker.cpp:904-920`); KDBG stores `Scope` in `.kdbg_scope`
 (`KC/src/debug/kdbg.cpp:395-403`).
 
-**krdbg does not read scopes**: `translate` never touches `image.scopes`, and
-`DebugInfo` has no scope table (`KD/src/kdbg/kdbg.cpp:62-218`,
-`KD/include/krdbg/debug_info.h:105-119`). A backend may omit `K` with no effect on
-krdbg, but it must emit the `.L<symbol>.end` symbol if it emits `K`, or the linker
-silently drops the record.
+krdbg reads the function-scope `K` record to recover the function identity that
+`F` cannot carry: the bridge's `F` symbol (its start label) is resolved to an
+address and the string is dropped, but the K record keeps it in its `function`
+field. `translate` sets `FunctionInfo::symbol` from a K record whose start equals
+the function's start AND whose `function` the payload's `V`/`W` records actually
+use; otherwise the F name is the identity. That distinction keeps kr216 working,
+where V/W use the display name while K lists the mangled symbol. `DebugInfo` has
+no scope table, so nested scopes are still ignored
+(`KD/src/kdbg/kdbg.cpp`). A backend must emit the `.L<symbol>.end` symbol if it
+emits `K`, or the linker silently drops the record; a backend that omits `K`
+still works when its V/W records use the F name.
 
 ### 2.8 `P` — register location
 
-KR32 emits none. The record exists in the format and the linker parses it, but no
-backend produces it; see [§5](#5-register-promotion-and-the-plocation-record).
+KR32 emits none. The record exists in the format, the linker parses it, and
+krdbg now translates it into `DebugInfo::locations` (fp → `fpr`, otherwise `gpr`,
+index = register number, half-open range). No backend produces one yet, so the
+selection path is exercised by synthetic payloads; see
+[§5](#5-register-promotion-and-the-plocation-record).
 
 ### 2.9 `T`, `C`, `M`, `A`, `R` — types
 
@@ -420,15 +438,16 @@ For a variable to appear in the Variables pane (`session->locals(selected_frame)
 
 1. `F` for the frame's pc, because `locals()` returns nothing without an enclosing
    function (`KD/src/core/session.cpp:654-658`).
-2. `V.function` equal to `FunctionInfo::name`, i.e. the same name string `F`
-   wrote, and `V` not flagged global (`KD/src/core/session.cpp:660-667`).
-   KR32 writes the mangled symbol here, which is why C++ member functions lose
-   their locals (§6.1).
+2. `V.function` equal to `FunctionInfo::identity()` and `V` not flagged global
+   (`KD/src/core/session.cpp`). `identity()` is the mangled symbol recovered from
+   the function-scope `K` record when V/W use it (KR32), otherwise the F name; a
+   variable whose function string is neither is not listed (§2.7, §6.1).
 3. A frame offset consistent with the adapter's frame base
-   (`KD/src/core/variables.cpp:78-83`).
+   (`KD/src/core/variables.cpp:78-83`), or a `P` range for a register-resident
+   value (§5.3).
 4. `W` to say `param` vs `local`; without it every variable is a local
-   (`KD/src/kdbg/kdbg.cpp:169`). `W` flags are ignored; `W` scope is copied but
-   never read.
+   (`KD/src/kdbg/kdbg.cpp:169`). `W` flag bit 2 marks an unusable slot; the other
+   flag bits are ignored; `W` scope is copied but never read.
 5. `T` for the variable's type (`V` carries the type name) for display: without a
    matching type the pane shows `?` as the type name and formats the raw bytes as
    a signed integer (`KD/src/core/session.cpp:178-203`;
@@ -498,9 +517,9 @@ Verified against `KD/src/kdbg/kdbg.cpp:62-218` and by loading hand-built payload
 
 | Data | krdbg behaviour |
 |---|---|
-| `KdbgScope` (bridge `K`) | decoded, then discarded; `translate` never reads `image.scopes` |
-| `KdbgLocation` (bridge `P`) | decoded, then discarded; `translate` never reads `image.locations` |
-| `KdbgVarInfo::flags` (`W` flags word) | parsed, not read; the `VariableFlag` comes from `kind` only |
+| `KdbgScope` (bridge `K`) | decoded; `translate` reads only a function-scope record to recover `FunctionInfo::symbol` when the payload's V/W records use it. No scope table in `DebugInfo`, so nested scopes are ignored |
+| `KdbgLocation` (bridge `P`) | decoded and translated to `DebugInfo::locations`; the PC-aware selection reads the register inside a range and reports `<optimized out>` outside it when the slot is unusable |
+| `KdbgVarInfo::flags` (`W` flags word) | bit 2 (`0x4`) becomes `VariableSlotUnusable`; bits 0 and 1 are not read, and the kind still sets the primary `VariableFlag` |
 | `W` kind `static` | maps to `VariableStatic`; no producer emits it for KR32 |
 | `KdbgFunction::type` (`F` return type) | discarded (`FunctionInfo` has no type field) |
 | `KdbgLine::column` | discarded (`LineInfo` has no column) |
@@ -608,13 +627,13 @@ The format defines the record; krc does not produce it:
   (`KC/src/linker/linker.cpp:884-886`; `KC/docs/decisions/0009-kdbg-v1-freeze.md:63-64`;
   `KC/docs/decisions/0052-kdbg-variable-scope-ranges.md:22-23`;
   `KC/docs/optimize.md:80-83`).
-- krdbg decodes it but drops it: the vendored decoder fills `KdbgLocation`
-  (`KD/third_party/krc-debug/src/kdbg.cpp:628-651`), and `translate` never reads
-  `image.locations` (`KD/src/kdbg/kdbg.cpp:62-218`). The neutral model has no
-  range on a variable: `VariableInfo` carries one `Location` and no start/end
-  (`KD/include/krdbg/debug_info.h:92-101`), and the only `LocationKind::Register`
-  producer today is the fake debug info used by tests
-  (`KD/src/core/fake_debug_info.cpp:86,127,157,167`).
+- krdbg translates and applies it: the vendored decoder fills `KdbgLocation`
+  (`KD/third_party/krc-debug/src/kdbg.cpp:628-651`), `translate` copies each
+  record into `DebugInfo::locations`, and `DebugSession::make_view` reads the
+  register while the PC is inside the half-open range. Outside every range the
+  `V` home is used unless the variable carries `VariableSlotUnusable`. No
+  backend produces a `P` record yet, so the path is proven by synthetic payloads
+  (`tests/test_kdbg.cpp`, `tests/test_session.cpp`).
 
 ### 5.4 `P`, `V` and `W` interact additively
 
@@ -676,32 +695,37 @@ If the kr232 rewrite keeps promotion to temporaries as KR32 does, the minimal
 contract is the same: stable slot + `V`/`W` for every named variable and no `P`.
 If it promotes named variables, it must emit one `P` per register-resident range
 with resolvable start/end labels, keep `V`/`W` for type/size/kind, and krdbg must
-gain the six points above. [register-promoted-locals.md](register-promoted-locals.md)
+gain the six points above (implemented 2026-11-27).
+[register-promoted-locals.md](register-promoted-locals.md)
 covers the kr232 redesign in depth: the `.debug_varinfo`/`.debug_scope`/
 `.debug_location` directives, the producer's range rules, the precedence and
 fallback table, and the tests that pin them.
 
 ## 6. KR32 behaviours confirmed by probe (and what a rewrite should note)
 
-### 6.1 C++ member functions lose their locals in krdbg
+### 6.1 C++ member functions lost their locals in krdbg
 
-KR32 writes the mangled symbol in `V`/`W` (`KC/src/backend/kr32_backend.cpp:1535-1539`),
-`F` carries the display name (`:1500-1503`), and krdbg matches
-`variable.function == FunctionInfo::name` (`KD/src/core/session.cpp:660-667`).
-Probe: a C++ class method named `Counter::add` (symbol `Counter_add`) with
-parameters `this`, `by` and local `tmp` translated to `FunctionInfo.name =
-"Counter::add"` and `VariableInfo.function = "Counter_add"`; `session->locals(0)`
-returned empty for that frame while `_start`'s local was listed. KR32's own
-reader and GUI have the same name comparison (`KR32/src/debug/debug.cpp:737-742`,
-`KR32/src/ui/debugger_ui.cpp:2384`, `KR32/src/dap/dap.cpp:797`), so this is
-consistent across consumers. kr216 already writes the display name in `V`/`W`
-(`KC/src/backend/kr216_backend.cpp:1846-1852,1870-1876`), which is the variant that
-works with krdbg; kr16 follows KR32 (`KC/src/backend/kr16_backend.cpp:1215-1221`).
-A kr232 rewrite should emit the same name in `F.name` and `V.function`.
+KR32 writes the mangled symbol in `V`/`W` (`KC/src/backend/kr32_backend.cpp:1535-1539`)
+and `F` carries the display name (`:1500-1503`). The probe at the time: a C++
+class method named `Counter::add` (symbol `Counter_add`) with parameters `this`,
+`by` and local `tmp` translated to `FunctionInfo.name = "Counter::add"` and
+`VariableInfo.function = "Counter_add"`; `session->locals(0)` returned empty for
+that frame because it matched `variable.function == FunctionInfo::name`. KR32's
+own reader and GUI have the same name comparison
+(`KR32/src/debug/debug.cpp:737-742`, `KR32/src/ui/debugger_ui.cpp:2384`,
+`KR32/src/dap/dap.cpp:797`).
 
-Also note `frame_base_for(function)` in `members(VariableView)` looks a frame up by
-function name (`KD/src/core/session.cpp:207-218`), so the same mismatch makes C++
-member expansion read from frame base 0; the name contract fixes both.
+krdbg now matches on `FunctionInfo::identity()`: `translate` recovers the mangled
+symbol from the function-scope `K` record whose start equals `F`'s start and
+which the `V`/`W` records name, and keeps the F name as the display name for the
+call stack and variable rows (§2.7). `members(VariableView)` reads through the
+resolved location and frame base carried by the view, so expansion follows the
+same identity. kr216 writes the display name in `V`/`W`
+(`KC/src/backend/kr216_backend.cpp:1846-1852,1870-1876`) and its K record keeps
+the mangled symbol, so there the F name remains the identity; kr16 follows KR32
+(`KC/src/backend/kr16_backend.cpp:1215-1221`). A kr232 rewrite can either emit
+the same string in `F.name` and `V.function` or emit the symbol in `K`/`V`/`W`
+with a display name in `F`; krdbg handles both.
 
 ### 6.2 Internal-linkage symbols with the same name collide
 
@@ -761,7 +785,9 @@ globals and call stacks:
 7. `C`+`M` for structs, `A` for arrays, `R` for pointers that appear.
 8. `G` for every defined global, including internal-linkage ones, with a
    non-zero size and a unique resolvable label.
-9. `K` optional (krdbg ignores it); `P` not needed at `-O0` (nothing is promoted
+9. `K` supplies the identity when `V`/`W` name a function by a symbol that
+   differs from `F`'s display name; with the same name in `F` and `V`, or with no
+   `K`, the F name is the identity. `P` not needed at `-O0` (nothing is promoted
    there: `compute_allocation` returns early when not optimising,
    `KC/src/backend/kr32_backend.cpp:1629-1634`).
 10. Encode as KDBG v1.1 with `pointer_width = 4` and `image_base =` the

@@ -27,11 +27,27 @@ struct Location {
     std::uint64_t address = 0;      // Absolute
 };
 
+// A register live range (KDBG `P`/`Location`). A promoted variable keeps its
+// declared home in VariableInfo::location and gains one record per half-open
+// [start, end) range in which the value lives in `location`. Records are sorted
+// by (function, name, start), so the first range containing the PC wins.
+struct LocationInfo {
+    std::string function;  // function identity, as VariableInfo::function
+    std::string name;      // variable name
+    Location location;     // Register: group and index
+    std::uint64_t start = 0;  // half-open, image address space
+    std::uint64_t end = 0;
+};
+
 enum VariableFlag : std::uint32_t {
     VariableParam = 1U << 0,
     VariableLocal = 1U << 1,
     VariableGlobal = 1U << 2,
     VariableStatic = 1U << 3,
+    // The producer no longer maintains the variable's frame slot at every PC.
+    // Outside every LocationInfo range the value is `<optimized out>` rather
+    // than the slot's stale bytes.
+    VariableSlotUnusable = 1U << 4,
 };
 using VariableFlags = std::uint32_t;
 
@@ -49,7 +65,11 @@ struct LineInfo {
 };
 
 struct FunctionInfo {
+    // Source-level name to display (`Class::method`). `symbol` is the identity
+    // the payload's variable records name this function by; matching (locals()
+    // and frame lookup) uses identity(), never `name`.
     std::string name;
+    std::string symbol;
     std::uint64_t begin = 0;
     std::uint64_t end = 0;       // exclusive
     std::uint32_t source = 0;
@@ -58,6 +78,14 @@ struct FunctionInfo {
     // frame (saved FP at +frame, return PC at +frame+pointer size). An adapter
     // that cannot unwind leaves this zero.
     std::uint32_t frame = 0;
+
+    // The function identity a variable record uses. A producer that keeps one
+    // name may leave `symbol` empty, in which case identity() returns `name`.
+    // KR32/KR16 C++ keep the mangled symbol here while `name` carries the display
+    // name.
+    [[nodiscard]] std::string_view identity() const {
+        return symbol.empty() ? std::string_view(name) : std::string_view(symbol);
+    }
 };
 
 struct SymbolInfo {
@@ -101,7 +129,8 @@ struct VariableInfo {
 };
 
 // The neutral debug model. Vectors that are searched are kept sorted by the
-// producer: lines by address, functions by range.
+// producer: lines by address, functions by range, locations by (function, name,
+// start).
 struct DebugInfo {
     std::uint32_t target_id = 0;
     std::uint32_t abi_version = 0;
@@ -114,6 +143,7 @@ struct DebugInfo {
     std::vector<FunctionInfo> functions;
     std::vector<SymbolInfo> symbols;
     std::vector<VariableInfo> variables;
+    std::vector<LocationInfo> locations;  // register live ranges
     std::vector<TypeInfo> types;
     std::map<std::string, TypeId> type_by_name;
 };
@@ -138,8 +168,20 @@ struct VariableView {
     TypeId type = kInvalidType;
     std::string value;
     std::uint32_t size = 0;
+    // The location in effect at the current PC: the live-range register when a
+    // LocationInfo range covers the PC, otherwise the declared home.
     Location location;
     bool has_children = false;
+    // A live range selected a register; `location` is that register and this is
+    // its display form ("register: R9"). Empty when no range applied, so a
+    // declared register home does not claim to be a live-range value.
+    std::string location_text;
+    // The value could not be read at this PC: a register-resident variable in a
+    // caller frame, or a slot flagged VariableSlotUnusable outside every range.
+    bool unavailable = false;
+    // The frame base this view's FrameOffset resolves against; members() reads
+    // through the location above instead of re-finding the variable.
+    std::uint64_t frame_base = 0;
 };
 
 struct MemberView {

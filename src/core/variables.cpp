@@ -44,15 +44,22 @@ std::int64_t sign_extend(std::uint64_t value, std::size_t bytes) {
 bool read_variable_storage(const IDebugTarget& target, std::uint64_t frame_base,
                            const VariableInfo& variable,
                            std::vector<std::uint8_t>& out) {
+    return read_variable_storage(target, frame_base, variable.location,
+                                 variable.size, out);
+}
+
+bool read_variable_storage(const IDebugTarget& target, std::uint64_t frame_base,
+                           const Location& location, std::uint32_t size,
+                           std::vector<std::uint8_t>& out) {
     out.clear();
-    if (variable.size == 0 && variable.location.kind != LocationKind::Register) {
+    if (size == 0 && location.kind != LocationKind::Register) {
         return false;
     }
 
-    switch (variable.location.kind) {
+    switch (location.kind) {
     case LocationKind::Register: {
         ScalarValue value;
-        if (!target.read_value(variable.location.group, variable.location.index, value)) {
+        if (!target.read_value(location.group, location.index, value)) {
             return false;
         }
         const std::size_t bytes = value.width / 8U;
@@ -60,11 +67,11 @@ bool read_variable_storage(const IDebugTarget& target, std::uint64_t frame_base,
             return false;
         }
         std::size_t count = bytes;
-        if (variable.size != 0) {
-            if (variable.size > bytes) {
+        if (size != 0) {
+            if (size > bytes) {
                 return false;
             }
-            count = variable.size;
+            count = size;
         }
         out.resize(count);
         const bool little_endian =
@@ -77,17 +84,30 @@ bool read_variable_storage(const IDebugTarget& target, std::uint64_t frame_base,
     }
     case LocationKind::FrameOffset: {
         const auto address = static_cast<std::uint64_t>(
-            static_cast<std::int64_t>(frame_base) + variable.location.frame_offset);
-        out.resize(variable.size);
+            static_cast<std::int64_t>(frame_base) + location.frame_offset);
+        out.resize(size);
         return target.read_memory(address, out);
     }
     case LocationKind::Absolute:
-        out.resize(variable.size);
-        return target.read_memory(variable.location.address, out);
+        out.resize(size);
+        return target.read_memory(location.address, out);
     case LocationKind::None:
         return false;
     }
     return false;
+}
+
+std::string register_label(const Location& location) {
+    if (location.kind != LocationKind::Register) {
+        return {};
+    }
+    const char* prefix = location.group == "fpr"   ? "F"
+                         : location.group == "gpr" ? "R"
+                                                   : nullptr;
+    if (prefix == nullptr) {
+        return "register: " + location.group + std::to_string(location.index);
+    }
+    return std::string("register: ") + prefix + std::to_string(location.index);
 }
 
 std::string format_scalar(const TypeInfo* type, std::span<const std::uint8_t> bytes,

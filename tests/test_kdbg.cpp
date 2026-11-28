@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "json_lite.h"
+#include "krc/debug/kdbg.h"
 #include "krdbg/kdbg.h"
 
 namespace {
@@ -103,6 +104,28 @@ const krdbg::VariableInfo* find_variable(const krdbg::DebugInfo& info,
         }
     }
     return nullptr;
+}
+
+const krdbg::FunctionInfo* find_function_at(const krdbg::DebugInfo& info,
+                                            std::uint64_t begin) {
+    for (const krdbg::FunctionInfo& function : info.functions) {
+        if (function.begin == begin) {
+            return &function;
+        }
+    }
+    return nullptr;
+}
+
+// Encodes a hand-built KdbgImage and translates it back, so a test can cover a
+// record no compiler path emits yet without a committed fixture.
+krdbg::DebugInfo translate_image(const krc::debug::KdbgImage& image) {
+    const std::vector<std::uint8_t> payload = krc::debug::encode_kdbg(image);
+    CHECK(!payload.empty());
+    krdbg::DebugInfo info;
+    std::string error;
+    CHECK(krdbg::kdbg::read_payload(payload, info, error));
+    CHECK(error.empty());
+    return info;
 }
 
 } // namespace
@@ -350,4 +373,102 @@ KRDBG_TEST(kdbg_rejects_a_bad_section_table_and_a_missing_section) {
         CHECK(!krdbg::kdbg::read_section(renamed, info, error));
         CHECK(error.find("not found") != std::string::npos);
     }
+}
+
+KRDBG_TEST(kdbg_translates_location_records) {
+    krc::debug::KdbgImage image;
+    image.target_id = 5;
+    image.pointer_width = 4;
+    image.functions = {{"main", 0x1000, 0x1040, 0, ""}};
+    image.variables = {
+        {"main", "x", 4, 4, "int"},
+        {"main", "f", 8, 4, "float"},
+    };
+    image.variable_info = {
+        {"main", "x", krc::debug::KdbgVariableKind::Local, 0, "main"},
+        {"main", "f", krc::debug::KdbgVariableKind::Local, 0, "main"},
+    };
+    // Deliberately unsorted: the translator must order by (function, name,
+    // start) so location selection is deterministic.
+    image.locations = {
+        {"main", "x", 10, false, 0x1020, 0x1030},
+        {"main", "f", 2, true, 0x1010, 0x1020},
+        {"main", "x", 9, false, 0x1000, 0x1018},
+    };
+
+    const krdbg::DebugInfo info = translate_image(image);
+    CHECK_EQ(info.locations.size(), 3U);
+    // The fp flag selects the floating-point register file; "f" sorts before
+    // "x".
+    CHECK_EQ(info.locations[0].function, "main");
+    CHECK_EQ(info.locations[0].name, "f");
+    CHECK_EQ(info.locations[0].location.group, "fpr");
+    CHECK_EQ(info.locations[0].location.index, 2);
+    CHECK_EQ(info.locations[0].start, 0x1010U);
+    CHECK_EQ(info.locations[0].end, 0x1020U);
+    CHECK_EQ(info.locations[1].name, "x");
+    CHECK_EQ(info.locations[1].start, 0x1000U);
+    CHECK_EQ(info.locations[1].end, 0x1018U);
+    CHECK_EQ(info.locations[1].location.kind, krdbg::LocationKind::Register);
+    CHECK_EQ(info.locations[1].location.group, "gpr");
+    CHECK_EQ(info.locations[1].location.index, 9);
+    CHECK_EQ(info.locations[2].name, "x");
+    CHECK_EQ(info.locations[2].start, 0x1020U);
+    CHECK_EQ(info.locations[2].location.index, 10);
+
+    // A payload with no Location records leaves the vector empty; the v1
+    // fixtures are covered byte-for-byte by the parity tests above.
+    krc::debug::KdbgImage without_locations = image;
+    without_locations.locations.clear();
+    CHECK(translate_image(without_locations).locations.empty());
+}
+
+KRDBG_TEST(kdbg_derives_the_function_symbol_from_the_scope_record) {
+    krc::debug::KdbgImage image;
+    image.target_id = 5;
+    image.pointer_width = 4;
+    // A KR32/KR16-style producer: F carries the display name, V/W and the
+    // function-scope K record carry the mangled symbol.
+    image.functions = {
+        {"Counter::add", 0x1000, 0x1020, 0, ""},
+        // A kr216-style producer: V/W carry the display name, and the K symbol
+        // differs, so the display name stays the variable identity.
+        {"Widget::draw", 0x2000, 0x2020, 0, ""},
+        // No K record at all: the F name is the identity.
+        {"plain", 0x3000, 0x3020, 0, ""},
+    };
+    image.variables = {
+        {"Counter_add", "by", 4, 4, "int"},
+        {"Widget::draw", "this", 4, 4, "Widget*"},
+        {"plain", "x", 4, 4, "int"},
+    };
+    image.variable_info = {
+        {"Counter_add", "by", krc::debug::KdbgVariableKind::Parameter, 0,
+         "Counter_add"},
+        {"Widget::draw", "this", krc::debug::KdbgVariableKind::Parameter, 0,
+         "Widget::draw"},
+        {"plain", "x", krc::debug::KdbgVariableKind::Local, 0, "plain"},
+    };
+    image.scopes = {
+        {"Counter_add", "Counter_add", "", 0x1000, 0x1020},
+        {"Widget_draw", "Widget_draw", "", 0x2000, 0x2020},
+    };
+
+    const krdbg::DebugInfo info = translate_image(image);
+    const krdbg::FunctionInfo* counter = find_function_at(info, 0x1000);
+    CHECK(counter != nullptr);
+    CHECK(counter != nullptr && counter->name == "Counter::add");
+    CHECK(counter != nullptr && counter->symbol == "Counter_add");
+    CHECK(counter != nullptr && counter->identity() == "Counter_add");
+
+    const krdbg::FunctionInfo* widget = find_function_at(info, 0x2000);
+    CHECK(widget != nullptr);
+    CHECK(widget != nullptr && widget->name == "Widget::draw");
+    CHECK(widget != nullptr && widget->symbol == "Widget::draw");
+    CHECK(widget != nullptr && widget->identity() == "Widget::draw");
+
+    const krdbg::FunctionInfo* plain = find_function_at(info, 0x3000);
+    CHECK(plain != nullptr);
+    CHECK(plain != nullptr && plain->name == "plain");
+    CHECK(plain != nullptr && plain->symbol == "plain");
 }

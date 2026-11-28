@@ -20,7 +20,7 @@ DebugInfo first_payload() {
     info.build_id = 0x111;
     info.compiler = "first";
     info.sources = {SourceFile{1, "a.c", "a.c"}};
-    info.functions = {FunctionInfo{"fa", 0x1000, 0x1010, 1, 1}};
+    info.functions = {FunctionInfo{"fa", "fa", 0x1000, 0x1010, 1, 1}};
     info.lines = {LineInfo{0x1004, 1, 2, 0}};
 
     TypeInfo int_type;
@@ -37,6 +37,11 @@ DebugInfo first_payload() {
     local.size = 4;
     local.location = krdbg::Location{krdbg::LocationKind::FrameOffset, -4, {}, 0, 0};
     info.variables = {local};
+    info.locations = {
+        krdbg::LocationInfo{"fa", "x", krdbg::Location{krdbg::LocationKind::Register,
+                                                     0, "gpr", 9, 0},
+                            0x1000, 0x1008},
+    };
     return info;
 }
 
@@ -47,8 +52,8 @@ DebugInfo second_payload() {
     info.compiler = "second";
     info.sources = {SourceFile{5, "b.c", "b.c"}};
     info.functions = {
-        FunctionInfo{"fb", 0x0800, 0x0810, 5, 1},
-        FunctionInfo{"fc", 0x3000, 0x3010, 5, 2},
+        FunctionInfo{"fb", "fb", 0x0800, 0x0810, 5, 1},
+        FunctionInfo{"fc", "fc", 0x3000, 0x3010, 5, 2},
     };
     info.lines = {
         LineInfo{0x0804, 5, 3, 0},
@@ -74,6 +79,13 @@ DebugInfo second_payload() {
     aggregate.size = 8;
     aggregate.location = krdbg::Location{krdbg::LocationKind::FrameOffset, -8, {}, 0, 0};
     info.variables = {aggregate};
+    // A second payload's ranges must survive a merge even though the functions
+    // they name are renumbered: LocationInfo identifies its function by name.
+    info.locations = {
+        krdbg::LocationInfo{"fb", "p", krdbg::Location{krdbg::LocationKind::Register,
+                                                     0, "fpr", 1, 0},
+                            0x0800, 0x0808},
+    };
     return info;
 }
 
@@ -126,6 +138,31 @@ KRDBG_TEST(merge_debug_info_sorts_functions_and_lines_and_remaps_indexes) {
     CHECK_EQ(into.lines[1].function, 1U);
     CHECK_EQ(into.lines[2].address, 0x3004U);
     CHECK_EQ(into.lines[2].function, 2U);
+}
+
+KRDBG_TEST(merge_debug_info_carries_register_ranges) {
+    DebugInfo into = first_payload();
+    const DebugInfo other = second_payload();
+    krdbg::merge_debug_info(into, other);
+
+    // Ordering is by (function, name, start): "fa" precedes "fb" and each keeps
+    // its register location and half-open range.
+    CHECK_EQ(into.locations.size(), 2U);
+    CHECK_EQ(into.locations[0].function, "fa");
+    CHECK_EQ(into.locations[0].name, "x");
+    CHECK_EQ(into.locations[0].location.group, "gpr");
+    CHECK_EQ(into.locations[0].location.index, 9);
+    CHECK_EQ(into.locations[0].start, 0x1000U);
+    CHECK_EQ(into.locations[0].end, 0x1008U);
+    CHECK_EQ(into.locations[1].function, "fb");
+    CHECK_EQ(into.locations[1].name, "p");
+    CHECK_EQ(into.locations[1].location.group, "fpr");
+    CHECK_EQ(into.locations[1].location.index, 1);
+    CHECK_EQ(into.locations[1].start, 0x0800U);
+
+    // The function the first range names now lives at a different index; a
+    // name-keyed range does not need renumbering.
+    CHECK_EQ(into.functions[1].identity(), "fa");
 }
 
 KRDBG_TEST(merge_debug_info_ignores_a_self_merge) {

@@ -28,7 +28,7 @@ KRDBG_TEST(fake_debug_info_function_and_line_lookups_are_clamped) {
 
     // A line before the function must not be reported for an address inside it.
     DebugInfo custom;
-    custom.functions = {FunctionInfo{"f", 0x2000, 0x2010, 0, 1}};
+    custom.functions = {FunctionInfo{"f", "f", 0x2000, 0x2010, 0, 1}};
     custom.lines = {LineInfo{0x1FF0, 0, 9, 0}, LineInfo{0x2004, 0, 10, 0}};
     CHECK(krdbg::detail::find_line(custom, 0x2000) == nullptr);
     CHECK_EQ(krdbg::detail::find_line(custom, 0x2008)->line, 10U);

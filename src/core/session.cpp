@@ -69,6 +69,23 @@ std::string aggregate_value(const TypeInfo* type) {
                : "{...}";
 }
 
+bool same_location(const Location& left, const Location& right) {
+    if (left.kind != right.kind) {
+        return false;
+    }
+    switch (left.kind) {
+    case LocationKind::None:
+        return true;
+    case LocationKind::FrameOffset:
+        return left.frame_offset == right.frame_offset;
+    case LocationKind::Register:
+        return left.group == right.group && left.index == right.index;
+    case LocationKind::Absolute:
+        return left.address == right.address;
+    }
+    return false;
+}
+
 } // namespace
 
 struct DebugSession::Impl {
@@ -168,13 +185,21 @@ struct DebugSession::Impl {
     BreakpointId add_line(std::string_view file, int line, bool temporary);
     void remove_breakpoint(BreakpointId id);
 
+    // Resolves the variable's location for one frame at one PC. Inside a
+    // LocationInfo range the value is that register; a caller frame has no
+    // register snapshot, so a range-resolved register is unavailable there.
+    // Outside every range the declared home is used, unless the producer marked
+    // the slot unusable.
     [[nodiscard]] VariableView make_view(const VariableInfo& variable,
-                                         std::uint64_t frame_base) const {
+                                         std::uint64_t frame_base,
+                                         std::uint64_t pc,
+                                         int frame_index) const {
         VariableView view;
         view.name = variable.name;
         view.type = variable.type;
         view.size = variable.size;
         view.location = variable.location;
+        view.frame_base = frame_base;
         const DebugInfo& debug = info.has_value() ? *info : empty_info;
         const TypeInfo* type = detail::find_type(debug, variable.type);
         if (type != nullptr) {
@@ -183,10 +208,33 @@ struct DebugSession::Impl {
                 view.size = type->size;
             }
         }
+        const LocationInfo* range =
+            detail::location_at(debug, variable.function, variable.name, pc);
+        if (range != nullptr) {
+            view.location = range->location;
+        }
+        const bool range_register =
+            range != nullptr && range->location.kind == LocationKind::Register;
+        if (range_register && frame_index > 0) {
+            // RawFrame carries only pc and frame_base; the registers hold this
+            // frame's live values, not the caller's at call time.
+            view.value = "?";
+            view.unavailable = true;
+            return view;
+        }
+        if (range == nullptr && (variable.flags & VariableSlotUnusable) != 0U) {
+            view.value = "<optimized out>";
+            view.unavailable = true;
+            return view;
+        }
+        if (range_register) {
+            view.location_text = detail::register_label(view.location);
+        }
         std::vector<std::uint8_t> storage;
         const bool readable =
             target != nullptr &&
-            detail::read_variable_storage(*target, frame_base, variable, storage);
+            detail::read_variable_storage(*target, frame_base, view.location,
+                                          view.size, storage);
         if (type != nullptr && (type->kind == TypeKind::Struct ||
                                 type->kind == TypeKind::Union ||
                                 type->kind == TypeKind::Array)) {
@@ -202,19 +250,6 @@ struct DebugSession::Impl {
             view.value = "?";
         }
         return view;
-    }
-
-    [[nodiscard]] std::uint64_t frame_base_for(const std::string& function) const {
-        if (target == nullptr) {
-            return 0;
-        }
-        const DebugInfo& debug = info.has_value() ? *info : empty_info;
-        for (const RawFrame& frame : target->unwind()) {
-            if (function_name(debug, frame.pc) == function) {
-                return frame.frame_base;
-            }
-        }
-        return 0;
     }
 };
 
@@ -658,12 +693,31 @@ std::vector<VariableView> DebugSession::locals(int frame) const {
     }
     result.reserve(info().variables.size());
     for (const VariableInfo& variable : info().variables) {
-        if (variable.function != function->name ||
+        // Variable records name the function by its identity, which is the
+        // mangled symbol for KR32/KR16 C++ members while FunctionInfo::name is
+        // the display name.
+        if (variable.function != function->identity() ||
             (variable.flags & VariableGlobal) != 0U) {
             continue;
         }
-        result.push_back(impl_->make_view(
-            variable, frames[static_cast<std::size_t>(frame)].frame_base));
+        const RawFrame& raw = frames[static_cast<std::size_t>(frame)];
+        VariableView view =
+            impl_->make_view(variable, raw.frame_base, raw.pc, frame);
+        // A producer can emit the same V/W record from more than one
+        // translation unit (the linker dedupes symbols, not debug records), which
+        // would repeat a row such as `this`. The first identical record wins; a
+        // shadowed variable has a different location and is still listed.
+        const bool duplicate =
+            std::any_of(result.begin(), result.end(),
+                        [&view](const VariableView& existing) {
+                            return existing.name == view.name &&
+                                   existing.type == view.type &&
+                                   existing.size == view.size &&
+                                   same_location(existing.location, view.location);
+                        });
+        if (!duplicate) {
+            result.push_back(std::move(view));
+        }
     }
     return result;
 }
@@ -675,11 +729,12 @@ std::vector<VariableView> DebugSession::globals() const {
         frames = impl_->target->unwind();
     }
     const std::uint64_t base = frames.empty() ? 0 : frames.front().frame_base;
+    const std::uint64_t pc = frames.empty() ? 0 : frames.front().pc;
     for (const VariableInfo& variable : info().variables) {
         if ((variable.flags & VariableGlobal) == 0U && !variable.function.empty()) {
             continue;
         }
-        result.push_back(impl_->make_view(variable, base));
+        result.push_back(impl_->make_view(variable, base, pc, 0));
     }
     return result;
 }
@@ -695,25 +750,20 @@ std::vector<MemberView> DebugSession::members(const MemberView& member) const {
 }
 
 std::vector<MemberView> DebugSession::members(const VariableView& variable) const {
-    const VariableInfo* found = nullptr;
-    for (const VariableInfo& candidate : info().variables) {
-        if (candidate.name == variable.name && candidate.type == variable.type) {
-            found = &candidate;
-            break;
-        }
-    }
-    if (found == nullptr || impl_->target == nullptr) {
+    if (impl_->target == nullptr) {
         return {};
     }
+    // Read through the location make_view resolved for this PC: a live-range
+    // register expands from the register, a declared home from its frame slot.
     std::vector<std::uint8_t> storage;
-    if (!detail::read_variable_storage(*impl_->target,
-                                       impl_->frame_base_for(found->function),
-                                       *found, storage)) {
+    if (!detail::read_variable_storage(*impl_->target, variable.frame_base,
+                                       variable.location, variable.size,
+                                       storage)) {
         return {};
     }
     const bool little_endian =
         impl_->target->layout(impl_->target->current_context()).little_endian;
-    const TypeInfo* type = detail::find_type(info(), found->type);
+    const TypeInfo* type = detail::find_type(info(), variable.type);
     if (type == nullptr) {
         return {};
     }
@@ -773,7 +823,7 @@ std::vector<MemberView> DebugSession::members(const VariableView& variable) cons
         }
         return {std::move(member)};
     }
-    return detail::expand_members(info(), found->type, storage, little_endian);
+    return detail::expand_members(info(), variable.type, storage, little_endian);
 }
 
 bool DebugSession::read_memory(std::uint64_t address,

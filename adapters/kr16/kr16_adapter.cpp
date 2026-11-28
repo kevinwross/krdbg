@@ -244,6 +244,9 @@ void decode_legacy(const kr16::Container& container, DebugInfo& info) {
             }
             FunctionInfo function;
             function.name = name;
+            // This path parses the legacy .debug_* sections, where every record
+            // names the function by its symbol; there is no separate display name.
+            function.symbol = name;
             function.begin = symbol.value;
             function.end = text_end;
             for (const std::uint16_t address : function_addresses) {

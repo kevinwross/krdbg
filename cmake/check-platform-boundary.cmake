@@ -2,7 +2,8 @@
 # UI or public krdbg headers, and when a VM header appears in krdbg_core or
 # krdbg_kdbg. The surface must stay platform- and target-agnostic (PLAN.md §4.1);
 # only src/platform and adapters may include either. krc/debug/kdbg.h is the
-# debug format, not a VM, and is allowed only in krdbg_kdbg.
+# debug format, not a VM, and is allowed only in krdbg_kdbg and the KDBG test
+# source that builds hand-crafted payloads.
 if(NOT DEFINED ROOT)
     message(FATAL_ERROR "ROOT is required")
 endif()

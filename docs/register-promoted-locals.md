@@ -155,22 +155,20 @@ linker already has absolute, half-open start/end addresses in the image's load s
 the same space as function ranges and line records. Nothing else in the linker has to
 change for a producer to land.
 
-### 1.4 How krdbg consumes it (it does not)
+### 1.4 How krdbg consumes it
 
-krdbg's vendored decoder *does* decode the record: `Record::Location` and
+krdbg's vendored decoder decodes the record: `Record::Location` and
 `Record::Location64` populate `KdbgImage.locations`
 (`third_party/krc-debug/src/kdbg.cpp:628-651`), and both dumpers print it (`:797`,
-`:849`, `:906-915`). The translation into the neutral model drops it:
-`translate()` in `src/kdbg/kdbg.cpp:62-218` copies sources, types, functions, lines,
-symbols, variables and `variable_info`, and never looks at `image.locations`. The
-neutral model has no range type; `VariableInfo` carries one `Location`
-(`include/krdbg/debug_info.h:92-101`), and while `VariableView`'s `location` is
-documented as "actually in effect at the current PC" (`debug_info.h:126-127`), nothing
-selects a location by PC.
-
-So the state is: the format can describe a promoted local, the linker can carry it,
-the decoder can parse it, and the Variables window will never see it. This is recorded
-as a known gap in `docs/working-debugger-plan.md:392` and `krdbg-newtarget.md:264-279`.
+`:849`, `:906-915`). Since the Track B consumer landed (2026-11-27),
+`translate()` in `src/kdbg/kdbg.cpp` copies each record into
+`DebugInfo::locations` (fp selects `fpr`, otherwise `gpr`, index is `reg`), sorted
+by `(function, name, start)`. `DebugSession::make_view` resolves the range at the
+frame's PC: inside it frame 0 reads the register and a caller frame reports the
+value unavailable, outside every range the `V` home is read unless
+`VariableSlotUnusable` is set. `VariableView` carries the resolved location and
+`members()` expands through it. A v1 payload has no records, so it behaves as
+before.
 
 ---
 
@@ -254,24 +252,27 @@ slot. The two dead-store passes are the ones that must learn about recorded slot
 
 ### 2.4 Does krdbg apply Location records?
 
-**No.** `src/kdbg/kdbg.cpp` never reads `image.locations`, and `DebugInfo` has no
-location-range collection (`include/krdbg/debug_info.h:105-119`). Everything else the
-reader needs is already there:
+**Yes.** The consumer side described in §3.4 is implemented: `src/kdbg/kdbg.cpp`
+translates `image.locations` into `DebugInfo::locations`,
+`detail::location_at` selects the first half-open range containing the PC, and
+`DebugSession::make_view` reads the register inside it. The pieces that were
+already there stay in place:
 
 - `read_variable_storage` handles `LocationKind::Register` by calling
   `target.read_value(group, index, ...)` and slicing to the variable's size
-  (`src/core/variables.cpp:44-91`, register case `:52-77`).
+  (`src/core/variables.cpp`, register case).
 - The fake target path exercises register values end to end: `argc` in `gpr:0` and an
-  8-byte `held` in `core:5` are declared in `src/core/fake_debug_info.cpp:81-130`, and
-  `tests/test_session.cpp:225-237` reads both values through `locals(0)`;
-  `tests/test_variables.cpp:56-77` pins the storage rules and
-  `tests/test_debug_info.cpp:47-64` asserts a register location exists.
+  8-byte `held` in `core:5` are declared in `src/core/fake_debug_info.cpp`, and
+  `tests/test_session.cpp` reads both values through `locals(0)`;
+  `tests/test_variables.cpp` pins the storage rules and
+  `tests/test_debug_info.cpp` asserts a register location exists.
 - The kr232 adapter exposes register groups `gpr` 0-15 and `fpr` 0-3
   (`adapters/kr232/kr232_adapter.cpp:183-197`, `:408-435`), which map exactly onto
   `KdbgLocation.reg`/`fp`.
 
-So the register read path is built and tested; only the KDBG-to-`DebugInfo` translation
-and the PC-aware selection are missing.
+No backend emits a `Location` record yet, so the path is proven by synthetic
+`DebugInfo` and hand-built KDBG payloads (`tests/test_session.cpp`,
+`tests/test_kdbg.cpp`).
 
 ### 2.5 What a user sees today
 
@@ -281,14 +282,15 @@ and the PC-aware selection are missing.
 | `-O1`, local assigned but never read by the program | Listed, but reads stale/zero: its last store was deleted by `eliminate_dead_frame_stores` (§2.3) |
 | `-O1`, C++ object temporaries | Listed as extra locals: `temporary.record`, `temporary.this` (§2.2) |
 | `-O1`, stop inside a `static` function | **Nothing**: no `F` record, so `DebugSession::locals` finds no function (`src/core/session.cpp:645-669`) |
-| `-O2` | **Nothing**: named locals and parameters are promoted away, no `P` record, no "optimized out" row |
-| Any level, a `Location` record were present | Ignored: krdbg falls back to the frame offset or to no entry |
-| KR32/kr16 C++ member functions | Not listed: krdbg's `locals` matches `variable.function` against the KDBG function name, which is the *display* name (`P::get`) while `V` records use the symbol (`P_get`); see `src/kdbg/kdbg.cpp:111-119`, `session.cpp:661`, and `kr32_backend.cpp:1502`/`:1535` (§6). kr232 is unaffected because its `F` names are symbols too |
+| `-O2` | **Nothing**: named locals and parameters are promoted away and no `P` record exists yet; with a `W` flag bit 2 the row would read `<optimized out>` |
+| Any level, a `Location` record present | Applied inside its range: the row reads the register, shows `register: R9`/`register: F2`, and members expand through it |
+| Any level, outside every range with the slot flagged unusable | `<optimized out>` rather than a stale slot read |
+| KR32/kr16 C++ member functions | Listed: `locals` matches `variable.function` against the function identity recovered from the F/K pair, so `V`'s mangled symbol resolves; the call stack and the rows show the display name |
 
-The Variables panel itself shows only `name = value` from `VariableView`
-(`src/ui/surface.cpp:1016-1056`, `:1030`, `:1049`); it never reads
-`VariableView.location`, so even with a register location in the model there would be
-no `register: R9` label and no distinction from a frame value.
+The Variables panel shows `name = value` from `VariableView`
+(`src/ui/surface.cpp`); a live-range register appends `register: R9`, a caller
+frame's register-resident value shows `?`, and an unusable slot shows
+`<optimized out>`.
 
 ---
 
@@ -415,6 +417,10 @@ C describe (`optimize.md:562-570`); Track B therefore lands once for all targets
 register-resident codegen.
 
 ### 3.4 Track B — krdbg changes
+
+**Status:** implemented (2026-11-27), including the translation, PC-aware selection,
+frame handling, `members()` through the resolved location, the Variables display,
+and the synthetic/hand-built-payload tests. The producer remains the open half.
 
 1. **Model.** Add a live-range record to the neutral model, matching the PLAN's v1.1
    `Location` record shape (`PLAN.md:1185-1194`):
@@ -679,11 +685,12 @@ unchanged by the later commits).
    - kr232: function table has `entry` only; variables include `variable helper.a` and
      `variable helper.doubled`.
    - kr32: both `helper` and `entry` in the function table.
-6. **krdbg does not read locations.** `src/kdbg/kdbg.cpp:62-218` has no
-   `image.locations` reference; `include/krdbg/debug_info.h:105-119` has no range
-   vector. The decoder does produce them: vendored
+6. **krdbg did not read locations** (measured before Track B landed; the consumer
+   now translates and applies them — see §1.4). `src/kdbg/kdbg.cpp` had no
+   `image.locations` reference; `include/krdbg/debug_info.h` had no range
+   vector. The decoder did produce them: vendored
    `third_party/krc-debug/src/kdbg.cpp:628-651`, dumpers at `:797`, `:849`, `:906-915`.
-   The neutral register path works without it — `fake_debug_info`'s `argc`
-   (`gpr:0`) and `held` (`core:5`) are read in `tests/test_session.cpp:225-237`.
+   The neutral register path worked without it — `fake_debug_info`'s `argc`
+   (`gpr:0`) and `held` (`core:5`) were read in `tests/test_session.cpp`.
 7. **The Variables-panel source is `name = value`.** `src/ui/surface.cpp:1030`,
    `:1049`; no `VariableView.location` use anywhere in `src/ui`.

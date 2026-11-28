@@ -58,8 +58,8 @@ DebugInfo make_fake_debug_info() {
     };
 
     info.functions = {
-        FunctionInfo{"main", 0x1000, 0x1010, 1, 4},
-        FunctionInfo{"util_add", 0x1018, 0x1024, 2, 3},
+        FunctionInfo{"main", "main", 0x1000, 0x1010, 1, 4},
+        FunctionInfo{"util_add", "util_add", 0x1018, 0x1024, 2, 3},
     };
 
     info.lines = {

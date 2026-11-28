@@ -585,6 +585,7 @@ struct DebugInfo {
     std::vector<FunctionInfo> functions;  // sorted by range
     std::vector<SymbolInfo> symbols;
     std::vector<VariableInfo> variables;
+    std::vector<LocationInfo> locations;  // sorted by function, name, start
     std::vector<TypeInfo> types;          // indexed by TypeId
     std::map<std::string, TypeId> type_by_name;
 };
@@ -592,6 +593,27 @@ struct DebugInfo {
 // `FunctionInfo` also carries `frame`, the ABI offset from the frame-pointer
 // register to the saved caller frame. KR32 uses R7 + frame for the saved FP and
 // +4 for the return PC; adapters that cannot unwind leave it zero.
+
+// Frozen-interface note (2026-11-27, Track B, docs/register-promoted-locals.md
+// §3.4; additive). A promoted variable keeps its declared home in
+// VariableInfo::location and gains one record per half-open range in which the
+// value lives in a register:
+struct LocationInfo {
+    std::string function;   // function identity, as VariableInfo::function
+    std::string name;       // variable name
+    Location location;      // Register: group and index
+    std::uint64_t start = 0;  // half-open, image address space
+    std::uint64_t end = 0;
+};
+// DebugInfo gains `std::vector<LocationInfo> locations` (sorted by function,
+// name, start). `VariableSlotUnusable` (1U << 4) marks a home slot the producer
+// no longer maintains, so a read outside every range is `<optimized out>`
+// instead of the slot's stale bytes. `FunctionInfo` also carries `symbol`, the
+// identity the payload's variable records name the function by, while `name`
+// stays the display name for the call stack; `identity()` resolves the pair (an
+// empty `symbol` means one name). `VariableView` reports the resolved location
+// (`location`, `location_text` such as `register: R9`), `unavailable`, and the
+// `frame_base` that `members()` reads through.
 
 // Concatenates a second payload, renumbering source ids and merging type
 // tables. KR32's --os mode needs this: the kernel and BIOS images each carry
@@ -1179,8 +1201,9 @@ value today (`docs/symbols.md:70-74`, `KRCompiler` ADR 0052).
 
 **Owner: KRCompiler.** It owns the record definitions, the writer, the
 `krc::debug` decoder changes, and the `krc --dump-symbols` output. krdbg
-consumes the resulting `DebugInfo` and already has the fields below; no surface
-change is expected when the records land.
+consumes the resulting `DebugInfo`; §4.5 records the neutral-model side of
+`Location` and the variable/flag additions. (`Scope` and the other v1.1 records
+are not yet in the neutral model.)
 
 | New record | Fields | Replaces / enables |
 |---|---|---|

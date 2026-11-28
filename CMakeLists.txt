@@ -88,8 +88,9 @@ target_include_directories(krdbg_host
 target_link_libraries(krdbg_host PUBLIC krdbg_core krc::toolchain PRIVATE krdbg_warnings)
 
 # KDBG translation. The decoder is the exact KRCompiler pair vendored under
-# third_party/krc-debug; only src/kdbg includes krc/debug/kdbg.h and only this
-# target sees a KdbgImage.
+# third_party/krc-debug; only src/kdbg and tests/test_kdbg.cpp include
+# krc/debug/kdbg.h, and only they see a KdbgImage (the test builds records no
+# compiler path emits yet).
 option(KRDBG_KDBG_VENDORED
     "Build the vendored krc::debug pair instead of find_package(krc-debug)" ON)
 add_library(krdbg_kdbg STATIC src/kdbg/kdbg.cpp)
@@ -311,6 +312,16 @@ if(KRDBG_BUILD_TESTS)
         krdbg_ui krdbg_kdbg krdbg_host krdbg_platform_null krdbg_warnings)
     target_include_directories(krdbg_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui")
+    # test_kdbg builds KdbgImage payloads to cover records no compiler path emits
+    # yet (Track B Location records, the F display-name/symbol pair). The
+    # decoder's headers stay out of the product targets: krdbg_kdbg is the only
+    # library that carries a KdbgImage.
+    if(KRDBG_KDBG_VENDORED)
+        target_include_directories(krdbg_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/krc-debug/include")
+    else()
+        target_link_libraries(krdbg_tests PRIVATE krc::debug)
+    endif()
     target_compile_definitions(krdbg_tests PRIVATE
         KRDBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/goldens"
         KRDBG_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kdbg"

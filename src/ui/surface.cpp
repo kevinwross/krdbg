@@ -1047,6 +1047,9 @@ DebuggerSurface::Impl::variable_rows() const {
         value.depth = depth;
         value.key = key;
         value.text = variable.name + " = " + variable.value;
+        if (!variable.location_text.empty()) {
+            value.text += "  " + variable.location_text;
+        }
         value.value = variable.value;
         value.expandable = variable.has_children;
         value.expanded = expanded.count(key) != 0;
@@ -2129,8 +2132,11 @@ void DebuggerSurface::Impl::draw_inspector(Canvas& canvas) {
                      FontRole::MonoSmall),
                 ui::theme::kText, FontRole::MonoSmall);
     canvas.text(inspector_rect.x + 10, inspector_rect.y + 52,
-                clip("value = " + value, inspector_rect.width - 20,
-                     FontRole::MonoSmall),
+                clip("value = " + value +
+                         (inspector_member || inspector_variable.location_text.empty()
+                              ? std::string{}
+                              : "  " + inspector_variable.location_text),
+                     inspector_rect.width - 20, FontRole::MonoSmall),
                 ui::theme::kDim, FontRole::MonoSmall);
     const std::vector<MemberView> members =
         inspector_member ? session->members(inspector_member_view)
@@ -2957,6 +2963,9 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
                 row.has_member ? row.member.type_name : row.variable.type_name;
             text = (row.has_member ? row.member.name : row.variable.name) + " : " +
                    type + " = " + row.value;
+            if (!row.has_member && !row.variable.location_text.empty()) {
+                text += "  " + row.variable.location_text;
+            }
             break;
         }
     } else if (panel == SurfacePanel::Breakpoints && program.loaded) {

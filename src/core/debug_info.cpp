@@ -147,6 +147,23 @@ void merge_debug_info(DebugInfo& into, const DebugInfo& other) {
         }
         into.variables.push_back(std::move(variable));
     }
+
+    // Location records name their function by identity string, not by index, so
+    // the function renumbering above does not touch them. Sort once so the
+    // merged list keeps the (function, name, start) order location_at() needs.
+    for (LocationInfo location : other.locations) {
+        into.locations.push_back(std::move(location));
+    }
+    std::stable_sort(into.locations.begin(), into.locations.end(),
+                     [](const LocationInfo& left, const LocationInfo& right) {
+                         if (left.function != right.function) {
+                             return left.function < right.function;
+                         }
+                         if (left.name != right.name) {
+                             return left.name < right.name;
+                         }
+                         return left.start < right.start;
+                     });
 }
 
 namespace detail {
@@ -167,6 +184,17 @@ const FunctionInfo* find_function(const DebugInfo& info, std::uint64_t pc) {
         }
         if (candidate->begin == 0) {
             break;
+        }
+    }
+    return nullptr;
+}
+
+const LocationInfo* location_at(const DebugInfo& info, std::string_view function,
+                                std::string_view name, std::uint64_t pc) {
+    for (const LocationInfo& location : info.locations) {
+        if (location.function == function && location.name == name &&
+            location.start <= pc && pc < location.end) {
+            return &location;
         }
     }
     return nullptr;

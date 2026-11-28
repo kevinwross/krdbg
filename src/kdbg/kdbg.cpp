@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -57,6 +58,38 @@ std::uint32_t function_at(const DebugInfo& info, std::uint64_t address) {
 TypeId type_id(const DebugInfo& info, const std::string& name) {
     const auto found = info.type_by_name.find(name);
     return found == info.type_by_name.end() ? kInvalidType : found->second;
+}
+
+// KDBG keeps one name per function: bridge `F` carries a display name and the
+// linker resolves the mangled symbol (F's start label) to an address, dropping
+// the string. A producer that keeps a distinct symbol also emits the
+// function-scope `K` record, whose `function` is that symbol and whose range
+// starts at the function's start label. Use it as the identity when the
+// payload's variable records name the function by it (KR32/KR16 C++, and a
+// kr232 producer that names V/W by symbol); leave name == symbol when they use
+// the display name (kr216).
+void assign_function_symbols(const krc::debug::KdbgImage& image, DebugInfo& out) {
+    std::set<std::string> variable_functions;
+    for (const krc::debug::KdbgVariable& variable : image.variables) {
+        variable_functions.insert(variable.function);
+    }
+    for (const krc::debug::KdbgVarInfo& info : image.variable_info) {
+        variable_functions.insert(info.function);
+    }
+    for (FunctionInfo& function : out.functions) {
+        function.symbol = function.name;
+        for (const krc::debug::KdbgScope& scope : image.scopes) {
+            if (!scope.parent.empty() || scope.start != function.begin ||
+                scope.function.empty()) {
+                continue;
+            }
+            if (variable_functions.count(scope.function) == 0) {
+                continue;
+            }
+            function.symbol = scope.function;
+            break;
+        }
+    }
 }
 
 void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
@@ -182,6 +215,12 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
                 info.flags = VariableLocal;
                 break;
             }
+            // W flag bit 2 (0x4) marks a home slot the producer no longer
+            // maintains. The other bits (address-taken, read-only) have no
+            // consumer here; an out-of-range read must not use this slot.
+            if ((metadata->second->flags & 0x4U) != 0U) {
+                info.flags |= krdbg::VariableSlotUnusable;
+            }
         }
         out.variables.push_back(std::move(info));
     }
@@ -215,6 +254,39 @@ void translate(const krc::debug::KdbgImage& image, DebugInfo& out) {
         info.flags = VariableGlobal;
         out.variables.push_back(std::move(info));
     }
+
+    // The variable identity is settled before the function symbols derive from
+    // it. A v1 payload has no K records and no distinct symbols, so both names
+    // stay the F name and behaviour is unchanged.
+    assign_function_symbols(image, out);
+
+    // A `P`/Location record becomes a register live range. The fp flag selects
+    // the floating-point register file; the index is the register number. A v1
+    // payload has no Location records, so this leaves the list empty.
+    out.locations.reserve(image.locations.size());
+    for (const krc::debug::KdbgLocation& location : image.locations) {
+        LocationInfo info;
+        info.function = location.function;
+        info.name = location.name;
+        info.location = Location{LocationKind::Register, 0,
+                                 location.fp ? "fpr" : "gpr",
+                                 static_cast<int>(location.reg), 0};
+        info.start = location.start;
+        info.end = location.end;
+        out.locations.push_back(std::move(info));
+    }
+    // Deterministic search order when a producer emits overlapping ranges: the
+    // earliest start wins, then the payload order.
+    std::stable_sort(out.locations.begin(), out.locations.end(),
+                     [](const LocationInfo& left, const LocationInfo& right) {
+                         if (left.function != right.function) {
+                             return left.function < right.function;
+                         }
+                         if (left.name != right.name) {
+                             return left.name < right.name;
+                         }
+                         return left.start < right.start;
+                     });
 }
 
 } // namespace
