@@ -486,10 +486,59 @@ if(KRDBG_BUILD_TESTS)
             PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_VARIABLES_HASH}")
     endif()
     if(KRDBG_KR216_ADAPTER)
-        # The adapter's own tests loaded two committed kr216 images, which were
-        # debugging artefacts rather than anything this tree builds. Linking the
-        # adapter is still checked by the configure and the build itself.
-        target_link_libraries(krdbg_tests PRIVATE krdbg_kr216)
+        # The kr216 adapter's tests are their own binary for the same reason as
+        # kr232's below: linking an adapter into krdbg_tests shifts the surface
+        # render hashes, and the UI goldens must be measured without one linked.
+        add_executable(krdbg_kr216_tests
+            tests/test_main.cpp
+            tests/test_kr216_adapter.cpp
+            tests/test_kr216_scenarios.cpp
+        )
+        target_link_libraries(krdbg_kr216_tests PRIVATE
+            krdbg_core krdbg_kdbg krdbg_kr216 krdbg_warnings)
+        target_compile_definitions(krdbg_kr216_tests PRIVATE
+            KRDBG_HAVE_KR216=1
+            KRDBG_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+            KRDBG_KR216_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216")
+        add_test(NAME krdbg_kr216_unit COMMAND krdbg_kr216_tests)
+        set_tests_properties(krdbg_kr216_unit PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # The M7.10-shaped smoke: an adapter-enabled build loads a committed
+        # image, names its source and steps one instruction.
+        add_test(NAME krdbg_kr216_app_smoke
+            COMMAND krdbg_kr216_tests --filter kr216_app_smoke)
+        set_tests_properties(krdbg_kr216_app_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            # Guards against a misnamed filter passing with no test run.
+            PASS_REGULAR_EXPRESSION "kr216_app_smoke_")
+        # Headless surface rows: a scripted run reaches the halt through the
+        # surface tick path, RESET keeps the image loadable, and a line
+        # breakpoint renders without a window.
+        add_test(NAME krdbg_kr216_running_row
+            COMMAND krdbg_demo --headless
+                --kr216 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216/session.kr216"
+                --state running --ticks 3)
+        add_test(NAME krdbg_kr216_reset_row
+            COMMAND krdbg_demo --headless
+                --kr216 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216/loaded.kr216"
+                --reset)
+        add_test(NAME krdbg_kr216_breakpoint_row
+            COMMAND krdbg_demo --headless
+                --kr216 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216/session.kr216"
+                --break-line 20)
+        set_tests_properties(
+            krdbg_kr216_running_row krdbg_kr216_reset_row
+            krdbg_kr216_breakpoint_row PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # The status bar names the stop reason: the session fixture exits 7, so
+        # the halted text is fixed even though the frame header varies.
+        add_test(NAME krdbg_kr216_status_row
+            COMMAND krdbg_demo --headless
+                --kr216 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216/session.kr216"
+                --state running --ticks 3 --print-status)
+        set_tests_properties(krdbg_kr216_status_row PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            PASS_REGULAR_EXPRESSION "status: halted: target exited with code 7")
     endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately
@@ -520,6 +569,21 @@ if(KRDBG_BUILD_TESTS)
                     -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232
                     -DWORK=${CMAKE_BINARY_DIR}/fixture-drift
                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr232/CheckFixtureDrift.cmake)
+    endif()
+    # The kr216 fixtures follow the same rule: the committed images are the
+    # compiler's output, and the drift check rebuilds them byte for byte when the
+    # caller names its tools.
+    set(KRDBG_KR216_KRC "" CACHE FILEPATH "kr216 compiler for the fixture drift check")
+    set(KRDBG_KR216_KRLD "" CACHE FILEPATH "kr216 linker for the fixture drift check")
+    if(KRDBG_KR216_ADAPTER AND KRDBG_KR216_KRC AND KRDBG_KR216_KRLD)
+        add_test(NAME krdbg_kr216_fixtures_match_source
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=${KRDBG_KR216_KRC}
+                    -DKRLD=${KRDBG_KR216_KRLD}
+                    -DSOURCES=${KRDBG_KRCOMPILER_ROOT}
+                    -DFIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216
+                    -DWORK=${CMAKE_BINARY_DIR}/kr216-fixture-drift
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/kr216/CheckFixtureDrift.cmake)
     endif()
     add_test(NAME krdbg_version COMMAND krdbg_demo --version)
     set_tests_properties(krdbg_version PROPERTIES
