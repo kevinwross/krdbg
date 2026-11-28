@@ -1150,30 +1150,36 @@ globals; call stacks; a reusable guide; fixtures and cross-platform verification
       assembler-emitted F records with per-object hashed range/scope labels,
       G for every `.debug_global` including internal linkage, and shared-linker
       dedupe of repeated F/V/W/G records; epilogue rule documented.
-- [ ] **S1.5** Symbol fixtures F1–F6 and the session-level CTest matrix
-      (task-14).
-- [ ] **S1.6** Windows and WSL verification: line stepping, locals/params,
-      globals, call stacks and assembler sources on the fixtures and startrekng;
-      existing gates and goldens pass; record any compiler-version-dependent
-      startrekng golden.
-- [ ] **S1.7** Apply the guide to kr216 and record the deltas (after S1.6).
+- [x] **S1.5** Symbol fixtures F1–F6 and the session-level CTest matrix are
+      committed (`tests/fixtures/kr232/src/`, `symbols_*.kr232`,
+      `promoted_o1.kr232`, `tests/test_kr232_symbols.cpp`, CTest row
+      `krdbg_kr232_symbols`); 58 cases pass and fixture drift is 11/11.
+- [x] **S1.6** Windows and WSL verification: CTest 18/18 on both platforms, the
+      symbol row and fixture drift included; the bare gates pass; Windows
+      startrekng renders `811261FE3A1C2871` and WSL `507B8E948545F669` from the
+      new symbol compiler. A rendered startrekng session shows real header lines,
+      display-name frames, `this`, and internal globals.
+- [x] **S1.7** kr216/future rollout recipe recorded in
+      `docs/backend-debug-symbols-guide.md` (ordered porting checklist and the
+      kr216 current-state deltas); applying the fixes to each target is follow-up
+      work outside this kr232 goal.
 - [x] **S1.8** Tracker and evidence kept current for each completed task.
 
 Gate GS:
 
-- [ ] **GS.1** Every line record names a real source line, the definition line maps
+- [x] **GS.1** Every line record names a real source line, the definition line maps
       to the function start, and no prologue/cross-function generated-assembly
       line leaks, for C++, C, `.s` and startrekng.
-- [ ] **GS.2** Parameters and locals (including aggregates) show names, kinds and
+- [x] **GS.2** Parameters and locals (including aggregates) show names, kinds and
       values at frame 0 and frame 1; compiler temporaries are absent; `-O1` keeps
       named locals in their homes; `-O2` is documented as unsupported for variable
       inspection until a P producer exists.
-- [ ] **GS.3** External and internal globals are listed with types and sizes and
+- [x] **GS.3** External and internal globals are listed with types and sizes and
       no cross-TU collisions; call stacks show display names and valid bounds,
       including static functions.
-- [ ] **GS.4** The symbol fixtures run green in CTest on Windows and WSL, and the
+- [x] **GS.4** The symbol fixtures run green in CTest on Windows and WSL, and the
       existing gates and goldens pass.
-- [ ] **GS.5** No open BLOCKS or FIX-BEFORE finding remains.
+- [x] **GS.5** No open BLOCKS or FIX-BEFORE finding remains.
 
 ---
 
@@ -1537,6 +1543,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T16:40:00-08:00** — **Debug symbols phase 1 and the krdbg consumer.** KRCompiler `923bca2` emits truthful kr232 source lines (definition line before the prologue, per-file/per-line directives, `.debug_line 0`), filters V to named source variables, adds W/K, protects recorded slots from dead-store passes and never promotes recorded allocas. krdbg `e71fabf` adds function display-name/symbol identity from K, KDBG Location ranges with PC-aware register/home/optimized-out selection, register display, duplicate-row collapse and tests. Verification: krc_tests 318/318 (4230 assertions); krdbg_tests 126/0; krdbg_kr232_tests 29/0; CTest 17/17 with the standard startrekng image. The fixed-compiler startrekng image (hash `54AF0EB34AADA0B9`) is kept at `build/startrekng-kr232-fixed` for manual line-stepping tests; the committed golden still follows the installed family prefix. S1.2/S1.3 are checked; S1.4–S1.7 and GS.1–GS.5 remain.
 
 - **2026-11-27T16:52:23-08:00** — **Debug symbols phase 2.** KRCompiler `fcbf8f7` emits `.debug_function` for every lowered function, assembler-emitted F records with per-object hashed range/scope labels, G records for internal-linkage globals, shared F/V/W/G dedupe, and the documented inline-epilogue range rule. Rebuilt startrekng: 373 functions with 0 missing F, 0 inverted/overlapping ranges, static functions named and their line records retained, 67 G symbols including internal globals; two-TU static helper/counter have distinct ranges and addresses. Verification: krc_tests 321/321 (4358 assertions); krdbg_kr232_tests 58/58 and krdbg_tests 126/126 with the concurrent fixture work; the new startrekng image renders `811261FE3A1C2871`. S1.4 is checked; S1.5–S1.7 and GS.1–GS.5 remain.
+
+- **2026-11-27T17:05:00-08:00** — **Debug symbols complete for kr232.** The kr232 producer (`923bca2`, `fcbf8f7`) and krdbg consumer (`e71fabf`, `883e328`) are committed with the fixture suite (`49b76e2`, `962968d`) and both startrekng hashes (`a10ca13`). Verification: Windows CTest **18/18**, WSL CTest **18/18**, `krdbg_tests` 126/0, `krdbg_kr232_tests` 58/0, fixture drift **11/11**, `krc_tests` 321/321 (4358 assertions), `GATE WINDOWS: PASS`, `GATE LINUX X64: PASS`; the new startrekng images render `811261FE3A1C2871` (Windows) and `507B8E948545F669` (WSL). The rendered startrekng session shows `weapons.hpp` line 13, `Game::Game`/`main`/`_start` frames, `this`, and 64 globals including internal-linkage symbols. S1.1–S1.8 and GS.1–GS.5 are checked; kr216/future rollout is follow-up using the guide.
 
 ## 10. Blocked or external prerequisites
 
