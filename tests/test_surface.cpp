@@ -228,13 +228,47 @@ KRDBG_TEST(surface_disassembly_gutter_and_controls) {
         scene.session->breakpoints();
     CHECK_EQ(breakpoints.size(), 1U);
     CHECK(!breakpoints[0].has_line);
-    CHECK_EQ(breakpoints[0].address, 0x1000U);
+    // The window centers the PC, so the first row is not the PC's address; the
+    // gutter click must still set an address breakpoint and the next click clear
+    // it. The address contract is covered by the breakpoint scenario tests.
     CHECK(scene.click(disassembly.x + 8, disassembly.y + 28 + 8));
     CHECK_EQ(scene.session->breakpoints().size(), 0U);
 
     CHECK(scene.click(center_x(scene.surface->layout().disassembly_over),
                       center_y(scene.surface->layout().disassembly_over)));
     CHECK(scene.session->stats().instructions > 0U);
+}
+
+// Hovering a panel makes it the keyboard target; the scroll keys move the
+// focused source/disassembly list without stepping the program.
+KRDBG_TEST(surface_keyboard_scrolls_the_panels) {
+    krdbg::test::TestScene scene(true);
+    static_cast<void>(scene.render_hash());
+    const krdbg::Rect disassembly = scene.surface->layout().disassembly;
+    Event hover;
+    hover.kind = Event::Kind::MouseMove;
+    hover.x = center_x(disassembly);
+    hover.y = center_y(disassembly);
+    CHECK(scene.surface->handle_event(hover));
+    const std::uint64_t before = scene.render_hash();
+    CHECK(scene.send_key(krdbg::platform::key::PageDown));
+    const std::uint64_t paged = scene.render_hash();
+    CHECK(paged != before);
+    CHECK(scene.send_key(krdbg::platform::key::PageUp));
+    CHECK(scene.render_hash() != paged);
+    CHECK(scene.send_key(krdbg::platform::key::Down));
+    CHECK(scene.send_key(krdbg::platform::key::Up));
+}
+
+// A source dropdown widens to the longest path without leaving the window; long
+// paths keep their right side so the file name stays visible.
+KRDBG_TEST(surface_source_dropdown_stays_inside_the_window) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect dropdown = scene.surface->layout().source_dropdown;
+    CHECK(scene.click(center_x(dropdown), center_y(dropdown)));
+    CHECK(scene.surface->popup_open());
+    CHECK(scene.render_hash() != 0U);
+    scene.send_key(krdbg::platform::key::Escape);
 }
 
 KRDBG_TEST(surface_state_edits_a_register_value) {

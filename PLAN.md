@@ -1349,6 +1349,13 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   one source line (both are instruction steps while the disassembly pane is
   focused), `Esc` quit (or close a menu/focus first). Restart is the `RESET`
   toolbar button. `F9` (toggle breakpoint) and `R` (restart) are not implemented.
+- Hovering a panel makes it the keyboard target. In the source and disassembly
+  panes, `Up`/`Down` scroll one row and `Page Up`/`Page Down` scroll 80% of the
+  visible rows; a manual scroll stops following until the next step. The source
+  file dropdown widens to the longest path within the window and keeps the right
+  side of an overlong path (the file name). The disassembly pane shows at least
+  512 bytes, has a scrollbar, and while following keeps the current instruction
+  between 20% and 80% of the viewport height.
 - Toolbar actions:
   - `RUN` toggles the VM running state (F5). It is green while running and
     normal while stopped; the status bar shows `F5 PAUSE` while running.

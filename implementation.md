@@ -1548,6 +1548,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-27T17:45:00-08:00** — **Function-entry debug-location fix.** Manual stepping showed a constructor's member initializers attributed to a previous inline destructor's header line (`Game::Game` prologue mapped to `weapons.hpp:13`), so source stepping jumped to unrelated files. KRCompiler `c02c123` resets the IR builder's debug location to the function definition before entry code; regenerated fixture images `a39a232`. `krc_tests` 321/321 (4370 assertions), `krdbg_kr232_tests` 58/0 and CTest 18/18 still pass; the startrekng image now maps the whole `Game::Game` entry to `game.cpp:10` before advancing to 11/12/13. The guide's failure section records the pitfall (6.4).
 
+- **2026-11-27T18:20:00-08:00** — **Source/disassembly usability.** The source file dropdown widens to the longest path inside the window and keeps the right side of an overlong path; the disassembly pane decodes a 512-byte window (centered for fixed-width targets, from the function start for variable-width targets), has a scrollbar with wheel/drag, and while following keeps the PC between 20% and 80% of the viewport; hover sets the keyboard target, and Up/Down/Page Up/Page Down scroll the source and disassembly panes (one row / 80% of the viewport). Manual scroll stops following until the next step. Tests: 129/0 unit, CTest 18/18, goldens re-recorded for the changed disassembly layout.
+
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.

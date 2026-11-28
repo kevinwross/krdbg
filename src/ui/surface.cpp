@@ -90,6 +90,29 @@ std::string clip(std::string_view text, int pixel_width, FontRole role) {
     return result;
 }
 
+// Keeps the right side of a path: the file name is the distinctive part when
+// a long absolute source path does not fit. The prefix marks the elision.
+std::string clip_left(std::string_view text, int pixel_width, FontRole role) {
+    if (pixel_width <= 0) {
+        return {};
+    }
+    if (Canvas::text_width(text, role) <= pixel_width) {
+        return std::string(text);
+    }
+    constexpr std::string_view kPrefix = "...";
+    const int prefix_width = Canvas::text_width(kPrefix, role);
+    if (prefix_width >= pixel_width) {
+        return std::string(kPrefix);
+    }
+    std::size_t keep = text.size();
+    std::string result = std::string(kPrefix) + std::string(text.substr(keep));
+    while (keep > 0 && Canvas::text_width(result, role) > pixel_width) {
+        --keep;
+        result = std::string(kPrefix) + std::string(text.substr(keep));
+    }
+    return result;
+}
+
 // The presenters deliver a letter as Event{key = 0, character = code point}
 // (WM_CHAR and SDL_TEXTINPUT); function keys keep a namespace key value. A
 // shortcut reads the character first and falls back to the key so both shapes
@@ -352,6 +375,14 @@ struct DebuggerSurface::Impl {
     SourceState source_state;
     std::uint64_t disasm_base = 0x1000;
     std::vector<std::uint64_t> disasm_rows;
+    struct DisasmEntry {
+        std::uint64_t address = 0;
+        InstructionView instruction;
+        bool valid = false;
+    };
+    std::vector<DisasmEntry> disasm_entries;
+    void refresh_disassembly();
+    [[nodiscard]] std::uint64_t disasm_address_at(int viewport_row) const;
     int selected_frame = 0;
     struct StateEdit {
         bool active = false;
@@ -656,9 +687,73 @@ int DebuggerSurface::Impl::panel_rows(SurfacePanel panel) const {
         return std::max(1, static_cast<int>(session->call_stack().size()));
     }
     if (panel == SurfacePanel::Disassembly) {
-        return 32;
+        return disasm_entries.empty() ? 32
+                                      : static_cast<int>(disasm_entries.size());
     }
     return static_cast<int>(lines_for(panel).size());
+}
+
+void DebuggerSurface::Impl::refresh_disassembly() {
+    disasm_entries.clear();
+    disasm_rows.clear();
+    if (!program.loaded) {
+        disasm_base = 0;
+        return;
+    }
+    const TargetLayout& target = session->layout();
+    const std::uint64_t alignment =
+        std::max(1U, target.instruction_alignment);
+    const bool variable = target.variable_instruction_length;
+    const std::uint64_t pc = session->pc();
+    constexpr std::uint64_t kDisasmWindowBytes = 512;
+
+    // Fixed-width instructions need no boundary search: place the current
+    // instruction in the middle of a 512-byte window. Variable-width
+    // instructions are decoded from the function start so every row is a real
+    // instruction boundary, and the window extends 512 bytes past the PC.
+    std::uint64_t anchor = pc;
+    if (!variable) {
+        const std::uint64_t half = kDisasmWindowBytes / 2;
+        anchor = pc > half ? pc - half : 0;
+        anchor -= anchor % alignment;
+    } else if (const FunctionInfo* function = session->function_at(pc)) {
+        anchor = function->begin;
+    }
+    disasm_base = anchor;
+    std::uint64_t target_end = variable ? pc + kDisasmWindowBytes
+                                       : anchor + kDisasmWindowBytes;
+    std::uint64_t address = anchor;
+    std::uint64_t bytes = 0;
+    int safety = 0;
+    while (address < target_end && safety < 8192) {
+        ++safety;
+        DisasmEntry entry;
+        entry.address = address;
+        entry.valid = session->disassemble(address, entry.instruction);
+        std::uint64_t advance =
+            variable && entry.valid && entry.instruction.length != 0
+                ? entry.instruction.length
+                : alignment;
+        if (advance == 0) {
+            advance = 1;
+        }
+        disasm_rows.push_back(address);
+        disasm_entries.push_back(std::move(entry));
+        bytes += advance;
+        address += advance;
+        if (!variable && bytes >= kDisasmWindowBytes) {
+            break;
+        }
+    }
+}
+
+std::uint64_t DebuggerSurface::Impl::disasm_address_at(int viewport_row) const {
+    update_scroll(SurfacePanel::Disassembly);
+    const int index = scroll_state(SurfacePanel::Disassembly).offset + viewport_row;
+    if (index < 0 || static_cast<std::size_t>(index) >= disasm_entries.size()) {
+        return 0;
+    }
+    return disasm_entries[static_cast<std::size_t>(index)].address;
 }
 
 void DebuggerSurface::Impl::update_scroll(SurfacePanel panel) const {
@@ -935,8 +1030,10 @@ void DebuggerSurface::Impl::note_stop(const StopResult& result) {
     last_stop_kind = result.kind;
     last_stop_message = result.message;
     last_stop_known = true;
-    // A step or run resumes source following after a manual scroll.
+    // A step or run resumes following after a manual scroll, and keeps the
+    // current instruction inside the disassembly window's 20%-80% band.
     scroll_state(SurfacePanel::Source).autoscroll = true;
+    scroll_state(SurfacePanel::Disassembly).autoscroll = true;
 }
 
 void DebuggerSurface::Impl::step_and_note(StepMode mode) {
@@ -1790,31 +1887,57 @@ void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
                       ui::theme::kBorder);
 
     if (!program.loaded) {
+        disasm_entries.clear();
+        disasm_rows.clear();
         canvas.text(rect.x + 8, rect.y + 32, "(no disassembly)", ui::theme::kDim,
                     FontRole::MonoSmall);
         return;
     }
+    refresh_disassembly();
+    update_scroll(SurfacePanel::Disassembly);
+    ScrollState& scroll = scroll_state(SurfacePanel::Disassembly);
     const TargetLayout& target = session->layout();
-    const unsigned alignment = std::max(1U, target.instruction_alignment);
-    const bool variable = target.variable_instruction_length;
     const std::uint64_t pc = session->pc();
-    if (variable) {
-        if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
-            disasm_base = pc;
+    // Follow the PC, but never let it enter the top or bottom fifth of the
+    // viewport while following: a step scrolls the smallest amount that puts
+    // the current instruction back inside [20%, 80%].
+    if (scroll.autoscroll && !disasm_entries.empty()) {
+        int pc_row = -1;
+        for (std::size_t index = 0; index < disasm_entries.size(); ++index) {
+            if (disasm_entries[index].address == pc) {
+                pc_row = static_cast<int>(index);
+                break;
+            }
         }
-    } else if (disasm_base > pc || pc >= disasm_base + 32ULL * alignment) {
-        disasm_base = pc > 8ULL * alignment ? pc - 8ULL * alignment : 0;
+        if (pc_row >= 0) {
+            const int margin = std::max(1, scroll.visible / 5);
+            const int low = margin;
+            const int high = std::max(low + 1, scroll.visible - margin);
+            int offset = scroll.offset;
+            if (pc_row < offset + low) {
+                offset = pc_row - low;
+            } else if (pc_row >= offset + high) {
+                offset = pc_row - high + 1;
+            }
+            if (offset != scroll.offset) {
+                scroll.offset = ui::clamp_scroll(offset, scroll.content,
+                                                 scroll.visible);
+                update_scroll(SurfacePanel::Disassembly);
+            }
+        }
     }
 
     int y = rect.y + ui::theme::kPanelHeaderHeight + 4;
-    const int rows = 32;
-    std::uint64_t address = disasm_base;
-    disasm_rows.clear();
-    for (int row = 0; row < rows && y + kRowHeight <= rect.y + rect.height;
-         ++row) {
-        disasm_rows.push_back(address);
-        InstructionView instruction;
-        const bool valid = session->disassemble(address, instruction);
+    for (int viewport_row = 0; viewport_row < scroll.visible; ++viewport_row) {
+        const std::size_t index = static_cast<std::size_t>(scroll.offset) +
+                                  static_cast<std::size_t>(viewport_row);
+        if (index >= disasm_entries.size()) {
+            break;
+        }
+        const DisasmEntry& entry = disasm_entries[index];
+        const std::uint64_t address = entry.address;
+        const InstructionView& instruction = entry.instruction;
+        const bool valid = entry.valid;
         const bool current = address == pc;
         if (current) {
             canvas.fill(Rect{rect.x + 1, y, rect.width - 2, kRowHeight},
@@ -1835,13 +1958,16 @@ void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
             canvas.frame(square, ui::theme::kBorder);
         }
         canvas.text(rect.x + 20, y, hex_value(address, target.address_bits),
-                    current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
+                    current ? ui::theme::kText : ui::theme::kDim,
+                    FontRole::MonoSmall);
         std::string bytes;
         if (valid) {
-            for (unsigned index = 0; index < instruction.length; ++index) {
+            for (unsigned byte_index = 0; byte_index < instruction.length;
+                 ++byte_index) {
                 char buffer[4] = {};
                 std::snprintf(buffer, sizeof(buffer), "%02X ",
-                              static_cast<unsigned>(instruction.bytes[index]));
+                              static_cast<unsigned>(
+                                  instruction.bytes[byte_index]));
                 bytes += buffer;
             }
         } else {
@@ -1850,17 +1976,17 @@ void DebuggerSurface::Impl::draw_disassembly_panel(Canvas& canvas) {
         canvas.text(rect.x + 104, y,
                     clip(bytes, 82, FontRole::MonoSmall), ui::theme::kDim,
                     FontRole::MonoSmall);
-        const std::string text = valid
-                                     ? instruction.mnemonic + " " + instruction.operands
-                                     : "(no code)";
+        const std::string text =
+            valid ? instruction.mnemonic + " " + instruction.operands
+                  : "(no code)";
         canvas.text(rect.x + 190, y,
-                    clip(text, rect.width - 196, FontRole::MonoSmall),
-                    current ? ui::theme::kText : ui::theme::kDim, FontRole::MonoSmall);
-        const std::uint64_t advance =
-            variable && valid && instruction.length != 0 ? instruction.length
-                                                         : alignment;
-        address += advance;
+                    clip(text, rect.width - 198, FontRole::MonoSmall),
+                    current ? ui::theme::kText : ui::theme::kDim,
+                    FontRole::MonoSmall);
         y += kRowHeight;
+    }
+    if (scroll.content > scroll.visible) {
+        draw_scrollbar(canvas, SurfacePanel::Disassembly);
     }
 }
 
@@ -1878,8 +2004,9 @@ void DebuggerSurface::Impl::draw_source_menu(Canvas& canvas) {
         }
         const bool current = static_cast<int>(index) == source_state.index;
         canvas.text(source_state.menu_rect.x + 8, y,
-                    clip(sources[index].path, source_state.menu_rect.width - 16,
-                         FontRole::MonoSmall),
+                    clip_left(sources[index].path,
+                              source_state.menu_rect.width - 16,
+                              FontRole::MonoSmall),
                     current ? ui::theme::kAccent : ui::theme::kText,
                     FontRole::MonoSmall);
         y += 16;
@@ -2491,15 +2618,33 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
 
     if (panel == SurfacePanel::Source) {
         if (layout.source_dropdown.contains(event.x, event.y)) {
-            const int count = static_cast<int>(session->info().sources.size());
-            const int menu_height = std::clamp(count * 16 + 8, 20, 200);
-            int y = layout.source_dropdown.y + layout.source_dropdown.height;
-            if (y + menu_height > layout.status.y) {
-                y = layout.source_dropdown.y - menu_height;
+            const std::vector<SourceFile>& sources = session->info().sources;
+            const int count = static_cast<int>(sources.size());
+            // Widen the list to the longest path (MAX_PATH-sized paths are
+            // common) but never past the window; the renderer keeps the right
+            // side, which is the distinctive file name.
+            int longest = static_cast<int>(layout.source_dropdown.width);
+            for (const SourceFile& source : sources) {
+                longest = std::max(longest, Canvas::text_width(
+                                                source.path, FontRole::MonoSmall) +
+                                                24);
             }
-            source_state.menu_rect = Rect{
-                layout.source_dropdown.x, y,
-                std::max(240, layout.source_dropdown.width), menu_height};
+            const int menu_x = layout.source_dropdown.x;
+            const int max_width = std::max(160, width - menu_x - 12);
+            const int menu_width = std::min(std::max(240, longest), max_width);
+            int y = layout.source_dropdown.y + layout.source_dropdown.height;
+            int menu_height = count * 16 + 8;
+            const int below = layout.status.y - y - 4;
+            const int above = layout.source_dropdown.y - 4;
+            if (below >= 20) {
+                menu_height = std::min(menu_height, below);
+            } else if (above >= 20) {
+                menu_height = std::min(menu_height, above);
+                y = layout.source_dropdown.y - menu_height;
+            } else {
+                menu_height = std::max(20, below);
+            }
+            source_state.menu_rect = Rect{menu_x, y, menu_width, menu_height};
             source_state.menu = true;
             return;
         }
@@ -2570,14 +2715,17 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             selected_frame = 0;
             return;
         }
-        const unsigned alignment =
-            std::max(1U, session->layout().instruction_alignment);
-        const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
-        if (row >= 0 && row < 32) {
-            const std::uint64_t address =
-                static_cast<std::size_t>(row) < disasm_rows.size()
-                    ? disasm_rows[static_cast<std::size_t>(row)]
-                    : disasm_base + static_cast<std::uint64_t>(row) * alignment;
+        update_scroll(SurfacePanel::Disassembly);
+        if (event.button == 0 &&
+            scroll_state(SurfacePanel::Disassembly).track.contains(event.x,
+                                                                   event.y)) {
+            scroll_click(SurfacePanel::Disassembly, event.x, event.y);
+            return;
+        }
+        const int row =
+            (event.y - (layout.disassembly.y + 28)) / kRowHeight;
+        if (row >= 0 && row < scroll_state(SurfacePanel::Disassembly).visible) {
+            const std::uint64_t address = disasm_address_at(row);
             if (event.x < layout.disassembly.x + 18) {
                 toggle_address_breakpoint(address);
                 return;
@@ -2869,6 +3017,13 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
     }
 
     const SurfacePanel panel = panel_at(event.x, event.y);
+    // Hovering a panel makes it the keyboard target (step granularity and the
+    // scroll keys); overlays and the toolbar keep whatever focus they had.
+    if (panel != SurfacePanel::None && !popup && !menu_open &&
+        !source_state.menu && !settings_open &&
+        !layout.toolbar.contains(event.x, event.y)) {
+        focus = panel;
+    }
     std::string text;
     if (layout.toolbar.contains(event.x, event.y)) {
         const auto over = [&event](const Rect& rect) {
@@ -2942,16 +3097,12 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
             break;
         }
     } else if (panel == SurfacePanel::Disassembly && program.loaded) {
-        const unsigned alignment =
-            std::max(1U, session->layout().instruction_alignment);
-        const int row = (event.y - (layout.disassembly.y + 28)) / kRowHeight;
-        if (row >= 0 && row < 32) {
-            const std::uint64_t address =
-                static_cast<std::size_t>(row) < disasm_rows.size()
-                    ? disasm_rows[static_cast<std::size_t>(row)]
-                    : disasm_base + static_cast<std::uint64_t>(row) * alignment;
+        const int row =
+            (event.y - (layout.disassembly.y + 28)) / kRowHeight;
+        if (row >= 0 && row < scroll_state(SurfacePanel::Disassembly).visible) {
+            const std::uint64_t address = disasm_address_at(row);
             InstructionView instruction;
-            if (session->disassemble(address, instruction)) {
+            if (address != 0 && session->disassemble(address, instruction)) {
                 text = instruction.help.empty()
                            ? instruction.mnemonic + " " + instruction.operands
                            : instruction.help;
@@ -3045,6 +3196,10 @@ void DebuggerSurface::Impl::wheel(const platform::Event& event) {
     const int max_offset = std::max(0, state.content - state.visible);
     state.autoscroll = panel == SurfacePanel::Com && state.offset == max_offset;
     if (event.wheel > 0) {
+        state.autoscroll = false;
+    }
+    if (panel == SurfacePanel::Disassembly && event.wheel != 0) {
+        // A manual scroll stops following the PC; the next step re-enables it.
         state.autoscroll = false;
     }
 }
@@ -3834,18 +3989,45 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
             enqueue_com_input(0x7F);
         }
         return true;
+    case platform::key::Up:
+    case platform::key::Down:
+        if (focus == SurfacePanel::Source ||
+            focus == SurfacePanel::Disassembly) {
+            update_scroll(focus);
+            ScrollState& state = scroll_state(focus);
+            const int delta = event.key == platform::key::Up ? -1 : 1;
+            state.offset = ui::clamp_scroll(state.offset + delta, state.content,
+                                            state.visible);
+            state.autoscroll = false;
+            return true;
+        }
+        return false;
     case platform::key::PageUp:
+    case platform::key::PageDown: {
         if (focus == SurfacePanel::Memory) {
-            memory_base = memory_base >= 32 ? memory_base - 32 : 0;
+            if (event.key == platform::key::PageUp) {
+                memory_base = memory_base >= 32 ? memory_base - 32 : 0;
+            } else {
+                memory_base += 32;
+            }
             scroll_state(SurfacePanel::Memory).offset = 0;
+            return true;
         }
-        return true;
-    case platform::key::PageDown:
-        if (focus == SurfacePanel::Memory) {
-            memory_base += 32;
-            scroll_state(SurfacePanel::Memory).offset = 0;
+        if (focus == SurfacePanel::Source ||
+            focus == SurfacePanel::Disassembly) {
+            update_scroll(focus);
+            ScrollState& state = scroll_state(focus);
+            // One page is 80% of the visible rows, at least one row.
+            const int page = std::max(1, state.visible * 4 / 5);
+            const int delta =
+                event.key == platform::key::PageUp ? -page : page;
+            state.offset = ui::clamp_scroll(state.offset + delta, state.content,
+                                            state.visible);
+            state.autoscroll = false;
+            return true;
         }
-        return true;
+        return false;
+    }
     case platform::key::F5:
         running = !running;
         if (running) {

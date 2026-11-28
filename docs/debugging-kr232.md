@@ -66,6 +66,14 @@ line, and the source pane's `OVER`/`IN`/`OUT` buttons do the same. With the
 disassembly pane focused, `F10`/`F11` and that pane's buttons step one
 instruction instead. `Shift+F11` steps out of the current frame.
 
+Hovering a panel makes it the keyboard target. `Up`/`Down` scroll the source and
+disassembly lists by one row; `Page Up`/`Page Down` scroll by 80% of the visible
+rows. The source file dropdown widens to the longest path that fits the window
+and elides the left of an overlong path, keeping the file name visible. The
+disassembly pane covers at least 512 bytes around the current function and has a
+scrollbar; while following, the current instruction stays between 20% and 80% of
+the pane's height.
+
 ## Kernel and user program
 
 ```powershell
