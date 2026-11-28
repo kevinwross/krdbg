@@ -316,6 +316,13 @@ KRDBG_TEST(kr232_scenario_startrekng) {
         for (const krdbg::SourceFile& source : loaded.info->sources) {
             CHECK(paths.insert(source.path).second);
         }
+        std::set<std::uint32_t> source_ids;
+        for (const krdbg::SourceFile& source : loaded.info->sources) {
+            source_ids.insert(source.id);
+        }
+        for (const krdbg::LineInfo& line : loaded.info->lines) {
+            CHECK(source_ids.count(line.source) == 1U);
+        }
     }
 
     krdbg::DebugSession session(std::move(loaded.target), loaded.info,
@@ -326,6 +333,7 @@ KRDBG_TEST(kr232_scenario_startrekng) {
     std::string file;
     int line = 0;
     CHECK(first_line(session, "main", address, file, line));
+    CHECK(file.find("main_script.cpp") != std::string::npos);
     const krdbg::BreakpointId breakpoint =
         session.add_line_breakpoint(file, line);
     CHECK(breakpoint != krdbg::kInvalidBreakpoint);

@@ -351,6 +351,11 @@ struct DebuggerSurface::Impl {
     struct SourceState {
         int index = 0;
         bool pinned = false;
+        // Picking a file from the source list pins it just long enough to read
+        // it; the first execution movement releases that preview pin. The PIN
+        // button makes the pin explicit, and an explicit pin survives stepping.
+        bool pinned_by_menu = false;
+        std::uint64_t pinned_pc = 0;
         bool menu = false;
         Rect menu_rect;
         std::vector<std::string> text;
@@ -953,8 +958,17 @@ void DebuggerSurface::Impl::load_source(int index) {
 }
 
 void DebuggerSurface::Impl::sync_source() {
-    if (!program.loaded || source_state.pinned) {
+    if (!program.loaded) {
         return;
+    }
+    if (source_state.pinned) {
+        if (!source_state.pinned_by_menu || session->pc() == source_state.pinned_pc) {
+            return;
+        }
+        // The source-list selection was a preview: execution moved, so follow
+        // the PC again unless the user pressed PIN to hold the file.
+        source_state.pinned = false;
+        source_state.pinned_by_menu = false;
     }
     const LineInfo* line = session->line_at(session->pc());
     if (line == nullptr) {
@@ -2673,6 +2687,8 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
                 index < static_cast<int>(session->info().sources.size())) {
                 load_source(index);
                 source_state.pinned = true;
+                source_state.pinned_by_menu = true;
+                source_state.pinned_pc = session->pc();
             }
         }
         source_state.menu = false;
@@ -2770,7 +2786,12 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             return;
         }
         if (layout.source_pin.contains(event.x, event.y)) {
-            source_state.pinned = !source_state.pinned;
+            if (source_state.pinned_by_menu) {
+                // A second, explicit decision: keep this file pinned.
+                source_state.pinned_by_menu = false;
+            } else {
+                source_state.pinned = !source_state.pinned;
+            }
             return;
         }
         if (layout.source_over.contains(event.x, event.y)) {
@@ -4710,6 +4731,7 @@ void DebuggerSurface::set_program_info(ProgramInfo program) {
         }
         impl_->disasm_base = impl_->program.entry;
         impl_->source_state.pinned = false;
+        impl_->source_state.pinned_by_menu = false;
         impl_->source_state.index = 0;
         impl_->load_source(0);
     } else {

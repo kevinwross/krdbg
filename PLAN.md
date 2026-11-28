@@ -1537,8 +1537,9 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   long lists. `RESET` reloads the image and preserves breakpoint addresses and
   enabled state.
 - Source `OVER/IN/OUT` steps by line; disassembly `OVER/IN/OUT` by instruction.
-- Source panel follows PC across files; clicking the filename opens the source
-  list and pins a file.
+- Source panel follows PC across files. Selecting a file from the filename menu
+  previews it until execution moves; `PIN` holds that file across steps and is
+  required to keep browsing a file while the PC changes.
 - Variables: `Locals`/`Globals` sections collapse. A register-held value shows
   `register: R9` or `register: F2` instead of an address, and its members are
   read from the register. Aggregates and arrays start collapsed; a row that can
