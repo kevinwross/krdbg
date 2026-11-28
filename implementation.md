@@ -1181,6 +1181,48 @@ Gate GS:
       existing gates and goldens pass.
 - [x] **GS.5** No open BLOCKS or FIX-BEFORE finding remains.
 
+### 8.5 S2 — kr216 capability parity (gate GS216, post-S1)
+
+Tracks applying the kr232 debugger and symbol work to kr216. The adapter and
+producer slices have landed; the follow-ups are tracked as task-20.
+
+- [x] **S2.1** kr216 adapter parity (`099e56f`): console IComPort, frame-zero
+      unwind independent of debug records, reset that rebuilds the machine,
+      R0/R1/R11 and fault-window semantics, hex disassembly, committed fixtures,
+      14 adapter/scenario tests, seven conditional CTest rows, fixture drift and
+      `docs/debugging-kr216.md`.
+- [x] **S2.2** kr216 producer symbols (KRCompiler `e2dd57c`): per-object labels
+      for internal functions and globals, shadowed `.addr.<n>` locals, no
+      recorded-local promotion at `-O2`; 328/328 compiler tests; two-TU static
+      ranges and G addresses distinct; 0 out-of-range L records on a real image.
+- [ ] **S2.3** kr216 assembler debug bridge for hand-written `.s` (task-20):
+      F/G/L records from labels and explicit `.debug_*` directives instead of an
+      entirely absent `.kdbg`; crt0 frame named.
+- [ ] **S2.4** kr216 same-named static variable identity and the wrapper `main`
+      display name (task-20).
+- [ ] **S2.5** Per-target defaults for kr216 after the defaults audit and
+      settings architecture land; keep kr216 debug builds at `-O0`/`-O1` until
+      its location policy is confirmed and never import kr232's `-O2` by default.
+- [ ] **S2.6** Combined verification after the settings and follow-up work:
+      regenerate kr216 fixtures with the improved producer/assembler, run the
+      adapter/symbol tests and full CTest on Windows and WSL, and update the
+      guide's kr216 section.
+
+Gate GS216:
+
+- [ ] **GS216.1** A hand-written `.s` image exposes source lines, function and
+      data labels and any declared local; the absence of a bridge is honest for
+      input that declares nothing.
+- [ ] **GS216.2** Two TUs with same-named `static` helpers/globals show distinct
+      frames, addresses and inspectable variables.
+- [ ] **GS216.3** kr216 fixtures and CTest rows are green with the adapter
+      enabled, the fixture drift check matches, and the combined bare gates still
+      pass.
+- [ ] **GS216.4** The per-target default values for kr216 are reviewed and
+      recorded; no global `-O2` default is introduced for targets that promote
+      recorded locals.
+- [ ] **GS216.5** No open BLOCKS or FIX-BEFORE finding remains.
+
 ---
 
 ## 9. Evidence log
@@ -1551,6 +1593,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 - **2026-11-27T18:20:00-08:00** — **Source/disassembly usability.** The source file dropdown widens to the longest path inside the window and keeps the right side of an overlong path; the disassembly pane decodes a 512-byte window (centered for fixed-width targets, from the function start for variable-width targets), has a scrollbar with wheel/drag, and while following keeps the PC between 20% and 80% of the viewport; hover sets the keyboard target, and Up/Down/Page Up/Page Down scroll the source and disassembly panes (one row / 80% of the viewport). Manual scroll stops following until the next step. Tests: 129/0 unit, CTest 18/18, goldens re-recorded for the changed disassembly layout.
 
 - **2026-11-27T18:30:00-08:00** — **Path separators and inspector placement.** Source paths are normalized to the host's preferred separator for display and file opening (producers can mix drive prefixes and forward-slash include paths). The variable inspector opens just to the right of the Variables panel and grows upward from the panel's bottom edge, sized to its member list within the available space, instead of covering the variables list. kr232 goldens re-recorded for the disassembly layout change; CTest 18/18, unit tests 129/0.
+
+- **2026-11-27T20:10:00-08:00** — **kr216 adapter and symbol parity landed.** krdbg `099e56f`: console IComPort, frame-zero unwind independent of debug records, reset that rebuilds the machine, R0/R1/R11/fault-window fixes, hex disassembly, committed fixtures and 14 adapter/scenario tests (ctest 22/22, fixture drift matches); docs/debugging-kr216.md. KRCompiler `e2dd57c`: per-object labels for internal functions/globals, shadowed locals, kr216 no-recorded-promotion at -O2; krc_tests 328/328 (5368 assertions), ctest 1012/1012, two-TU statics distinct and 0 out-of-range L on a real image. Follow-ups recorded as task-20 and S2.3–S2.6: the kr216 assembler still emits no bridge for hand-written `.s`, and same-named static variable identity needs the symbol shape. The combined rebuild is pending the per-VM settings work because the settings tree was mid-edit during the kr216 verification.
 
 ## 10. Blocked or external prerequisites
 

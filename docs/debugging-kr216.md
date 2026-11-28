@@ -143,3 +143,25 @@ kr232 and is what the fixtures' tests do.
   base, so read locals from the user `main` frame.
 - Source paths are resolved when the image loads. Changing `dbg.source_roots`
   affects the next load, not an already-loaded image.
+
+## Follow-ups
+
+These are tracked as task-20 and are not implemented yet:
+
+- **Assembler debug bridge.** kr216's assembler emits no KDBG records for
+  hand-written `.s` text, so assembly-only images have no source lines,
+  function names, globals or locals, and crt0's outer frame is unnamed. The
+  planned fix mirrors kr232's assembler: synthesise `F` for `.globl`/`.weak`
+  text labels, `G`/symbols for `.globl` data and physical-line `L` records, and
+  accept explicit `.debug_function`/`.debug_line`/`.debug_var`/
+  `.debug_varinfo`/`.debug_scope`/`.debug_global`/`.debug_type` directives for
+  richer records. An assembly fixture will assert the emitted records.
+- **Same-named static identity.** Per-object labels fixed the ranges and
+  addresses of two TUs' `static helper()`/`static counter`, but kr216 keeps
+  display names in `V`/`W` and the symbol in `K`, so two statics with the same
+  source name can still merge in the Variables view. The planned fix moves the
+  variable-identity field to the symbol for internal functions (the krdbg
+  consumer already supports that shape) and extends the two-TU static test.
+- **Wrapper `main` display name.** A C/C++ image's compiler wrapper and the
+  user `main` currently share a display name, so the call stack shows two `main`
+  rows; a distinct debug name for the wrapper is part of the same identity pass.
