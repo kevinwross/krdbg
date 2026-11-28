@@ -50,6 +50,16 @@ build\kr232-debugger\krdbg_demo.exe tests\fixtures\kr232\session.kr232 `
 | `nested_frames.kr232` | two-frame unwind and a frame-relative local |
 | `session.kr232` | COM output and a committed framebuffer |
 | `kernel.kr232` + `userprint.kr232` | a user program run under the kernel |
+| `symbols_cpp.kr232`, `symbols_pair.kr232`, `symbols_include.kr232` | C++ source lines, locals/kinds, `this`, aggregates, external and internal globals, cross-unit call stacks |
+| `symbols_asm.kr232` | hand-written assembly lines, function and data symbols, a declared local |
+| `promoted_o1.kr232` | the `-O1` home-slot guarantee for a promotion-shaped local |
+
+`tests/fixtures/kr232/README.md` gives each fixture's source and build recipe;
+`tests/test_kr232_symbols.cpp` is the end-to-end symbol verification. Names and
+values at the default `-O1` come from each named variable's frame slot; `-O2`
+is not a supported debug level for kr232 until a register-location producer
+exists (ADR 0052), so do not expect a `-O2` build's named locals to be
+inspectable.
 
 ## Kernel and user program
 

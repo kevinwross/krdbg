@@ -1,9 +1,17 @@
 # Symbol verification plan for kr232
 
-Status: design for the verification work only. No source change is part of this
-plan, and nothing in it is claimed to pass yet: every row marked **RED** below
-is either measured failing on 2026-11-27 with the tools and fixtures in this
-checkout, or blocked on a named prerequisite (§4). The legend in §11 says which.
+Status: implemented 2026-11-27. The fixtures are committed under
+`tests/fixtures/kr232/src/` (images `symbols_cpp`, `symbols_pair`,
+`symbols_asm`, `symbols_include`, `promoted_o1`, listed in
+`tests/fixtures/kr232/README.md`), the session-level cases are in
+`tests/test_kr232_symbols.cpp` and run under `krdbg_kr232_unit` and
+`krdbg_kr232_symbols`, and `CheckFixtureDrift.cmake` proves every image still
+matches its source. The implemented suite passes with the staged compiler from
+the truthful-line/variable change (including the internal-linkage records the
+`phase2_*` cases assert). The RED/PASS column in §11 is the state *before*
+implementation and is kept as the record of what the plan had to prove; where a
+row needed a krdbg fix the implementation found it (see the frame pairing note
+in `docs/backend-debug-symbols-guide.md` §9.2).
 
 Scope: prove that KRCompiler's kr232 debug symbols are good enough for a
 debugger to be useful — C++ and assembler source lines, local and global
@@ -846,6 +854,14 @@ API ambiguity:
   symptom being caught.
 
 ## 11. Pass/fail matrix
+
+Post-implementation: every session-level row below is green in
+`tests/test_kr232_symbols.cpp` (58 cases, 0 failures on 2026-11-27), including
+the three `phase2_*` internal-linkage rows, because the producer and the
+regenerated fixtures provide the records. The one deliberate gap is Track B
+(no kr232 register-location producer yet, §7.7); the member-view array
+expansion limit noted in §7.1 is a model limitation, not a missing symbol. The
+column reads as designed, not as current status.
 
 Legend: **PASS** = expected green once the row's prerequisite phase lands;
 **RED** = not achievable with today's compiler/krdbg (measured with a probe

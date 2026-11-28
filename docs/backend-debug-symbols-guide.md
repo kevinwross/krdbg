@@ -1310,7 +1310,20 @@ Per requirement, drive the real adapter and assert through the session API
 
 The exact kr232 assertions and their names are in
 [symbol-verification-plan.md](symbol-verification-plan.md) §7–§8; re-use the
-vocabulary rather than inventing a second one.
+vocabulary rather than inventing a second one. They are implemented in
+[krdbg `tests/test_kr232_symbols.cpp`](../tests/test_kr232_symbols.cpp): one
+case per row above, driven through a real `DebugSession` over the
+`symbols_*`/`promoted_o1` fixtures. The `kr232_symbols_phase2_*` cases carry the
+internal-linkage rows (a `static` function's frame and file-scope statics); they
+went green when the producer gained an `F` record for every function and `G`
+records for internal data.
+
+Two consumer defects that only a frame-aware test finds: a frame's PC and its
+`frame_base` must come from the same unwound link (pairing one frame's return
+address with the next frame's base names the grandcaller and reads the wrong
+locals for frame 1), and `members()` on a member view only walks struct
+members, so an array member expands its elements only at variable level, not
+member level.
 
 ### 9.3 Fixture matrix
 

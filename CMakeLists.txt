@@ -355,6 +355,7 @@ if(KRDBG_BUILD_TESTS)
             tests/test_main.cpp
             tests/test_kr232_adapter.cpp
             tests/test_kr232_scenarios.cpp
+            tests/test_kr232_symbols.cpp
             tests/test_host_build.cpp
             tests/test_app_smoke.cpp
         )
@@ -368,6 +369,19 @@ if(KRDBG_BUILD_TESTS)
         add_test(NAME krdbg_kr232_unit COMMAND krdbg_kr232_tests)
         set_tests_properties(krdbg_kr232_unit PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        # Symbol fidelity: source lines, locals/kinds, globals, call stacks and
+        # the -O1 home-slot guarantee, all through the session API on the
+        # fixtures tests/fixtures/kr232/src/. The phase2_* cases in that file
+        # assert the internal-linkage records (an F record for every function,
+        # G records for file-scope statics); they stayed red until the producer
+        # and the regenerated fixtures provided them, and they remain as the
+        # regression for that contract.
+        add_test(NAME krdbg_kr232_symbols
+            COMMAND krdbg_kr232_tests --filter kr232_symbols)
+        set_tests_properties(krdbg_kr232_symbols PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            # Guards against a misnamed filter passing with no test run.
+            PASS_REGULAR_EXPRESSION "kr232_symbols_")
         # The M7.10 smoke: the gate fails if loading loaded.kr232 through the
         # adapter or one instruction step regresses.
         add_test(NAME krdbg_kr232_app_smoke
@@ -422,9 +436,10 @@ if(KRDBG_BUILD_TESTS)
         if(EXISTS "${KRDBG_STARTREKNG_IMAGE}")
             # The image is compiler-built, so its debug payload can differ by
             # host toolchain; record the rendered hash each platform's build
-            # produces for the same scripted image.
+            # produces for the same scripted image. Re-recorded 2026-11-27 after
+            # the truthful-line/variable compiler rebuild regenerated the image.
             if(WIN32)
-                set(KRDBG_STARTREKNG_HASH "FF770DB7FEA84D7A")
+                set(KRDBG_STARTREKNG_HASH "811261FE3A1C2871")
             else()
                 set(KRDBG_STARTREKNG_HASH "4DD52E2F73788C72")
             endif()
