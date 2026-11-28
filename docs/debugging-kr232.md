@@ -61,6 +61,11 @@ is not a supported debug level for kr232 until a register-location producer
 exists (ADR 0052), so do not expect a `-O2` build's named locals to be
 inspectable.
 
+Stepping: with the source pane focused, `F10`/`F11` step over/into one source
+line, and the source pane's `OVER`/`IN`/`OUT` buttons do the same. With the
+disassembly pane focused, `F10`/`F11` and that pane's buttons step one
+instruction instead. `Shift+F11` steps out of the current frame.
+
 ## Kernel and user program
 
 ```powershell

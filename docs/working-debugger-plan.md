@@ -148,7 +148,7 @@ Acceptance checks, all observable in the window except where noted:
 | A2 | Status shows the stop address and the executed-instruction count; no panel says "no program loaded". |
 | A3 | `F5` runs; the instruction/time/IPS counters advance; `F6` pauses; the status names the stop reason. |
 | A4 | Clicking a source-gutter line sets a breakpoint; `F5` stops on that line; the source highlight and the BREAKPOINTS panel agree. |
-| A5 | `F10`/`F11` step by instruction; the source pane's `OVER`/`IN`/`OUT` step by line; PC, line and disassembly follow. |
+| A5 | `F10`/`F11` step by source line when the source pane is focused and by instruction when the disassembly pane is focused; the pane-local `OVER`/`IN`/`OUT` buttons always use their own granularity. PC, line and disassembly follow. |
 | A6 | `VARIABLES` shows the current function's locals with values; an aggregate expands; selecting frame 1 changes the locals. |
 | A7 | `CALL STACK` shows at least two frames on `nested_frames.kr232`; frame selection works. |
 | A8 | A GPR, a flag and a memory byte can be edited and read back; `read_memory`/`write_memory` round-trips. |
@@ -159,8 +159,7 @@ Acceptance checks, all observable in the window except where noted:
 | A13 | Kernel+user: load `kernel.kr232` with `userprint.kr232`, break in user code, step a syscall, see the output, exit 3. |
 | A14 | The same checks run headless in CTest with a synthetic event script and a frame hash, on Windows and Linux. |
 | A15 | `STATE` shows per-bit Z/N/C/V/I/T/K rows for kr232; the writable bits toggle and K stays read-only. |
-| A16 | `F10` steps over a call without landing inside it; `OUT` from the outermost frame returns control instead of running to the guard. |
-| A17 | The status line names the stop reason (breakpoint, halted, fault, budget); the source pane scrolls the current line into view. |
+| A16 | `F10` steps over a call without landing inside it; `OUT` from the outermost frame returns control instead of running to the guard. || A17 | The status line names the stop reason (breakpoint, halted, fault, budget); the source pane scrolls the current line into view. |
 | A18 | `scripts/build-startrekng-kr232.ps1` (or `.sh`) builds both images and `build-info.txt` from a clean `build/`, and the KRCompiler sources stay unmodified. |
 | A19 | Loading `startrekng_script.kr232` with `--source-root ../krcompiler` opens `examples/startrekng/main_script.cpp` and highlights the initial stop; running follows the PC into other units (`galaxy.cpp`, `weapons.cpp`), and a breakpoint in a second unit fires. |
 | A20 | Stepping into `Console::line` shows `this` and its members; the scripted session runs to completion with its expected console output. |

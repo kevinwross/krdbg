@@ -782,15 +782,20 @@ KRDBG_TEST(surface_f9_toggles_the_current_line_breakpoint) {
     CHECK_EQ(scene.session->breakpoints().size(), 1U);
 }
 
-// F10 is instruction over, plain F11 is instruction in, and Shift+F11 is
-// instruction out. Stepping out is observable: it runs the callee out and drops
-// one frame instead of retiring exactly one instruction.
+// With the disassembly pane focused, F10 is instruction over, plain F11 is
+// instruction in, and Shift+F11 is instruction out. Stepping out is observable:
+// it runs the callee out and drops one frame instead of retiring exactly one
+// instruction. Source-focus stepping is covered separately.
 KRDBG_TEST(surface_f11_steps_in_and_shift_f11_steps_out) {
     krdbg::test::TestScene step_in_scene(true);
     for (int step = 0; step < 3; ++step) {
         step_in_scene.session->step(krdbg::StepMode::Instruction);
     }
     CHECK_EQ(step_in_scene.session->call_stack().size(), 2U);
+    const krdbg::Rect in_disassembly =
+        step_in_scene.surface->layout().disassembly;
+    CHECK(step_in_scene.click(center_x(in_disassembly),
+                              center_y(in_disassembly)));
     const std::uint64_t in_before =
         step_in_scene.session->stats().instructions;
     CHECK(step_in_scene.send_key(krdbg::platform::key::F11));
@@ -801,6 +806,10 @@ KRDBG_TEST(surface_f11_steps_in_and_shift_f11_steps_out) {
     for (int step = 0; step < 3; ++step) {
         step_out_scene.session->step(krdbg::StepMode::Instruction);
     }
+    const krdbg::Rect out_disassembly =
+        step_out_scene.surface->layout().disassembly;
+    CHECK(step_out_scene.click(center_x(out_disassembly),
+                               center_y(out_disassembly)));
     const std::size_t depth_before =
         step_out_scene.session->call_stack().size();
     CHECK_EQ(depth_before, 2U);
@@ -813,6 +822,24 @@ KRDBG_TEST(surface_f11_steps_in_and_shift_f11_steps_out) {
     CHECK(step_out_scene.surface->handle_event(shift_f11));
     CHECK(step_out_scene.session->call_stack().size() < depth_before);
     CHECK(step_out_scene.session->stats().instructions > out_before + 1);
+}
+
+// With the source pane focused (the default), F10/F11 are source-line steps:
+// they stop when the source line changes rather than after one instruction.
+KRDBG_TEST(surface_source_focus_keys_step_by_line) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect source = scene.surface->layout().source;
+    CHECK(scene.click(center_x(source), center_y(source)));
+    const krdbg::LineInfo* before = scene.session->line_at(scene.session->pc());
+    CHECK(before != nullptr);
+    const std::uint64_t before_pc = scene.session->pc();
+    CHECK(scene.send_key(krdbg::platform::key::F10));
+    CHECK(scene.session->pc() != before_pc);
+    const krdbg::LineInfo* after = scene.session->line_at(scene.session->pc());
+    CHECK(after != nullptr);
+    if (before != nullptr && after != nullptr) {
+        CHECK(before->source != after->source || before->line != after->line);
+    }
 }
 
 // Ctrl-V reaches the clipboard through the character too; the event carries no

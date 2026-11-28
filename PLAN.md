@@ -1345,9 +1345,10 @@ and 8-byte instruction widths.
 
 From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
 
-- `F5` run/pause, `F6` break, `F10` instruction over, `F11` instruction in,
-  `Esc` quit (or close a menu/focus first). Restart is the `RESET` toolbar
-  button. `F9` (toggle breakpoint) and `R` (restart) are not implemented.
+- `F5` run/pause, `F6` break, `F10` step over one source line, `F11` step into
+  one source line (both are instruction steps while the disassembly pane is
+  focused), `Esc` quit (or close a menu/focus first). Restart is the `RESET`
+  toolbar button. `F9` (toggle breakpoint) and `R` (restart) are not implemented.
 - Toolbar actions:
   - `RUN` toggles the VM running state (F5). It is green while running and
     normal while stopped; the status bar shows `F5 PAUSE` while running.

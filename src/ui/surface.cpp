@@ -2362,16 +2362,23 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         }
         return;
     case ToolbarAction::StepOver:
-        step_and_note(StepMode::InstructionOver);
+        // Source-level by default; the disassembly pane's own OVER remains
+        // instruction-level, and focusing it switches these toolbar buttons too.
+        step_and_note(focus == SurfacePanel::Disassembly
+                          ? StepMode::InstructionOver
+                          : StepMode::LineOver);
         selected_frame = 0;
         return;
     case ToolbarAction::StepIn:
-        step_and_note(StepMode::Instruction);
+        step_and_note(focus == SurfacePanel::Disassembly ? StepMode::Instruction
+                                                         : StepMode::LineIn);
         selected_frame = 0;
         return;
     case ToolbarAction::StepOut:
         running = false;
-        note_stop(session->step(StepMode::InstructionOut));
+        note_stop(session->step(focus == SurfacePanel::Disassembly
+                                    ? StepMode::InstructionOut
+                                    : StepMode::LineOut));
         selected_frame = 0;
         return;
     case ToolbarAction::ToggleBreakpoint:
@@ -2878,11 +2885,11 @@ void DebuggerSurface::Impl::mouse_move(const platform::Event& event) {
         } else if (over(layout.toolbar_kernel)) {
             text = "Load the kernel and user program";
         } else if (over(layout.toolbar_over)) {
-            text = "F10 step over one instruction";
+            text = "F10 step over one source line (instruction in the disassembly pane)";
         } else if (over(layout.toolbar_in)) {
-            text = "F11 step into one instruction";
+            text = "F11 step into one source line (instruction in the disassembly pane)";
         } else if (over(layout.toolbar_out)) {
-            text = "Shift+F11 step out of the frame";
+            text = "Shift+F11 step out of the frame (instruction in the disassembly pane)";
         } else if (over(layout.toolbar_breakpoint)) {
             text = "F9 toggle a breakpoint on the current line";
         } else if (over(layout.toolbar_clr)) {
@@ -3855,15 +3862,22 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         toggle_current_line_breakpoint();
         return true;
     case platform::key::F10:
-        step_and_note(StepMode::InstructionOver);
+        step_and_note(focus == SurfacePanel::Disassembly
+                          ? StepMode::InstructionOver
+                          : StepMode::LineOver);
         running = false;
         return true;
     case platform::key::F11:
-        // Shift+F11 steps out by instruction; plain F11 steps in. Both reach the
-        // session through the same key, so the shift flag selects the mode.
+        // Source-level by default; Shift+F11 steps out. Focusing the
+        // disassembly pane makes F10/F11 instruction steps.
         running = false;
-        note_stop(session->step(event.shift ? StepMode::InstructionOut
-                                            : StepMode::Instruction));
+        if (focus == SurfacePanel::Disassembly) {
+            note_stop(session->step(event.shift ? StepMode::InstructionOut
+                                                : StepMode::Instruction));
+        } else {
+            note_stop(session->step(event.shift ? StepMode::LineOut
+                                                : StepMode::LineIn));
+        }
         return true;
     default:
         break;
