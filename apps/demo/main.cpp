@@ -1005,7 +1005,7 @@ int main(int argc, char** argv) {
 
     // Source roots for an adapter load: the command-line root plus the settings'
     // extra roots, unless the command line named a root itself.
-    const auto configured_source_roots = [&host, &options]() {
+    [[maybe_unused]] const auto configured_source_roots = [&host, &options]() {
         std::vector<std::string> roots{options.source_root};
         if (options.source_root_set) {
             return roots;
@@ -1028,7 +1028,7 @@ int main(int argc, char** argv) {
     // `dbg.stop_at_main` gates the automatic run into the loaded program,
     // including the kernel+user pair (which otherwise runs to the user entry and
     // would ignore the setting).
-    const auto stop_at_main_enabled = [&host]() {
+    [[maybe_unused]] const auto stop_at_main_enabled = [&host]() {
         const krdbg::SettingsSnapshot live = host.settings_values();
         const auto found = live.values.find("dbg.stop_at_main");
         if (found != live.values.end()) {
@@ -1085,7 +1085,7 @@ int main(int argc, char** argv) {
 
     // A command-line image load knows its target before the adapter runs, so the
     // settings sections and the project file are switched first.
-    const auto activate_for_load = [&host](const std::string& target,
+    [[maybe_unused]] const auto activate_for_load = [&host](const std::string& target,
                                            const std::string& path) {
         std::string error;
         if (!host.activate_target(target, path, error)) {
