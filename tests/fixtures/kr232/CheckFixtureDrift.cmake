@@ -12,12 +12,16 @@
 #
 # Required: KRC, KRLD, SOURCES (krcompiler root), KR232 (kr232 root),
 #           FIXTURE_DIR, WORK
+#
+# The symbol fixtures' sources live in this repository, not in KRCompiler; the
+# repository root is derived from FIXTURE_DIR (<repo>/tests/fixtures/kr232).
 
 if(NOT DEFINED KRC OR NOT DEFINED KRLD OR NOT DEFINED SOURCES OR NOT DEFINED KR232 OR
    NOT DEFINED FIXTURE_DIR OR NOT DEFINED WORK)
     message(FATAL_ERROR "KRC, KRLD, SOURCES, KR232, FIXTURE_DIR and WORK are required")
 endif()
 file(MAKE_DIRECTORY "${WORK}")
+get_filename_component(REPO "${FIXTURE_DIR}/../../.." ABSOLUTE)
 
 # compile(<output> <root> <source relative to root> [extra arguments...])
 function(compile out root source)
@@ -41,11 +45,35 @@ compile("${WORK}/gfx.o" "${SOURCES}" "targets/kr232/runtime/gfx.c"
 compile("${WORK}/kernel.o" "${KR232}" "targets/kr232/kernel/kernel.s")
 compile("${WORK}/userprint.o" "${FIXTURE_DIR}" "userprint.s")
 
+# Symbol fixtures (tests/test_kr232_symbols.cpp). Same recipe as
+# regenerate.ps1: compiled from REPO so the recorded path is
+# tests/fixtures/kr232/src/..., -O0 for the stepping fixtures and -O1 for the
+# promotion fixture.
+compile("${WORK}/symbols_cpp.o" "${REPO}"
+        "tests/fixtures/kr232/src/symbols_cpp.cpp" -O0)
+compile("${WORK}/symbols_pair_math.o" "${REPO}"
+        "tests/fixtures/kr232/src/symbols_pair_math.cpp" -O0
+        -I "tests/fixtures/kr232/src")
+compile("${WORK}/symbols_pair_main.o" "${REPO}"
+        "tests/fixtures/kr232/src/symbols_pair_main.cpp" -O0
+        -I "tests/fixtures/kr232/src")
+compile("${WORK}/include_heavy.o" "${REPO}"
+        "tests/fixtures/kr232/src/include_heavy.cpp" -O0
+        -I "tests/fixtures/kr232/src/include")
+compile("${WORK}/promoted.o" "${REPO}"
+        "tests/fixtures/kr232/src/promoted.cpp" -O1)
+compile("${WORK}/symbols_asm.o" "${REPO}"
+        "tests/fixtures/kr232/src/symbols_asm.s")
+
 set(failures "")
 
-# The four that link with crt0 and no base.
+# The fixtures that link with crt0 and no base.
 foreach(fixture IN ITEMS "loaded.kr232;min.o" "nested_frames.kr232;nested.o"
-                         "session.kr232;session.o;cons.o;gfx.o")
+                         "session.kr232;session.o;cons.o;gfx.o"
+                         "symbols_cpp.kr232;symbols_cpp.o"
+                         "symbols_pair.kr232;symbols_pair_math.o;symbols_pair_main.o"
+                         "symbols_include.kr232;include_heavy.o"
+                         "promoted_o1.kr232;promoted.o")
     string(REPLACE ";" "|" fields "${fixture}")
     string(REPLACE "|" ";" fields "${fields}")
     list(GET fields 0 image)
@@ -82,7 +110,14 @@ execute_process(COMMAND "${KRLD}" --base=0x08000000
 if(NOT print_state EQUAL 0)
     message(FATAL_ERROR "linking userprint.kr232 failed:\n${print_error}")
 endif()
-foreach(image IN ITEMS "kernel.kr232" "userprint.kr232")
+# symbols_asm.kr232 defines its own _start and therefore links without crt0.
+execute_process(COMMAND "${KRLD}" --entry=_start
+                        "${WORK}/symbols_asm.o" -o "${WORK}/symbols_asm.kr232"
+                RESULT_VARIABLE asm_state ERROR_VARIABLE asm_error)
+if(NOT asm_state EQUAL 0)
+    message(FATAL_ERROR "linking symbols_asm.kr232 failed:\n${asm_error}")
+endif()
+foreach(image IN ITEMS "kernel.kr232" "userprint.kr232" "symbols_asm.kr232")
     file(SHA256 "${FIXTURE_DIR}/${image}" checked_in)
     file(SHA256 "${WORK}/${image}" rebuilt)
     if(NOT checked_in STREQUAL rebuilt)
@@ -93,4 +128,4 @@ endforeach()
 if(NOT failures STREQUAL "")
     message(FATAL_ERROR "fixtures do not match their sources:\n${failures}")
 endif()
-message(STATUS "all six kr232 fixtures match their sources")
+message(STATUS "all kr232 fixtures match their sources")

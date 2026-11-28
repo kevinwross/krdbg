@@ -78,4 +78,24 @@ Link-Fixture $fixtureRoot 'userprint.kr232' @("$workText/userprint.o") @('--base
 Compile-From $repo 'tests/fixtures/kr232/aggregate.c' "$workText/aggregate.o"
 Link-Fixture $repo 'aggregate.kr232' @("$workText/crt0.o", "$workText/aggregate.o")
 
+# Symbol fixtures for tests/test_kr232_symbols.cpp. They live in this tree and
+# are compiled from the repository root so the recorded source path is
+# `tests/fixtures/kr232/src/...`, which the tests resolve under
+# KRDBG_SOURCE_ROOT. No libc: the fixtures use int data only, so each image is
+# a few kilobytes and links crt0 alone. -O0 keeps line stepping independent of
+# optimiser decisions; promoted_o1.kr232 is the deliberate -O1 case.
+$symbols = 'tests/fixtures/kr232/src'
+Compile-From $repo "$symbols/symbols_cpp.cpp" "$workText/symbols_cpp.o" @('-O0')
+Compile-From $repo "$symbols/symbols_pair_math.cpp" "$workText/symbols_pair_math.o" @('-O0', '-I', $symbols)
+Compile-From $repo "$symbols/symbols_pair_main.cpp" "$workText/symbols_pair_main.o" @('-O0', '-I', $symbols)
+Compile-From $repo "$symbols/include_heavy.cpp" "$workText/include_heavy.o" @('-O0', '-I', "$symbols/include")
+Compile-From $repo "$symbols/promoted.cpp" "$workText/promoted.o" @('-O1')
+Compile-From $repo "$symbols/symbols_asm.s" "$workText/symbols_asm.o"
+Link-Fixture $repo 'symbols_cpp.kr232' @("$workText/crt0.o", "$workText/symbols_cpp.o")
+Link-Fixture $repo 'symbols_pair.kr232' @("$workText/crt0.o", "$workText/symbols_pair_math.o", "$workText/symbols_pair_main.o")
+Link-Fixture $repo 'symbols_include.kr232' @("$workText/crt0.o", "$workText/include_heavy.o")
+Link-Fixture $repo 'promoted_o1.kr232' @("$workText/crt0.o", "$workText/promoted.o")
+# The assembly fixture defines its own _start, so it links without crt0.
+Link-Fixture $repo 'symbols_asm.kr232' @("$workText/symbols_asm.o")
+
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'
