@@ -1247,6 +1247,20 @@ The optional text-terminal interface and the DISPLAY device tab are in `main`
   guest and then releases focus. Function keys F5/F6/F9–F11 still reach the
   debugger, and no single-letter debugger shortcut applies while the terminal has
   guest focus. DISPLAY and COM input never share a queue.
+- Repaint policy (task-27): `src/ui/display_dirty.h` diffs the cached snapshot
+  against the host's next `TextDisplayView` per cell. Only changed cells plus the
+  cursor's old and new cells are repainted; rows/cols (or a missing/short span) is
+  the only full-rebuild trigger. The diff's changed flag gates
+  `present_display_window()`, so an idle display does not rebuild or re-upload a
+  frame every UI tick; the pop-out is presented on change, on opening and from
+  the presenter's retained copy after a resize.
+- Flicker and aspect (task-27): both Win32 windows paint through a retained
+  memory bitmap and blit once from it (the video window no longer fills the window
+  DC black before drawing a frame, and its class background brush is removed);
+  SDL2 keeps its renderer/vsync path and repaints a resized pop-out from its
+  retained texture. The popped-out VIDEO/DISPLAY window is aspect-locked to the
+  presented frame (640x480 default) with `WM_SIZING` on Win32 and a
+  recursion-guarded resize correction on SDL2; the main window is unconstrained.
 - Tests: `fake_target` grew an opt-in `FakeTextDisplay` (deterministic
   tic-tac-toe grid plus recorded keys/text/clicks); new unit tests cover the
   optional interface, deterministic rendering, key/paste/click forwarding,

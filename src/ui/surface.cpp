@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "scroll.h"
+#include "display_dirty.h"
 #include "theme.h"
 #include "video_fit.h"
 
@@ -416,6 +417,10 @@ struct DebuggerSurface::Impl {
     std::vector<TextCell> display_cells;
     TextCursor display_cursor;
     bool display_snapshot_valid = false;
+    // The canvas above is only re-rendered when the diff finds a change; this
+    // flag carries that change to the pop-out present, so an idle display does not
+    // re-upload a whole frame every UI tick.
+    bool display_present_pending = false;
     std::unique_ptr<Canvas> display_canvas;
     std::vector<std::uint8_t> display_frame_bytes;
     bool menu_open = false;
@@ -2494,7 +2499,20 @@ void DebuggerSurface::Impl::render(Canvas& canvas) {
         }
     }
     if (display_popped && display_window && display_window->valid()) {
-        present_display_window();
+        // The panel drew the grid when the DISPLAY tab is active; when another
+        // tab is showing, refresh from the target here so the pop-out stays live.
+        if (!display_tab || !display_available()) {
+            ITextDisplay* source = session->text_display();
+            TextDisplayView view;
+            if (source != nullptr && source->frame(view)) {
+                refresh_display_canvas(view);
+            }
+        }
+        // Present only when the diff (or the opening) says the frame changed; the
+        // Windows and SDL2 presenters repaint a resize from their retained copy.
+        if (display_present_pending) {
+            present_display_window();
+        }
     }
     draw_status_bar(canvas);
     draw_popup(canvas);
@@ -3037,8 +3055,11 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
                     display_window = platform::create_video_window();
                 }
                 if (display_window &&
-                    display_window->create("krdbg display", 720, 440)) {
+                    display_window->create("krdbg display", 640, 480)) {
                     display_popped = true;
+                    // The pop-out opens on the current frame even if the next
+                    // tick would find the display unchanged.
+                    display_present_pending = true;
                 }
             }
             return;
@@ -3764,19 +3785,17 @@ void DebuggerSurface::Impl::draw_display_panel(Canvas& canvas) {
 void DebuggerSurface::Impl::refresh_display_canvas(const TextDisplayView& view) {
     const std::size_t count =
         static_cast<std::size_t>(view.rows) * static_cast<std::size_t>(view.cols);
-    bool changed = !display_snapshot_valid || display_rows != view.rows ||
-                   display_cols != view.cols || display_cursor != view.cursor;
-    if (!changed) {
-        for (std::size_t index = 0; index < count; ++index) {
-            if (!(display_cells[index] == view.cells[index])) {
-                changed = true;
-                break;
-            }
-        }
-    }
-    if (!changed && display_canvas) {
+    if (view.rows <= 0 || view.cols <= 0 || view.cells.size() < count) {
         return;
     }
+    const ui::DisplayDiff diff =
+        ui::diff_display_snapshot(display_rows, display_cols, display_cells,
+                                  display_cursor, view);
+    if (!diff.changed) {
+        return;
+    }
+    display_present_pending = true;
+
     display_rows = view.rows;
     display_cols = view.cols;
     display_cells.assign(view.cells.begin(),
@@ -3788,11 +3807,15 @@ void DebuggerSurface::Impl::refresh_display_canvas(const TextDisplayView& view) 
     const int cell_height = display_cell_height();
     const int natural_width = view.cols * cell_width;
     const int natural_height = view.rows * cell_height;
-    if (!display_canvas || display_canvas->width() != natural_width ||
-        display_canvas->height() != natural_height) {
+    const bool geometry =
+        diff.geometry_changed || !display_canvas ||
+        display_canvas->width() != natural_width ||
+        display_canvas->height() != natural_height;
+    if (geometry) {
         display_canvas = std::make_unique<Canvas>(natural_width, natural_height);
+        display_canvas->clear(Color{0, 0, 0, 255});
     }
-    display_canvas->clear(Color{0, 0, 0, 255});
+
     const auto draw_code = [&](int x, int y, std::uint16_t code, Color color) {
         if (display_code_printable(code)) {
             display_canvas->text(x, y,
@@ -3800,32 +3823,54 @@ void DebuggerSurface::Impl::refresh_display_canvas(const TextDisplayView& view) 
                                  FontRole::MonoSmall);
         }
     };
-    for (int row = 0; row < view.rows; ++row) {
-        for (int col = 0; col < view.cols; ++col) {
-            const TextCell& cell = display_cells[static_cast<std::size_t>(row) *
-                                                     static_cast<std::size_t>(view.cols) +
-                                                 static_cast<std::size_t>(col)];
-            const int x = col * cell_width;
-            const int y = row * cell_height;
-            const Color background = unpack_color(cell.background);
-            display_canvas->fill(Rect{x, y, cell_width, cell_height}, background);
-            draw_code(x, y, cell.code, unpack_color(cell.foreground));
-        }
-    }
-    // The cursor is an inverse block: the cell is filled with the foreground and
-    // the code, if printable, is drawn in the background colour on top.
-    if (view.cursor.visible && view.cursor.row >= 0 &&
-        view.cursor.row < view.rows && view.cursor.col >= 0 &&
-        view.cursor.col < view.cols) {
-        const TextCell& cell =
-            display_cells[static_cast<std::size_t>(view.cursor.row) *
-                              static_cast<std::size_t>(view.cols) +
-                          static_cast<std::size_t>(view.cursor.col)];
-        const int x = view.cursor.col * cell_width;
-        const int y = view.cursor.row * cell_height;
-        const Color foreground = unpack_color(cell.foreground);
-        display_canvas->fill(Rect{x, y, cell_width, cell_height}, foreground);
+    // Normal cell: the background block and the glyph in the foreground colour.
+    const auto draw_cell = [&](std::size_t index) {
+        const int col = static_cast<int>(
+            index % static_cast<std::size_t>(view.cols));
+        const int row = static_cast<int>(
+            index / static_cast<std::size_t>(view.cols));
+        const TextCell& cell = display_cells[index];
+        const int x = col * cell_width;
+        const int y = row * cell_height;
+        display_canvas->fill(Rect{x, y, cell_width, cell_height},
+                             unpack_color(cell.background));
+        draw_code(x, y, cell.code, unpack_color(cell.foreground));
+    };
+    // Cursor cell: an inverse block, the glyph in the background colour.
+    const auto draw_cursor = [&](std::size_t index) {
+        const int col = static_cast<int>(
+            index % static_cast<std::size_t>(view.cols));
+        const int row = static_cast<int>(
+            index / static_cast<std::size_t>(view.cols));
+        const TextCell& cell = display_cells[index];
+        const int x = col * cell_width;
+        const int y = row * cell_height;
+        display_canvas->fill(Rect{x, y, cell_width, cell_height},
+                             unpack_color(cell.foreground));
         draw_code(x, y, cell.code, unpack_color(cell.background));
+    };
+    std::size_t cursor_index = 0;
+    const bool cursor_visible =
+        view.cursor.visible &&
+        ui::display_cursor_index(view.rows, view.cols, view.cursor, cursor_index);
+
+    if (geometry) {
+        for (std::size_t index = 0; index < count; ++index) {
+            draw_cell(index);
+        }
+        if (cursor_visible) {
+            draw_cursor(cursor_index);
+        }
+        return;
+    }
+    // Only the changed cells, plus the old and new cursor cells, are repainted.
+    // The diff lists the previous cursor cell so an old inverse block is cleared.
+    for (std::size_t index : diff.cells) {
+        if (cursor_visible && index == cursor_index) {
+            draw_cursor(index);
+        } else {
+            draw_cell(index);
+        }
     }
 }
 
@@ -3900,6 +3945,7 @@ void DebuggerSurface::Impl::present_display_window() {
     frame.stride = frame_width * 4;
     frame.pixels = std::span<const std::uint8_t>(display_frame_bytes);
     display_window->present(frame, true);
+    display_present_pending = false;
 }
 
 

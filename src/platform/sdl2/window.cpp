@@ -9,6 +9,7 @@
 #include "krdbg/window.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -16,6 +17,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "../window_aspect.h"
 
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
@@ -305,6 +308,7 @@ public:
         if (window_ == nullptr) {
             return false;
         }
+        SDL_SetWindowMinimumSize(window_, 160, 120);
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
         if (renderer_ == nullptr) {
             renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
@@ -339,12 +343,24 @@ public:
                 event.kind = Event::Kind::Quit;
                 return true;
             }
-            if (raw.type == SDL_WINDOWEVENT &&
-                raw.window.windowID == window_id_ &&
+            if (raw.type == SDL_WINDOWEVENT && raw.window.windowID == window_id_ &&
                 raw.window.event == SDL_WINDOWEVENT_CLOSE) {
                 event = Event{};
                 event.kind = Event::Kind::Quit;
                 return true;
+            }
+            if (raw.type == SDL_WINDOWEVENT && raw.window.windowID == window_id_ &&
+                (raw.window.event == SDL_WINDOWEVENT_RESIZED ||
+                 raw.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
+                // SDL2 has no aspect-ratio API, so the resize is corrected here
+                // after the fact. The guard keeps our own SDL_SetWindowSize from
+                // re-entering the correction, and the retained texture is
+                // re-presented so a resize does not show an empty backbuffer.
+                if (!resizing_) {
+                    enforce_aspect();
+                }
+                render_last();
+                continue;
             }
             if (window_ == nullptr || SDL_GetKeyboardFocus() != window_) {
                 continue;
@@ -385,6 +401,16 @@ public:
         if (renderer_ == nullptr || frame.width <= 0 || frame.height <= 0) {
             return;
         }
+        const bool same_frame =
+            texture_ != nullptr && frame.frame_number != 0 &&
+            frame.frame_number == last_frame_number_ &&
+            frame_width_ == frame.width && frame_height_ == frame.height &&
+            fit_ == fit;
+        if (same_frame) {
+            // The surface already gates the DISPLAY pop-out; this keeps the VIDEO
+            // pop-out from re-uploading an unchanged committed frame every tick.
+            return;
+        }
         if (texture_ == nullptr || texture_width_ != frame.width ||
             texture_height_ != frame.height) {
             if (texture_ != nullptr) {
@@ -400,23 +426,11 @@ public:
             return;
         }
         SDL_UpdateTexture(texture_, nullptr, frame.pixels.data(), frame.stride);
-        int output_width = 0;
-        int output_height = 0;
-        SDL_GetRendererOutputSize(renderer_, &output_width, &output_height);
-        SDL_Rect destination{0, 0, frame.width, frame.height};
-        if (fit) {
-            const double scale = std::min(
-                static_cast<double>(output_width) / frame.width,
-                static_cast<double>(output_height) / frame.height);
-            destination.w = std::max(1, static_cast<int>(frame.width * scale));
-            destination.h = std::max(1, static_cast<int>(frame.height * scale));
-            destination.x = (output_width - destination.w) / 2;
-            destination.y = (output_height - destination.h) / 2;
-        }
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
-        SDL_RenderClear(renderer_);
-        SDL_RenderCopy(renderer_, texture_, nullptr, &destination);
-        SDL_RenderPresent(renderer_);
+        frame_width_ = frame.width;
+        frame_height_ = frame.height;
+        fit_ = fit;
+        last_frame_number_ = frame.frame_number;
+        render_last();
     }
 
     void set_title(std::string_view title) override {
@@ -426,12 +440,63 @@ public:
     }
 
 private:
+    // Keeps the pop-out client at the presented frame's aspect. The window size
+    // includes no border in SDL, so the client size is the window size.
+    void enforce_aspect() {
+        if (window_ == nullptr || frame_width_ <= 0 || frame_height_ <= 0) {
+            return;
+        }
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSize(window_, &width, &height);
+        const double aspect = static_cast<double>(frame_width_) /
+                              static_cast<double>(frame_height_);
+        const ClientSize locked = lock_client_aspect(width, height, aspect);
+        if (locked.width == width && locked.height == height) {
+            return;
+        }
+        resizing_ = true;
+        SDL_SetWindowSize(window_, locked.width, locked.height);
+        resizing_ = false;
+    }
+
+    // Draws the retained texture at the current output size. Called after a
+    // present and after a resize so the pop-out is never blank between frames.
+    void render_last() {
+        if (renderer_ == nullptr || texture_ == nullptr || frame_width_ <= 0 ||
+            frame_height_ <= 0) {
+            return;
+        }
+        int output_width = 0;
+        int output_height = 0;
+        SDL_GetRendererOutputSize(renderer_, &output_width, &output_height);
+        SDL_Rect destination{0, 0, frame_width_, frame_height_};
+        if (fit_) {
+            const double scale = std::min(
+                static_cast<double>(output_width) / frame_width_,
+                static_cast<double>(output_height) / frame_height_);
+            destination.w = std::max(1, static_cast<int>(frame_width_ * scale));
+            destination.h = std::max(1, static_cast<int>(frame_height_ * scale));
+            destination.x = (output_width - destination.w) / 2;
+            destination.y = (output_height - destination.h) / 2;
+        }
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderClear(renderer_);
+        SDL_RenderCopy(renderer_, texture_, nullptr, &destination);
+        SDL_RenderPresent(renderer_);
+    }
+
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
     SDL_Texture* texture_ = nullptr;
     std::uint32_t window_id_ = 0;
     int texture_width_ = 0;
     int texture_height_ = 0;
+    int frame_width_ = 0;
+    int frame_height_ = 0;
+    bool fit_ = true;
+    bool resizing_ = false;
+    std::uint64_t last_frame_number_ = 0;
 };
 
 } // namespace

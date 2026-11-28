@@ -304,6 +304,7 @@ if(KRDBG_BUILD_TESTS)
         tests/test_settings_host.cpp
         tests/test_scroll.cpp
         tests/test_surface.cpp
+        tests/test_display_dirty.cpp
         tests/test_video_fit.cpp
         tests/test_golden.cpp
         tests/test_version.cpp

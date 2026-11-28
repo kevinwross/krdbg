@@ -1459,11 +1459,14 @@ bottom-right, tabbed with the COM port, and to a separate video window.
   the devices the target exposes: `DISPLAY`, `COM` and `VIDEO`.
   - `DISPLAY` tab: the target's character terminal (`ITextDisplay`), rendered as
     the whole grid with the mono font, per-cell colours and a cursor block. It is
-    the initial tab whenever the target exposes a text display. Key, paste and
-    cell-click input is forwarded to the guest only while the terminal has guest
-    focus (clicking its content), and a `POP OUT` window can show the grid at its
-    natural size. The panel scales the grid to fit; the pop-out window is for
-    reading or playing text games.
+    the initial tab whenever the target exposes a text display. The surface diffs
+    each frame against its previous snapshot and repaints only changed cells plus
+    the old and new cursor cells; a geometry change is the only full rebuild, and
+    the pop-out is presented only when that diff (or its opening) says the display
+    changed. Key, paste and cell-click input is forwarded to the guest only while
+    the terminal has guest focus (clicking its content), and a `POP OUT` window can
+    show the grid at its natural size. The panel scales the grid to fit; the
+    pop-out is aspect-locked (default 640x480) so the grid is never stretched.
   - COM tab title: `IComPort::name()` (for example `COM1`, `UART0`), default
     `COM1`; this is the debug serial byte stream, not the terminal.
   - Video tab title: `VIDEO`. Without a display, the initial tab is `VIDEO` when
@@ -1588,7 +1591,10 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   reaches the guest and then releases guest focus. Debugger function keys
   (`F5`, `F6`, `F9`–`F11`) always reach the debugger, and no single-letter
   shortcut is applied while the terminal has guest focus. `POP OUT` shows the
-  grid at natural size in a separate window. DISPLAY focus and COM focus are
+  grid at natural size in a separate window, aspect-locked to the presented frame
+  (default 640x480). The panel repaints only the cells the diff reports (plus the
+  cursor's old and new cells) and re-presents the pop-out only on a change, not
+  every UI tick. DISPLAY focus and COM focus are
   separate: typing in the terminal never fills the COM input queue and vice
   versa.
 - Statistics: the toolbar always shows `instr`, `time` and `ips`; `CLR` resets
@@ -1669,7 +1675,10 @@ These are reflected in §6.1, §6.2, §6.3, and §7.1.
   when the target has no COM port. Closing it leaves it closed until reopened.
 - Title: `krdbg video`.
 - Default size: 640x480. The window presents the surface's `FIT` (aspect
-  preserving) or `1:1` mode.
+  preserving) or `1:1` mode. The popped-out VIDEO/DISPLAY window is aspect-locked
+  to the current presented frame (640x480 before the first frame): Win32 corrects
+  the tracked RECT in `WM_SIZING`, SDL2 corrects a resize event under a recursion
+  guard. The main debugger window is not constrained.
   Nearest-neighbour, no bilinear filtering.
 - Keyboard and pointer events go to the guest screen; debugger function keys
   (`F5`, `F6`, `F9`–`F11`) are forwarded to the debugger.
