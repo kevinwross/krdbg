@@ -1353,9 +1353,12 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   panes, `Up`/`Down` scroll one row and `Page Up`/`Page Down` scroll 80% of the
   visible rows; a manual scroll stops following until the next step. The source
   file dropdown widens to the longest path within the window and keeps the right
-  side of an overlong path (the file name). The disassembly pane shows at least
-  512 bytes, has a scrollbar, and while following keeps the current instruction
-  between 20% and 80% of the viewport height.
+  side of an overlong path (the file name); displayed and opened source paths
+  use the host's path separator. The disassembly pane shows at least 512 bytes,
+  has a scrollbar, and while following keeps the current instruction between 20%
+  and 80% of the viewport height. The variable inspector opens just to the right
+  of the Variables panel and grows upward from its bottom edge rather than
+  covering the list it describes.
 - Toolbar actions:
   - `RUN` toggles the VM running state (F5). It is green while running and
     normal while stopped; the status bar shows `F5 PAUSE` while running.

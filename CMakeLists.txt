@@ -439,9 +439,9 @@ if(KRDBG_BUILD_TESTS)
             # produces for the same scripted image. Re-recorded 2026-11-27 after
             # the truthful-line/variable compiler rebuild regenerated the image.
             if(WIN32)
-                set(KRDBG_STARTREKNG_HASH "811261FE3A1C2871")
+                set(KRDBG_STARTREKNG_HASH "68D1619C100EE8AB")
             else()
-                set(KRDBG_STARTREKNG_HASH "507B8E948545F669")
+                set(KRDBG_STARTREKNG_HASH "C38648E170E5CE83")
             endif()
             add_test(NAME krdbg_kr232_startrekng_golden
                 COMMAND krdbg_demo --headless

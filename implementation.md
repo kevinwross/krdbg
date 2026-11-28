@@ -1550,6 +1550,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-27T18:20:00-08:00** — **Source/disassembly usability.** The source file dropdown widens to the longest path inside the window and keeps the right side of an overlong path; the disassembly pane decodes a 512-byte window (centered for fixed-width targets, from the function start for variable-width targets), has a scrollbar with wheel/drag, and while following keeps the PC between 20% and 80% of the viewport; hover sets the keyboard target, and Up/Down/Page Up/Page Down scroll the source and disassembly panes (one row / 80% of the viewport). Manual scroll stops following until the next step. Tests: 129/0 unit, CTest 18/18, goldens re-recorded for the changed disassembly layout.
 
+- **2026-11-27T18:30:00-08:00** — **Path separators and inspector placement.** Source paths are normalized to the host's preferred separator for display and file opening (producers can mix drive prefixes and forward-slash include paths). The variable inspector opens just to the right of the Variables panel and grows upward from the panel's bottom edge, sized to its member list within the available space, instead of covering the variables list. kr232 goldens re-recorded for the disassembly layout change; CTest 18/18, unit tests 129/0.
+
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.

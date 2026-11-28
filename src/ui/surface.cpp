@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <deque>
 #include <fstream>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -110,6 +111,18 @@ std::string clip_left(std::string_view text, int pixel_width, FontRole role) {
         --keep;
         result = std::string(kPrefix) + std::string(text.substr(keep));
     }
+    return result;
+}
+
+// Producers can record paths with a mixture of separators (a Windows drive
+// prefix and forward-slash include paths, for example). The filesystem accepts
+// both on Windows but displays poorly and fails elsewhere, so every displayed
+// or opened source path uses the host's preferred separator.
+std::string host_path(std::string_view path) {
+    std::string result(path);
+    const char native = std::filesystem::path::preferred_separator;
+    const char other = native == '/' ? '\\' : '/';
+    std::replace(result.begin(), result.end(), other, native);
     return result;
 }
 
@@ -846,9 +859,10 @@ void DebuggerSurface::Impl::load_source(int index) {
         source_state.text = cached->second;
         return;
     }
-    std::ifstream input(source.path);
+    std::ifstream input(host_path(source.path));
     if (!input) {
-        source_state.text.push_back("(source not found: " + source.path + ")");
+        source_state.text.push_back("(source not found: " + host_path(source.path) +
+                                    ")");
         return;
     }
     std::string line;
@@ -2004,7 +2018,7 @@ void DebuggerSurface::Impl::draw_source_menu(Canvas& canvas) {
         }
         const bool current = static_cast<int>(index) == source_state.index;
         canvas.text(source_state.menu_rect.x + 8, y,
-                    clip_left(sources[index].path,
+                    clip_left(host_path(sources[index].path),
                               source_state.menu_rect.width - 16,
                               FontRole::MonoSmall),
                     current ? ui::theme::kAccent : ui::theme::kText,
@@ -2625,9 +2639,10 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             // side, which is the distinctive file name.
             int longest = static_cast<int>(layout.source_dropdown.width);
             for (const SourceFile& source : sources) {
-                longest = std::max(longest, Canvas::text_width(
-                                                source.path, FontRole::MonoSmall) +
-                                                24);
+                longest = std::max(
+                    longest, Canvas::text_width(host_path(source.path),
+                                                FontRole::MonoSmall) +
+                                 24);
             }
             const int menu_x = layout.source_dropdown.x;
             const int max_width = std::max(160, width - menu_x - 12);
@@ -2810,9 +2825,23 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
                 inspector_variable = row.variable;
                 inspector_member_view = row.member;
                 inspector_open = true;
-                inspector_rect = Rect{
-                    std::clamp(event.x, 0, std::max(0, width - 320)),
-                    std::clamp(event.y, 0, std::max(0, height - 200)), 320, 200};
+                // Open beside the Variables panel, not over it: the left edge
+                // starts just past the panel and the box grows upward from the
+                // panel's bottom edge, capped to the available space.
+                constexpr int kInspectorWidth = 320;
+                const std::vector<MemberView> members =
+                    inspector_member ? session->members(inspector_member_view)
+                                     : session->members(inspector_variable);
+                const int needed = 84 + static_cast<int>(members.size()) * kRowHeight;
+                const int panel_bottom =
+                    layout.variables.y + layout.variables.height;
+                const int available = std::max(160, panel_bottom - 8);
+                const int inspector_height =
+                    std::clamp(needed, 160, available);
+                int x = layout.variables.x + layout.variables.width + 4;
+                x = std::clamp(x, 0, std::max(0, width - kInspectorWidth - 8));
+                const int y = std::max(8, panel_bottom - inspector_height - 4);
+                inspector_rect = Rect{x, y, kInspectorWidth, inspector_height};
             }
             return;
         }
