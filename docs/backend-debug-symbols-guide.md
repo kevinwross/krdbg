@@ -1127,6 +1127,22 @@ Either is acceptable if documented; the failure to avoid is an `F` end that is
 inside the function's body or an end label that resolves to a later function's
 start, because then the line filter and `function_at` disagree about the body.
 
+### 6.4 The builder's debug-location state leaks into the next function's entry
+
+IR builders commonly keep the current source location as builder state, and
+statement emission updates it. Function entry code — parameter spills and
+implicit member/base initializer calls — is emitted before the first statement,
+so it inherits whatever location the previous function happened to leave behind.
+The symptom is subtle: a constructor's prologue maps to the *previous* inline
+function's header line, so source stepping from the constructor's opening line
+jumps into an unrelated header. The durable fixes are (a) reset the builder's
+location to the function definition before emitting entry code, and (b) when a
+function has no definition location, emit an explicit "no source line" marker
+rather than letting the previous line persist. Regression check: the first
+`L` record of every function must name the function definition's file and line,
+and no record in a function body may name a file other than the definition's
+unless the body genuinely contains that source (an inline body defined there).
+
 ---
 
 ## 7. KR232 lessons (target-specific; skip on first read)

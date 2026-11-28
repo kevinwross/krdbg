@@ -1546,6 +1546,8 @@ Recorded 2026-11-20T22:14:07-08:00.
 
 - **2026-11-27T17:05:00-08:00** — **Debug symbols complete for kr232.** The kr232 producer (`923bca2`, `fcbf8f7`) and krdbg consumer (`e71fabf`, `883e328`) are committed with the fixture suite (`49b76e2`, `962968d`) and both startrekng hashes (`a10ca13`). Verification: Windows CTest **18/18**, WSL CTest **18/18**, `krdbg_tests` 126/0, `krdbg_kr232_tests` 58/0, fixture drift **11/11**, `krc_tests` 321/321 (4358 assertions), `GATE WINDOWS: PASS`, `GATE LINUX X64: PASS`; the new startrekng images render `811261FE3A1C2871` (Windows) and `507B8E948545F669` (WSL). The rendered startrekng session shows `weapons.hpp` line 13, `Game::Game`/`main`/`_start` frames, `this`, and 64 globals including internal-linkage symbols. S1.1–S1.8 and GS.1–GS.5 are checked; kr216/future rollout is follow-up using the guide.
 
+- **2026-11-27T17:45:00-08:00** — **Function-entry debug-location fix.** Manual stepping showed a constructor's member initializers attributed to a previous inline destructor's header line (`Game::Game` prologue mapped to `weapons.hpp:13`), so source stepping jumped to unrelated files. KRCompiler `c02c123` resets the IR builder's debug location to the function definition before entry code; regenerated fixture images `a39a232`. `krc_tests` 321/321 (4370 assertions), `krdbg_kr232_tests` 58/0 and CTest 18/18 still pass; the startrekng image now maps the whole `Game::Game` entry to `game.cpp:10` before advancing to 11/12/13. The guide's failure section records the pitfall (6.4).
+
 ## 10. Blocked or external prerequisites
 
 These are not krdbg implementation tasks. A gate that depends on one stays open.
