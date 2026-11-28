@@ -115,6 +115,47 @@ const krdbg::VariableView* find_global(
     return find_variable(globals, name);
 }
 
+// The whole DISPLAY grid as text, one line per row, with NUL cells as spaces.
+std::string display_text(krdbg::ITextDisplay* display) {
+    if (display == nullptr) {
+        return {};
+    }
+    krdbg::TextDisplayView view;
+    if (!display->frame(view)) {
+        return {};
+    }
+    std::string text;
+    text.reserve((static_cast<std::size_t>(view.rows) + 1) *
+                 static_cast<std::size_t>(view.cols));
+    for (int row = 0; row < view.rows; ++row) {
+        for (int col = 0; col < view.cols; ++col) {
+            const std::uint16_t code =
+                view.cells[static_cast<std::size_t>(row) *
+                               static_cast<std::size_t>(view.cols) +
+                           static_cast<std::size_t>(col)]
+                    .code;
+            if (code >= 32 && code < 127) {
+                text.push_back(static_cast<char>(code));
+            } else {
+                text.push_back(code == 0 ? ' ' : '.');
+            }
+        }
+        text.push_back('\n');
+    }
+    return text;
+}
+
+std::string serial_text(krdbg::IComPort* port) {
+    std::string text;
+    if (port == nullptr) {
+        return text;
+    }
+    std::uint8_t byte = 0;
+    while (port->read_output(byte)) {
+        text.push_back(static_cast<char>(byte));
+    }
+    return text;
+}
 } // namespace
 
 // A line breakpoint resolves against the KDBG line table, the run stops on that
@@ -532,3 +573,99 @@ KRDBG_TEST(kr216_scenario_assembly_entry_and_helper) {
         CHECK(!port->read_output(byte));
     }
 }
+
+// The DISPLAY device through the real adapter: printf writes the shared text
+// grid, the host line editor feeds getchar, and the key/click queues feed the
+// display wrappers. The console stays the debug serial stream and carries only
+// the fixture's marker.
+KRDBG_TEST(kr216_scenario_display_stdio_and_debug_serial) {
+    Loaded loaded = load("display.kr216");
+    CHECK(loaded.ok);
+    if (!loaded.ok) {
+        return;
+    }
+    krdbg::DebugSession session = make_session(loaded);
+    krdbg::ITextDisplay* display = session.text_display();
+    CHECK(display != nullptr);
+    if (display == nullptr) {
+        return;
+    }
+
+    // The guest prints its prompt and then blocks polling READ_LINE, so the
+    // budget runs out while it waits for a host line.
+    const krdbg::StopResult waiting = session.run(300000);
+    CHECK(waiting.kind == krdbg::StopKind::Budget);
+    const std::string prompt = display_text(display);
+    CHECK(prompt.find("NAME?") != std::string::npos);
+
+    // Entered through the host line editor: DISPLAY text, not COM bytes.
+    CHECK(display->send_text("ada\n"));
+    const krdbg::StopResult awaiting_key = session.run(300000);
+    CHECK(awaiting_key.kind == krdbg::StopKind::Budget);
+    CHECK(display_text(display).find("HELLO ada") != std::string::npos);
+
+    CHECK(display->send_key('K'));
+    const krdbg::StopResult awaiting_click = session.run(300000);
+    CHECK(awaiting_click.kind == krdbg::StopKind::Budget);
+    CHECK(display_text(display).find("KEY K") != std::string::npos);
+
+    CHECK(display->send_click(2, 3, static_cast<std::uint16_t>(krdbg::TextButton::Left)));
+    const krdbg::StopResult halted = session.run(300000);
+    CHECK(halted.kind == krdbg::StopKind::Halted);
+
+    const std::string screen = display_text(display);
+    CHECK(screen.find("HELLO ada") != std::string::npos);
+    CHECK(screen.find("KEY K") != std::string::npos);
+    CHECK(screen.find("CLICK") != std::string::npos);
+    // The debug serial marker never reaches the display, and stdio never reaches
+    // the serial port.
+    CHECK(screen.find("DBG") == std::string::npos);
+    krdbg::IComPort* port = session.com_port();
+    CHECK(port != nullptr);
+    CHECK_EQ(serial_text(port), std::string("DBG"));
+}
+
+#ifdef KRDBG_KR216_TICTACTOE
+// The real example through the real adapter, built by
+// scripts/build-tictactoe-kr216.ps1 with the current runtime and no shims: the
+// game's printf output is the DISPLAY grid and its getchar input is the host line
+// editor. Standard output never reaches COM.
+KRDBG_TEST(kr216_scenario_tictactoe_display) {
+    std::error_code exists_error;
+    if (!std::filesystem::exists(KRDBG_KR216_TICTACTOE, exists_error)) {
+        return;
+    }
+    Loaded loaded;
+    loaded.ok = krdbg::kr216adapter::load_image(KRDBG_KR216_TICTACTOE, options(),
+                                                loaded.program, loaded.error);
+    CHECK(loaded.ok);
+    if (!loaded.ok) {
+        return;
+    }
+    krdbg::DebugSession session = make_session(loaded);
+    krdbg::ITextDisplay* display = session.text_display();
+    CHECK(display != nullptr);
+    if (display == nullptr) {
+        return;
+    }
+
+    // The board and the first prompt render before the guest blocks on input.
+    CHECK(session.run(400000).kind == krdbg::StopKind::Budget);
+    const std::string opening = display_text(display);
+    CHECK(opening.find("Tic-tac-toe") != std::string::npos);
+    CHECK(opening.find("Your move (1-9):") != std::string::npos);
+
+    // The center move reaches getchar through the display line editor and the
+    // computer answers on the same grid.
+    CHECK(display->send_text("5\n"));
+    CHECK(session.run(400000).kind == krdbg::StopKind::Budget);
+    const std::string after_move = display_text(display);
+    CHECK(after_move.find("The computer plays") != std::string::npos);
+    CHECK(after_move.find('X') != std::string::npos);
+    CHECK(after_move.find('O') != std::string::npos);
+    CHECK(after_move.find("Your move (1-9):") != std::string::npos);
+
+    // stdio is DISPLAY-only: the debug serial stream carries nothing.
+    CHECK_EQ(serial_text(session.com_port()), std::string());
+}
+#endif

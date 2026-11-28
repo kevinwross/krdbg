@@ -77,4 +77,14 @@ Compile-From $repoRoot 'tests/fixtures/kr216/src/symbols_asm.s' "$workText/symbo
 Compile-From $repoRoot 'tests/fixtures/kr216/src/symbols_asm_helper.c' "$workText/symbols_asm_helper.o" @('-O0')
 Link-Fixture 'symbols_asm.kr216' @("$workText/symbols_asm.o", "$workText/symbols_asm_helper.o")
 
+# display.kr216: stdio and input on the shared display. It links the fixture-side
+# ABI wrappers (src/display_abi.c) and the SYS trampolines only: no libc and no
+# sysroot headers, so the committed image is reproducible on Windows and Linux.
+# The fixture also writes a marker to the debug serial console so the adapter
+# tests can prove the two devices are distinct.
+Compile-From $repoRoot 'tests/fixtures/kr216/src/display_abi.c' "$workText/display_abi.o" @('-O0')
+Compile-From $repoRoot 'tests/fixtures/kr216/src/display.c' "$workText/display.o" @('-O0')
+Link-Fixture 'display.kr216' @(
+    "$workText/crt0.o", "$workText/syscalls.o", "$workText/display_abi.o",
+    "$workText/display.o")
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'

@@ -34,6 +34,8 @@ endfunction()
 compile("${WORK}/crt0.o" "${SOURCES}" "targets/kr216/runtime/crt0.s")
 compile("${WORK}/syscalls.o" "${SOURCES}" "targets/kr216/runtime/syscalls.s")
 compile("${WORK}/console_read.o" "${REPO}" "tests/fixtures/kr216/src/console_read.s")
+compile("${WORK}/display_abi.o" "${REPO}" "tests/fixtures/kr216/src/display_abi.c" -O0)
+compile("${WORK}/display.o" "${REPO}" "tests/fixtures/kr216/src/display.c" -O0)
 compile("${WORK}/loaded.o" "${REPO}" "tests/fixtures/kr216/src/loaded.c" -O0)
 compile("${WORK}/symbols_c.o" "${REPO}" "tests/fixtures/kr216/src/symbols_c.c" -O0)
 compile("${WORK}/symbols_cpp.o" "${REPO}" "tests/fixtures/kr216/src/symbols_cpp.cpp" -O0)
@@ -41,7 +43,23 @@ compile("${WORK}/symbols_asm.o" "${REPO}" "tests/fixtures/kr216/src/symbols_asm.
 compile("${WORK}/symbols_asm_helper.o" "${REPO}"
         "tests/fixtures/kr216/src/symbols_asm_helper.c" -O0)
 
-set(failures "")
+# display.kr216 links the fixture-side ABI wrappers and the SYS trampolines; it
+# has no libc and no sysroot headers, so its bytes do not depend on the host.
+execute_process(COMMAND "${KRLD}" --entry=_start
+                        "${WORK}/crt0.o" "${WORK}/syscalls.o"
+                        "${WORK}/display_abi.o" "${WORK}/display.o"
+                        -o "${WORK}/display.kr216"
+                WORKING_DIRECTORY "${REPO}"
+                RESULT_VARIABLE display_state ERROR_VARIABLE display_error)
+if(NOT display_state EQUAL 0)
+    message(FATAL_ERROR "linking display.kr216 failed:\n${display_error}")
+endif()
+file(SHA256 "${FIXTURE_DIR}/display.kr216" display_checked_in)
+file(SHA256 "${WORK}/display.kr216" display_rebuilt)
+if(NOT display_checked_in STREQUAL display_rebuilt)
+    message(FATAL_ERROR "display.kr216 does not match its source")
+endif()
+
 
 # link(<image> <objects...>): links from the repository root with crt0.
 function(link image)

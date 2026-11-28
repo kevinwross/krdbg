@@ -123,21 +123,18 @@ The bottom-right panel has a tab per device the target exposes:
   single-letter shortcut is applied while the terminal has guest focus. `POP
   OUT` shows the grid at natural size.
 
-kr232 does not expose a text display yet: the shared `krc::display` terminal is
-exposed by the host VM in a separate task, and this adapter will wrap it in
-`ITextDisplay` then. The adapter test asserts `text_display() == nullptr` today,
-so the pending hook stays visible.
+kr232 exposes this terminal through the adapter: the machine's shared
+`krc::display` terminal page is wrapped as `ITextDisplay`, so the panel opens on
+DISPLAY, stdio writes and the host line editor read it, and the key/click queues
+receive `send_key`/`send_click`. The console page is the `COM1` tab (the debug
+serial stream), not stdio; a program that wants COM writes the console page
+directly. The display ABI's v2 end-of-input is host state, not a key.
 
-The exact hook (task-25): the adapter implements `ITextDisplay` over the host
-machine's `krc::display::TextDisplay`, so `frame()` copies
-`rows()/cols()/cell(row, col)/cursor_row()/cursor_col()/cursor_visible()` into
-`TextDisplayView`, `send_key(code)` calls
-`push_key(static_cast<std::uint16_t>(code))`, `send_text(text)` calls
-`push_text(text)`, and `send_click(row, col, buttons)` calls
-`push_click(row, col, buttons)`. The display ABI's v2 end-of-input is host state,
-not a key: a later close/Ctrl-D input action should call `close_input()`, never
-send a key for it.
-
+The display stdio test is `kr232_scenario_display_stdio_and_debug_serial` on
+`tests/fixtures/kr232/display.kr232`: the guest writes a prompt with SYS 1,
+the host line editor delivers `ada` through SYS 2, and the guest writes
+`HELLO ada` before a separate `DBG` marker on the console page. The test asserts
+the DISPLAY cells and the empty-COM / non-empty-DISPLAY split.
 ## Settings
 
 The settings dialog exposes two values that change how a load resolves:

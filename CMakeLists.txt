@@ -437,11 +437,13 @@ if(KRDBG_BUILD_TESTS)
             # The image is compiler-built, so its debug payload can differ by
             # host toolchain; record the rendered hash each platform's build
             # produces for the same scripted image. Re-recorded 2026-11-27 after
-            # the truthful-line/variable compiler rebuild regenerated the image.
+            # the display split moved the scripted session's output to the
+            # DISPLAY tab. The image is rebuilt from the current runtime by
+            # scripts/build-startrekng-kr232.ps1 (Windows) and .sh (Linux).
             if(WIN32)
-                set(KRDBG_STARTREKNG_HASH "68D1619C100EE8AB")
+                set(KRDBG_STARTREKNG_HASH "ABD6FCE50FF64EC3")
             else()
-                set(KRDBG_STARTREKNG_HASH "C38648E170E5CE83")
+                set(KRDBG_STARTREKNG_HASH "FE97AAD484F85E7B")
             endif()
             add_test(NAME krdbg_kr232_startrekng_golden
                 COMMAND krdbg_demo --headless
@@ -549,6 +551,21 @@ if(KRDBG_BUILD_TESTS)
         set_tests_properties(krdbg_kr216_status_row PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             PASS_REGULAR_EXPRESSION "status: halted: target exited with code 7")
+        # The real tictactoe example on the DISPLAY, built by
+        # scripts/build-tictactoe-kr216.ps1 (.sh on Linux) into the transient build
+        # tree. Like startrekng, the row is registered only when the image exists.
+        set(KRDBG_KR216_TICTACTOE
+            "${CMAKE_CURRENT_SOURCE_DIR}/build/tictactoe-kr216/tictactoe.kr216")
+        if(EXISTS "${KRDBG_KR216_TICTACTOE}")
+            target_compile_definitions(krdbg_kr216_tests PRIVATE
+                KRDBG_KR216_TICTACTOE="${KRDBG_KR216_TICTACTOE}")
+            add_test(NAME krdbg_kr216_tictactoe
+                COMMAND krdbg_kr216_tests --filter kr216_scenario_tictactoe_display)
+            set_tests_properties(krdbg_kr216_tictactoe PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                # Guards against a misnamed filter passing with no test run.
+                PASS_REGULAR_EXPRESSION "kr216_scenario_tictactoe_display")
+        endif()
     endif()
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         # ARM64 runs the functional checks and records its own hash separately

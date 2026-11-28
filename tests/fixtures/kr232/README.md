@@ -1,6 +1,6 @@
 # KR232 fixtures
 
-Eleven checked-in containers exercise the kr232 adapter and its debug symbols.
+Twelve checked-in containers exercise the kr232 adapter and its debug symbols.
 They are built by `regenerate.ps1` from KRCompiler, kr232 and this repository's
 sources, not hand-made:
 
@@ -8,7 +8,7 @@ sources, not hand-made:
 |---|---|
 | `loaded.kr232` | layout, memory regions and the loaded-state golden |
 | `nested_frames.kr232` | two-frame unwind and a frame-relative local |
-| `session.kr232` | COM output and a committed framebuffer |
+| `session.kr232` | display output and a committed framebuffer |
 | `kernel.kr232` | the kernel the adapter runs a user program under |
 | `userprint.kr232` | a user program that prints through the kernel and exits 3 |
 | `aggregate.kr232` | an array of structs and a scalar global for member expansion |
@@ -17,6 +17,9 @@ sources, not hand-made:
 | `symbols_asm.kr232` | hand-written assembly: physical source lines, `.globl` function with an ENTER frame chain, `.globl` data objects, `.debug_var` local, one `.debug_line`-mapped block |
 | `symbols_include.kr232` | startrekng-shaped include-heavy C++: header-defined classes, members and `this` |
 | `promoted_o1.kr232` | `-O1` home-slot guarantee: a promotion-shaped local listed across its live range, an address-taken local, and a caller-frame read |
+| `display.kr232` | DISPLAY stdio and input: SYS 1 writes the terminal page, SYS 2 reads a host-edited line, and a console-page marker proves COM stays the debug serial |
+
+`display.kr232` links fixture-only SYS trampolines (`display_io.s`) rather than the full C runtime, so it stays small and so the image carries no host-specific sysroot path.
 
 The symbol fixtures' sources live in `tests/fixtures/kr232/src/` and their
 assertions are in `tests/test_kr232_symbols.cpp`. Each image links `crt0` only

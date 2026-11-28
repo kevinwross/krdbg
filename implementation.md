@@ -1253,9 +1253,29 @@ The optional text-terminal interface and the DISPLAY device tab are in `main`
   shortcut isolation, DISPLAY/COM separation and the pop-out; the new
   `goldens/display.hash` captures the DISPLAY tab with the fake grid, and every
   pre-existing golden is unchanged because the fake target's display is opt-in.
-- The kr216 adapter (task-24) and the kr232 adapter (task-25) wire their host
-  machine's shared `krc::display` TextDisplay into `ITextDisplay` later; until
-  then `text_display()` is null and the tab is hidden.
+- The kr216 and kr232 adapters now wrap their machine's shared `krc::display`
+  terminal in `ITextDisplay` (task-26): `frame()` snapshots the grid and cursor,
+  `send_key`/`send_text`/`send_click` call the machine's display push helpers,
+  `layout.has_text_display` is set, and the adapters' fixture drift and unit
+  suites were regenerated against a current KRCompiler prefix (`krc-display`).
+- DISPLAY is live in both adapter builds: `display.kr216` and `display.kr232`
+  drive text and input through the display ABI (prompt, host-edited line,
+  forwarded key and click on kr216) and prove COM carries only the fixture's
+  debug-serial marker; the kr216 fixture links fixture-side ABI wrappers instead
+  of libc, so its bytes are reproducible on Windows and Linux, and
+  `display.kr232` uses the SYS 1/2 stdio path.
+  `kr232_scenario_startrekng` now asserts the display grid and empty COM instead
+  of the old console stream; both fixtures are committed and covered by the
+  drift checks.
+- `scripts/build-tictactoe-kr216.ps1` / `.sh` rebuild KRCompiler's real
+  tictactoe example for kr216 with the current runtime and no getchar/rand shims;
+  when the transient image exists, `krdbg_kr216_tictactoe` runs it through the
+  adapter and asserts the board, the computer's reply and that stdio never
+  reaches COM.
+- Re-recorded goldens after the adapters began defaulting to the DISPLAY tab:
+  `kr232-breakpoint[-linux].hash`, `kr232-variables[-linux].hash` and the two
+  per-platform startrekng hashes in `CMakeLists.txt`; the adapter-free goldens,
+  including `display.hash`, are unchanged.
 ## 9. Evidence log
 
 Record the real command and result. Do not pre-fill expected output.

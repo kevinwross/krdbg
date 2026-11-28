@@ -1,6 +1,6 @@
 # kr216 fixtures
 
-Four checked-in `K216` containers exercise the kr216 adapter. They are built by
+Five checked-in `K216` containers exercise the kr216 adapter. They are built by
 `regenerate.ps1` from KRCompiler's kr216 runtime and this repository's sources,
 not hand-made:
 
@@ -10,14 +10,17 @@ not hand-made:
 | `session.kr216` | file-scope globals and an aggregate, a three-frame ENTER chain with frame-relative locals, console output and input, and an exit status of 7 |
 | `symbols_cpp.kr216` | a class member function's `this` and its locals, and a member global's type record |
 | `symbols_asm.kr216` | a hand-written `_start` (no KDBG records) calling a C helper with source lines and a parameter |
+| `display.kr216` | DISPLAY stdio and input: display_puts writes the shared text display, display_read_line reads a host-edited line, the key and click queues are polled, and a marker proves COM stays the debug serial |
 
 The sources live in `src/` and the assertions are in
-`tests/test_kr216_adapter.cpp` and `tests/test_kr216_scenarios.cpp`. Each image
-links `crt0` only plus the runtime's write trampoline and a fixture-only read
-trampoline (`src/console_read.s`); no libc. Images are 0.8-4 KB. The
-C/C++ fixtures are compiled `-O0` so a named local is in its frame slot at every
-source line; `-O2` is not a supported debug level until the kr216 producer emits
-register locations.
+`tests/test_kr216_adapter.cpp` and `tests/test_kr216_scenarios.cpp`. The minimal
+images link `crt0` plus the runtime's write trampoline and a fixture-only read
+trampoline (`src/console_read.s`); no libc, 0.8-4 KB. `display.kr216` links the
+fixture-side display wrappers `src/display_abi.c` and the SYS trampolines: no
+libc and no sysroot headers, so its bytes are reproducible on Windows and Linux.
+The C/C++ fixtures are compiled `-O0` so a named local is in its frame slot at
+every source line; `-O2` is not a supported debug level until the kr216 producer
+emits register locations.
 
 The C source in the assembly fixture is what gives that image its source lines:
 the kr216 assembler emits no KDBG records for `.s` text (the kr216 producer is a

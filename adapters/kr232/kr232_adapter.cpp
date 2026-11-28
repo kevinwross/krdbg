@@ -7,7 +7,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
+#include <krc/display/text_display.h>
 #include <kr232/decoder.h>
 #include <kr232/loader.h>
 #include <kr232/machine.h>
@@ -112,6 +114,58 @@ public:
 private:
     const kr232::Machine& machine_;
 };
+
+// The machine's shared krc::display terminal page. It is the guest's DISPLAY
+// (printf/getchar and the terminal page), while the console page stays the
+// debug serial stream behind Kr232ComPort. The frame is a snapshot copy because
+// the debugger interface keeps the cells until its next call.
+class Kr232TextDisplay final : public ITextDisplay {
+public:
+    explicit Kr232TextDisplay(kr232::Machine& machine) : machine_(machine) {}
+
+    bool frame(TextDisplayView& out) const override {
+        const krc::display::TextDisplay& display = machine_.display();
+        const int rows = display.rows();
+        const int cols = display.cols();
+        cells_.clear();
+        cells_.reserve(static_cast<std::size_t>(rows) *
+                       static_cast<std::size_t>(cols));
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < cols; ++col) {
+                const krc::display::Cell& cell = display.cell(
+                    static_cast<std::uint16_t>(row),
+                    static_cast<std::uint16_t>(col));
+                cells_.push_back(
+                    TextCell{cell.code, cell.foreground, cell.background});
+            }
+        }
+        out.rows = rows;
+        out.cols = cols;
+        out.cells = std::span<const TextCell>(cells_);
+        out.cursor = TextCursor{display.cursor_row(), display.cursor_col(),
+                                display.cursor_visible()};
+        return true;
+    }
+
+    bool send_key(int key) override {
+        machine_.display().push_key(static_cast<std::uint16_t>(key));
+        return true;
+    }
+    bool send_text(std::string_view text) override {
+        machine_.display().push_text(text);
+        return true;
+    }
+    bool send_click(int row, int col, std::uint16_t buttons) override {
+        machine_.display().push_click(static_cast<std::uint16_t>(row),
+                                      static_cast<std::uint16_t>(col), buttons);
+        return true;
+    }
+
+private:
+    kr232::Machine& machine_;
+    mutable std::vector<TextCell> cells_;
+};
+
 class Kr232Target final : public IDebugTarget {
 public:
     Kr232Target() : layout_(make_layout()) {}
@@ -365,6 +419,12 @@ public:
         }
         return video_.get();
     }
+    ITextDisplay* text_display() override {
+        if (!display_) {
+            display_ = std::make_unique<Kr232TextDisplay>(machine_);
+        }
+        return display_.get();
+    }
 
 private:
     static std::string hex(std::uint8_t value) {
@@ -400,6 +460,9 @@ private:
         layout.variable_instruction_length = true;
         layout.has_framebuffer = true;
         layout.has_com_port = true;
+        // The shared krc::display terminal page is the guest's DISPLAY; the
+        // console page stays the debug serial stream.
+        layout.has_text_display = true;
 
         RegisterGroup gpr;
         gpr.id = "gpr";
@@ -486,6 +549,7 @@ private:
     TargetLayout layout_;
     mutable std::unique_ptr<Kr232ComPort> com_;
     mutable std::unique_ptr<Kr232Video> video_;
+    mutable std::unique_ptr<Kr232TextDisplay> display_;
     kr232::Machine machine_;
     std::vector<std::uint8_t> image_;
     std::uint32_t base_ = 0;

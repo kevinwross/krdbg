@@ -91,15 +91,29 @@ KRDBG_TEST(kr216_adapter_loads_container_and_layout) {
     CHECK_EQ(layout.address_bits, 16U);
     CHECK_EQ(layout.pointer_bits, 16U);
     CHECK(layout.variable_instruction_length);
-    // kr216 has a console (the three-register port) and no video device.
+    // kr216 has a console (the three-register port) and no video device, and its
+    // shared krc::display terminal is the DISPLAY device.
     CHECK(layout.has_com_port);
+    CHECK(layout.has_text_display);
     CHECK(!layout.has_framebuffer);
     CHECK(target.video() == nullptr);
     CHECK(target.com_port() != nullptr);
-    // The shared text display is not wired into the adapter yet (task-24); the
-    // optional interface is null, so the surface keeps its pre-display tabs.
-    CHECK(target.text_display() == nullptr);
-    CHECK(!layout.has_text_display);
+    krdbg::ITextDisplay* display = target.text_display();
+    CHECK(display != nullptr);
+    if (display != nullptr) {
+        krdbg::TextDisplayView view;
+        CHECK(display->frame(view));
+        CHECK_EQ(view.rows, 30);
+        CHECK_EQ(view.cols, 80);
+        CHECK_EQ(view.cells.size(),
+                 static_cast<std::size_t>(view.rows) *
+                     static_cast<std::size_t>(view.cols));
+        CHECK(view.cursor.visible);
+        // A fresh machine's grid is blank white on black.
+        CHECK(view.cells[0].code == 0);
+        CHECK_EQ(view.cells[0].foreground, 0xFFFFFFFFU);
+        CHECK_EQ(view.cells[0].background, 0xFF000000U);
+    }
 
     // One core context, selected by the session.
     const std::vector<krdbg::ContextInfo> contexts = target.contexts();

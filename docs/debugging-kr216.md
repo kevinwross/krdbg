@@ -118,21 +118,22 @@ after which printable keys, Ctrl-V paste, `Backspace`, `Tab`, `Enter`,
 debugger function keys still work and no single-letter shortcut is applied while
 the terminal has guest focus. `POP OUT` shows the grid at natural size.
 
-kr216 does not expose this yet: the shared `krc::display` TextDisplay is being
-added to the host machine in a separate task, and this adapter will wrap it in
-`ITextDisplay` then. Until that lands, the panel has only the COM tab (and a
-VIDEO tab for a target that has a framebuffer).
+kr216 exposes this terminal through the adapter: `Machine::display()` is wrapped
+as `ITextDisplay`, so the panel opens on DISPLAY, printf/getchar from the C
+runtime write and read it, and the key/click queues receive `send_key`/
+`send_click`. The three-register console is the `COM1` tab (the debug serial
+stream), not stdio. The shared display ABI's v2 end-of-input is host state, not a
+key; krdbg does not send a key for it.
 
-The exact hook (task-24): the adapter implements `ITextDisplay` over
-`kr216::Machine::display()`, so `frame()` copies
-`TextDisplay::rows()/cols()/cell(row, col)/cursor_row()/cursor_col()/
-cursor_visible()` into `TextDisplayView`, `send_key(code)` calls
-`TextDisplay::push_key(static_cast<std::uint16_t>(code))`, `send_text(text)` calls
-`push_text(text)`, and `send_click(row, col, buttons)` calls
-`push_click(row, col, buttons)`. The shared display ABI's v2 end-of-input is host
-state, not a key: a later close/Ctrl-D input action should call the display's
-`close_input()`, never send a key value for it.
-
+The real example is covered too: `scripts/build-tictactoe-kr216.ps1` (or `.sh`)
+builds KRCompiler's tictactoe with the current runtime and no shims, and
+`krdbg_kr216_tictactoe` runs it through the adapter when that transient image
+exists.
+The display stdio test is `kr216_scenario_display_stdio_and_debug_serial` on
+`tests/fixtures/kr216/display.kr216`: the guest prints a prompt, the host line
+editor delivers `ada`, the guest prints `HELLO ada`, then consumes a forwarded
+key and click. The test asserts the DISPLAY cells and the separate `DBG` marker
+on COM.
 ## Source and stepping
 
 With the source pane focused, `F10`/`F11` step over/into one source line, and the

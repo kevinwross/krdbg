@@ -89,6 +89,45 @@ bool first_line(krdbg::DebugSession& session, const std::string& function,
     return address != 0 && !file.empty();
 }
 
+// The whole DISPLAY grid as text, one line per row, with NUL cells as spaces.
+std::string display_text(krdbg::ITextDisplay* display) {
+    if (display == nullptr) {
+        return {};
+    }
+    krdbg::TextDisplayView view;
+    if (!display->frame(view)) {
+        return {};
+    }
+    std::string text;
+    for (int row = 0; row < view.rows; ++row) {
+        for (int col = 0; col < view.cols; ++col) {
+            const std::uint16_t code =
+                view.cells[static_cast<std::size_t>(row) *
+                               static_cast<std::size_t>(view.cols) +
+                           static_cast<std::size_t>(col)]
+                    .code;
+            if (code >= 32 && code < 127) {
+                text.push_back(static_cast<char>(code));
+            } else {
+                text.push_back(code == 0 ? ' ' : '.');
+            }
+        }
+        text.push_back('\n');
+    }
+    return text;
+}
+
+std::string serial_text(krdbg::IComPort* port) {
+    std::string text;
+    if (port == nullptr) {
+        return text;
+    }
+    std::uint8_t byte = 0;
+    while (port->read_output(byte)) {
+        text.push_back(static_cast<char>(byte));
+    }
+    return text;
+}
 } // namespace
 
 // A1/A4/A5: the image opens on a source line, a line breakpoint stops the run
@@ -192,7 +231,8 @@ KRDBG_TEST(kr232_scenario_registers_memory_and_disassembly) {
     CHECK(!instruction.mnemonic.empty());
 }
 
-// A10/A11: the session fixture writes a console byte and commits a frame.
+// A10/A11: the session fixture writes a display byte and commits a frame. The
+// console page is the debug serial stream, so it carries nothing here.
 KRDBG_TEST(kr232_scenario_devices) {
     Loaded loaded = load("session.kr232");
     CHECK(loaded.ok);
@@ -202,15 +242,15 @@ KRDBG_TEST(kr232_scenario_devices) {
     krdbg::DebugSession session = make_session(loaded);
     CHECK(session.com_port() != nullptr);
     CHECK(session.video() != nullptr);
-    if (session.com_port() == nullptr || session.video() == nullptr) {
+    CHECK(session.text_display() != nullptr);
+    if (session.com_port() == nullptr || session.video() == nullptr ||
+        session.text_display() == nullptr) {
         return;
     }
     // The fixture writes one byte, draws and flips, then exits 7.
     (void)session.run(1000000);
-    std::uint8_t byte = 0;
-    CHECK(session.com_port()->read_output(byte));
-    CHECK_EQ(byte, static_cast<std::uint8_t>('A'));
-    CHECK(!session.com_port()->read_output(byte));
+    CHECK(display_text(session.text_display()).find('A') != std::string::npos);
+    CHECK_EQ(serial_text(session.com_port()), std::string());
 
     krdbg::FramebufferView frame;
     CHECK(session.video()->frame(frame));
@@ -373,14 +413,22 @@ KRDBG_TEST(kr232_scenario_startrekng) {
     const krdbg::StopResult finished = completion.run(20000000);
     CHECK(finished.kind == krdbg::StopKind::Halted ||
           finished.kind == krdbg::StopKind::Fault);
-    std::size_t output_bytes = 0;
-    if (completion.com_port() != nullptr) {
-        std::uint8_t byte = 0;
-        while (completion.com_port()->read_output(byte)) {
-            ++output_bytes;
+    // The scripted session prints through stdio, which the kr232 runtime routes
+    // to the DISPLAY terminal page; the console page is the debug serial stream
+    // now, so it stays empty unless the guest writes it directly.
+    krdbg::ITextDisplay* display = completion.text_display();
+    CHECK(display != nullptr);
+    std::size_t display_chars = 0;
+    if (display != nullptr) {
+        const std::string screen = display_text(display);
+        for (char character : screen) {
+            if (character != ' ' && character != '\n' && character != '.') {
+                ++display_chars;
+            }
         }
     }
-    CHECK(output_bytes > 0);
+    CHECK(display_chars > 0);
+    CHECK_EQ(serial_text(completion.com_port()), std::string());
 }
 // A6: globals and aggregate expansion. The fixture has `struct Point
 // points[2]` and `int total`; krc emits the type records and sized G records, so
@@ -422,4 +470,43 @@ KRDBG_TEST(kr232_scenario_globals_and_members) {
             CHECK(fields[1].name == "y");
         }
     }
+}
+// The DISPLAY device through the real kr232 adapter: printf writes the shared
+// terminal page, the host line editor feeds getchar, and the console page stays
+// the debug serial stream. The key/click queues are host input for the display;
+// the kr232 runtime exposes line input, so those are asserted through the
+// interface contract rather than a guest poll.
+KRDBG_TEST(kr232_scenario_display_stdio_and_debug_serial) {
+    Loaded loaded = load("display.kr232");
+    CHECK(loaded.ok);
+    if (!loaded.ok) {
+        return;
+    }
+    krdbg::DebugSession session = make_session(loaded);
+    krdbg::ITextDisplay* display = session.text_display();
+    CHECK(display != nullptr);
+    if (display == nullptr) {
+        return;
+    }
+
+    const krdbg::StopResult waiting = session.run(300000);
+    CHECK(waiting.kind == krdbg::StopKind::Budget);
+    CHECK(display_text(display).find("NAME?") != std::string::npos);
+
+    CHECK(display->send_text("ada\n"));
+    const krdbg::StopResult halted = session.run(500000);
+    CHECK(halted.kind == krdbg::StopKind::Halted);
+
+    const std::string screen = display_text(display);
+    CHECK(screen.find("HELLO ada") != std::string::npos);
+    CHECK(screen.find("DBG") == std::string::npos);
+    krdbg::IComPort* port = session.com_port();
+    CHECK(port != nullptr);
+    CHECK_EQ(serial_text(port), std::string("DBG"));
+
+    // Host key and cell-click input is accepted by the display even when the
+    // guest has halted; the interface reports the queue as available.
+    CHECK(display->send_key(static_cast<int>(krdbg::TextKey::Enter)));
+    CHECK(display->send_click(
+        2, 3, static_cast<std::uint16_t>(krdbg::TextButton::Left)));
 }

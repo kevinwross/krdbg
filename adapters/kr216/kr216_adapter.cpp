@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "krdbg/kdbg.h"
+#include "krc/display/text_display.h"
 #include "kr216/encoding.h"
 #include "kr216/image.h"
 #include "kr216/machine.h"
@@ -186,6 +187,60 @@ private:
     kr216::Machine& machine_;
     std::size_t output_position_ = 0;
     bool input_pending_ = false;
+};
+
+// The machine's shared krc::display terminal (SYS 5 and the runtime's stdio).
+// It is a separate device from the console/debug serial port: printf and
+// getchar travel here while SYS 1/2 console bytes stay on Kr216ComPort. The
+// frame is a snapshot copy because the debugger interface keeps the cells until
+// its next call, and the machine keeps rewriting the live grid while it runs.
+class Kr216TextDisplay final : public ITextDisplay {
+public:
+    explicit Kr216TextDisplay(kr216::Machine& machine) : machine_(machine) {}
+
+    bool frame(TextDisplayView& out) const override {
+        const krc::display::TextDisplay& display = machine_.display();
+        const int rows = display.rows();
+        const int cols = display.cols();
+        cells_.clear();
+        cells_.reserve(static_cast<std::size_t>(rows) *
+                       static_cast<std::size_t>(cols));
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < cols; ++col) {
+                const krc::display::Cell& cell = display.cell(
+                    static_cast<std::uint16_t>(row),
+                    static_cast<std::uint16_t>(col));
+                cells_.push_back(
+                    TextCell{cell.code, cell.foreground, cell.background});
+            }
+        }
+        out.rows = rows;
+        out.cols = cols;
+        out.cells = std::span<const TextCell>(cells_);
+        out.cursor = TextCursor{display.cursor_row(), display.cursor_col(),
+                                display.cursor_visible()};
+        return true;
+    }
+
+    bool send_key(int key) override {
+        // The guest's device key values are 16-bit cell/control codes; a
+        // printable code point arrives here as its code point.
+        machine_.display().push_key(static_cast<std::uint16_t>(key));
+        return true;
+    }
+    bool send_text(std::string_view text) override {
+        machine_.display().push_text(text);
+        return true;
+    }
+    bool send_click(int row, int col, std::uint16_t buttons) override {
+        machine_.display().push_click(static_cast<std::uint16_t>(row),
+                                      static_cast<std::uint16_t>(col), buttons);
+        return true;
+    }
+
+private:
+    kr216::Machine& machine_;
+    mutable std::vector<TextCell> cells_;
 };
 
 // The frame chain ENTER builds is [FP] = saved caller FP and [FP + 2] = return
@@ -484,6 +539,12 @@ public:
         return com_.get();
     }
     const IVideoSource* video() const override { return nullptr; }
+    ITextDisplay* text_display() override {
+        if (!display_) {
+            display_ = std::make_unique<Kr216TextDisplay>(machine_);
+        }
+        return display_.get();
+    }
 
     bool load_image(const std::string& path, const Options& options,
                     std::string& error) {
@@ -558,6 +619,9 @@ private:
         layout_.little_endian = true;
         layout_.step_unit = "instructions";
         layout_.has_com_port = true;
+        // The shared krc::display terminal is the guest's DISPLAY; the console
+        // above stays the debug serial stream.
+        layout_.has_text_display = true;
         // kr216 has no framebuffer device: kr216-plan.md section 11.8 says
         // `video()` returns null and the console maps to IComPort directly.
         layout_.has_framebuffer = false;
@@ -674,8 +738,9 @@ private:
 
     kr216::Machine machine_;
     // Constructed lazily and declared after the machine, so it is destroyed
-    // before the machine whose console it reads.
+    // before the machine whose console or display it reads.
     mutable std::unique_ptr<Kr216ComPort> com_;
+    mutable std::unique_ptr<Kr216TextDisplay> display_;
     kr216::Image image_;
     std::vector<std::uint8_t> bytes_;
     TargetLayout layout_;

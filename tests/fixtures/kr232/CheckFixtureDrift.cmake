@@ -44,6 +44,11 @@ compile("${WORK}/gfx.o" "${SOURCES}" "targets/kr232/runtime/gfx.c"
         -I "sysroot/kr232/include")
 compile("${WORK}/kernel.o" "${KR232}" "targets/kr232/kernel/kernel.s")
 compile("${WORK}/userprint.o" "${FIXTURE_DIR}" "userprint.s")
+# display.kr232 uses fixture-only SYS trampolines: standard output/input go
+# through the display, and a console-page marker proves the debug-serial split.
+compile("${WORK}/crt0_far.o" "${SOURCES}" "targets/kr232/runtime/crt0.s" --far-calls)
+compile("${WORK}/display.o" "${REPO}" "tests/fixtures/kr232/src/display.c"
+        --far-calls)
 
 # Symbol fixtures (tests/test_kr232_symbols.cpp). Same recipe as
 # regenerate.ps1: compiled from REPO so the recorded path is
@@ -125,6 +130,22 @@ foreach(image IN ITEMS "kernel.kr232" "userprint.kr232" "symbols_asm.kr232")
     endif()
 endforeach()
 
+# display.kr232: standard output/input on the shared display, with a console-page
+# marker for the debug-serial split. Fixture-only SYS trampolines keep it small.
+compile("${WORK}/display_io.o" "${FIXTURE_DIR}" "display_io.s" --far-calls)
+execute_process(COMMAND "${KRLD}" --entry=_start
+                        "${WORK}/crt0_far.o" "${WORK}/display_io.o"
+                        "${WORK}/display.o"
+                        -o "${WORK}/display.kr232"
+                RESULT_VARIABLE display_state ERROR_VARIABLE display_error)
+if(NOT display_state EQUAL 0)
+    message(FATAL_ERROR "linking display.kr232 failed:\n${display_error}")
+endif()
+file(SHA256 "${FIXTURE_DIR}/display.kr232" display_checked_in)
+file(SHA256 "${WORK}/display.kr232" display_rebuilt)
+if(NOT display_checked_in STREQUAL display_rebuilt)
+    string(APPEND failures "  display.kr232 does not match its source\n")
+endif()
 if(NOT failures STREQUAL "")
     message(FATAL_ERROR "fixtures do not match their sources:\n${failures}")
 endif()

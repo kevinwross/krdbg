@@ -98,4 +98,13 @@ Link-Fixture $repo 'promoted_o1.kr232' @("$workText/crt0.o", "$workText/promoted
 # The assembly fixture defines its own _start, so it links without crt0.
 Link-Fixture $repo 'symbols_asm.kr232' @("$workText/symbols_asm.o")
 
+# display.kr232: standard output/input on the shared display terminal page. The
+# fixture uses fixture-only SYS trampolines (display_io.s) instead of the full C
+# runtime, so the committed image stays small; it writes a marker to the console
+# page (the debug serial) so the adapter tests can prove the devices are distinct.
+Compile-From $sourcesRoot 'targets/kr232/runtime/crt0.s' "$workText/crt0_far.o" @('--far-calls')
+Compile-From $fixtureRoot 'display_io.s' "$workText/display_io.o" @('--far-calls')
+Compile-From $repo 'tests/fixtures/kr232/src/display.c' "$workText/display.o" @('--far-calls')
+Link-Fixture $repo 'display.kr232' @(
+    "$workText/crt0_far.o", "$workText/display_io.o", "$workText/display.o")
 Write-Host 'fixtures rebuilt; the adapter tests read them by name'

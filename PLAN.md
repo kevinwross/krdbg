@@ -1880,11 +1880,10 @@ Wraps `kr216::Machine`, its image loader, decoder and disassembler:
 - Disassembly: kr216's decoder; instructions are 1–6 bytes and the view advances
   by decoded length.
 - Unwind: the kr216 frame layout.
-- Devices: the three-register console as `IComPort`; no framebuffer. The optional
-  `text_display()` is null in v1 because the host machine does not expose the
-  shared `krc::display` terminal yet (the kr216 task that adds it is separate);
-  when it does, the adapter wraps it in `ITextDisplay` and the surface gains its
-  DISPLAY tab with no UI change. COM stays the debug serial stream.
+- Devices: the three-register console as `IComPort` (the debug serial stream) and
+  the machine's shared `krc::display` terminal as `ITextDisplay` (DISPLAY:
+  printf/getchar, key and click queues); no framebuffer. `layout.has_text_display`
+  is true, so the surface opens on the DISPLAY tab.
 - Coverage: the adapter has no committed fixture, test file or golden. The
   two-adapter configure links it so the render goldens are measured with an
   adapter present, not to test its behavior.
@@ -1904,11 +1903,11 @@ Wraps `kr232::Machine`, its container loader, decoder and disassembler:
   length.
 - Unwind: the EFP chain, with `FunctionInfo::frame` zero and the payload's
   signed frame offsets copied as-is.
-- Devices: the three-register COM port over page 2 and the committed framebuffer
-  as `IVideoSource`. The optional `text_display()` is null in v1; the shared
-  `krc::display` terminal is exposed by the host VM in a separate task, and the
-  adapter will wrap it in `ITextDisplay` then. With a display present the surface
-  opens on the DISPLAY tab; COM remains the debug serial stream.
+- Devices: the three-register COM port over the console page (the debug serial
+  stream), the committed framebuffer as `IVideoSource`, and the shared
+  `krc::display` terminal page as `ITextDisplay` (DISPLAY: stdio, line editor and
+  key queue). With a display present the surface opens on the DISPLAY tab; COM
+  remains the debug serial stream.
 - Coverage: `tests/test_kr232_adapter.cpp` and its fixtures, plus
   `goldens/kr232-loaded.hash`, are a separate test binary so the render goldens
   stay adapter-independent. The host build chain builds kr232 sources.
@@ -2151,10 +2150,9 @@ and tracked in `implementation.md` §8.1:
 - kr232: full adapter with COM, framebuffer, kernel/user load, fixtures and a
   golden.
 - Text display: the optional `ITextDisplay` interface, the DISPLAY tab, the fake
-  display source, unit tests and a display golden are in `main`. The host VMs
-  expose their shared `krc::display` TextDisplay in separate tasks; each adapter
-  then wraps it in `ITextDisplay` and the tab appears with no UI change. COM
-  remains the debug serial stream.
+  display source, unit tests and a display golden are in `main`. The kr216 and
+  kr232 adapters wrap their machine's shared `krc::display` terminal, so DISPLAY
+  is live in both debugger builds; COM is the debug serial stream.
 - Remaining: a kr216 fixture, test and golden; a gate that builds all four
   adapters; and kr216/kr232 coverage in the platform boundary check.
 - DAP server from the same session.

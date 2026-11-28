@@ -19,6 +19,46 @@ std::string fixture_path() {
     return std::string(KRDBG_KR232_FIXTURE);
 }
 
+// The DISPLAY grid as text, one line per row, with NUL cells as spaces.
+std::string display_text(krdbg::ITextDisplay* display) {
+    if (display == nullptr) {
+        return {};
+    }
+    krdbg::TextDisplayView view;
+    if (!display->frame(view)) {
+        return {};
+    }
+    std::string text;
+    for (int row = 0; row < view.rows; ++row) {
+        for (int col = 0; col < view.cols; ++col) {
+            const std::uint16_t code =
+                view.cells[static_cast<std::size_t>(row) *
+                               static_cast<std::size_t>(view.cols) +
+                           static_cast<std::size_t>(col)]
+                    .code;
+            if (code >= 32 && code < 127) {
+                text.push_back(static_cast<char>(code));
+            } else {
+                text.push_back(code == 0 ? ' ' : '.');
+            }
+        }
+        text.push_back('\n');
+    }
+    return text;
+}
+
+std::string serial_text(krdbg::IComPort* port) {
+    std::string text;
+    if (port == nullptr) {
+        return text;
+    }
+    std::uint8_t byte = 0;
+    while (port->read_output(byte)) {
+        text.push_back(static_cast<char>(byte));
+    }
+    return text;
+}
+
 } // namespace
 
 KRDBG_TEST(kr232_adapter_loads_container_and_layout) {
@@ -281,19 +321,30 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
     const krdbg::TargetLayout& layout = loaded.target->layout(0);
     CHECK(layout.has_com_port);
     CHECK(layout.has_framebuffer);
-    // The shared text display is not wired into the adapter yet (task-25); the
-    // optional interface is null, so the surface keeps its pre-display tabs.
-    CHECK(loaded.target->text_display() == nullptr);
-    CHECK(!layout.has_text_display);
+    // The shared krc::display terminal page is DISPLAY; the console page stays
+    // the debug serial stream behind COM.
+    CHECK(layout.has_text_display);
+    krdbg::ITextDisplay* display = loaded.target->text_display();
+    CHECK(display != nullptr);
+    if (display != nullptr) {
+        krdbg::TextDisplayView view;
+        CHECK(display->frame(view));
+        CHECK(view.rows > 0);
+        CHECK(view.cols > 0);
+        CHECK_EQ(view.cells.size(),
+                 static_cast<std::size_t>(view.rows) *
+                     static_cast<std::size_t>(view.cols));
+        CHECK(view.cursor.visible);
+    }
     krdbg::IComPort* com = loaded.target->com_port();
     CHECK(com != nullptr);
-    if (com != nullptr) {
-        std::uint8_t byte = 0;
-        CHECK(com->read_output(byte));
-        CHECK_EQ(byte, 65U);  // 'A'
-        // The queue is drained now, so a second read finds nothing.
-        CHECK(!com->read_output(byte));
+    // The fixture's console byte is standard output now, which the runtime routes
+    // to the DISPLAY terminal page; the console page is the debug serial stream
+    // and stays empty.
+    if (display != nullptr) {
+        CHECK(display_text(display).find('A') != std::string::npos);
     }
+    CHECK_EQ(serial_text(com), std::string());
 
     const krdbg::IVideoSource* video = loaded.target->video();
     CHECK(video != nullptr);
@@ -334,14 +385,18 @@ KRDBG_TEST(kr232_com_status_tracks_the_console) {
     CHECK(status.tx_ready);
     CHECK(!status.overrun);
 
-    // The guest writes 'A' and halts. The console page has no output-side status
-    // bit (TX_READY is constant), so the output evidence is read_output; the
-    // status word still reports TX ready and no debugger-supplied RX.
+    // The guest's standard output goes to the DISPLAY terminal page, not to the
+    // console page, so the debug serial stream stays empty while the display has
+    // the byte. The console page has no output-side status bit (TX_READY is
+    // constant), so the output evidence is the device split itself.
     const krdbg::StopResult ran = loaded.target->run(1000000);
     CHECK(ran.kind == krdbg::StopKind::Halted);
-    std::uint8_t byte = 0;
-    CHECK(com->read_output(byte));
-    CHECK_EQ(byte, 65U);
+    CHECK_EQ(serial_text(com), std::string());
+    krdbg::ITextDisplay* display = loaded.target->text_display();
+    CHECK(display != nullptr);
+    if (display != nullptr) {
+        CHECK(display_text(display).find('A') != std::string::npos);
+    }
     status = com->status();
     CHECK(status.tx_ready);
     CHECK(!status.rx_ready);
