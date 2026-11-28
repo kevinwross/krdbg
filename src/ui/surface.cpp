@@ -4028,9 +4028,10 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
             state.offset = ui::clamp_scroll(state.offset + delta, state.content,
                                             state.visible);
             state.autoscroll = false;
-            return true;
         }
-        return false;
+        // A key event must be consumed: a false return means "quit" to the
+        // window loop, so unhandled arrows would close the debugger.
+        return true;
     case platform::key::PageUp:
     case platform::key::PageDown: {
         if (focus == SurfacePanel::Memory) {
@@ -4053,9 +4054,9 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
             state.offset = ui::clamp_scroll(state.offset + delta, state.content,
                                             state.visible);
             state.autoscroll = false;
-            return true;
         }
-        return false;
+        // Consume the key even outside the scrollable panels; see Up/Down.
+        return true;
     }
     case platform::key::F5:
         running = !running;

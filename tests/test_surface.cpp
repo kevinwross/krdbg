@@ -271,6 +271,26 @@ KRDBG_TEST(surface_source_dropdown_stays_inside_the_window) {
     scene.send_key(krdbg::platform::key::Escape);
 }
 
+// Key events must be consumed even where they do nothing: the window loop treats
+// a false return as "quit", so an arrow key over a non-scrollable panel would
+// close the debugger.
+KRDBG_TEST(surface_arrow_keys_never_quit) {
+    krdbg::test::TestScene scene(true);
+    const krdbg::Rect variables = scene.surface->layout().variables;
+    Event mousemove;
+    mousemove.kind = Event::Kind::MouseMove;    mousemove.x = variables.x + 20;
+    mousemove.y = variables.y + 40;
+    CHECK(scene.surface->handle_event(mousemove));
+    for (int key : {krdbg::platform::key::Up, krdbg::platform::key::Down,
+                    krdbg::platform::key::PageUp,
+                    krdbg::platform::key::PageDown}) {
+        Event press;
+        press.kind = Event::Kind::KeyDown;
+        press.key = key;
+        CHECK(scene.surface->handle_event(press));
+    }
+}
+
 KRDBG_TEST(surface_state_edits_a_register_value) {
     krdbg::test::TestScene scene(true);
     const krdbg::Rect state = scene.surface->layout().state;
