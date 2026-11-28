@@ -453,8 +453,18 @@ if(KRDBG_BUILD_TESTS)
                 PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_STARTREKNG_HASH}")
         endif()
         # P2 kr232 state goldens: a breakpoint set without executing and the
-        # settings dialog over a real image. Both render deterministic states.
-        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-breakpoint.hash"
+        # settings dialog over a real image. The breakpoint/variables states
+        # render the resolved source path, so the frame hash differs between
+        # Windows and Linux; each platform records its own value (the settings
+        # state has no path-bearing text and stays cross-platform).
+        if(WIN32)
+            set(_kr232_breakpoint_golden goldens/kr232-breakpoint.hash)
+            set(_kr232_variables_golden goldens/kr232-variables.hash)
+        else()
+            set(_kr232_breakpoint_golden goldens/kr232-breakpoint-linux.hash)
+            set(_kr232_variables_golden goldens/kr232-variables-linux.hash)
+        endif()
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${_kr232_breakpoint_golden}"
              KRDBG_KR232_BREAKPOINT_HASH)
         file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-settings.hash"
              KRDBG_KR232_SETTINGS_HASH)
@@ -474,7 +484,7 @@ if(KRDBG_BUILD_TESTS)
         set_tests_properties(krdbg_kr232_settings_golden PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             PASS_REGULAR_EXPRESSION "frame hash ${KRDBG_KR232_SETTINGS_HASH}")
-        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/goldens/kr232-variables.hash"
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${_kr232_variables_golden}"
              KRDBG_KR232_VARIABLES_HASH)
         string(STRIP "${KRDBG_KR232_VARIABLES_HASH}" KRDBG_KR232_VARIABLES_HASH)
         add_test(NAME krdbg_kr232_variables_golden
