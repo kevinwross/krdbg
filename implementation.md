@@ -1225,6 +1225,37 @@ Gate GS216:
 
 ---
 
+### 8.6 T1 — text display and the DISPLAY tab
+
+The optional text-terminal interface and the DISPLAY device tab are in `main`
+(task-23), without wiring any VM adapter:
+
+- `target.h` adds `TextCell`, `TextCursor`, `TextDisplayView`, `TextKey`,
+  `TextButton`, `ITextDisplay` and `IDebugTarget::text_display()`, plus
+  `TargetLayout::has_text_display`. All default to null/false, so every adapter
+  that does not implement a terminal is unchanged; the kr216 and kr232 adapter
+  tests assert the null.
+- `DebugSession::text_display()` exposes it. The bottom-right device panel is now
+  a tab strip of the devices a target provides: `DISPLAY` first and the default
+  when present, then `COM1` (debug serial) and `VIDEO`. DISPLAY renders the whole
+  grid with the mono font, per-cell XRGB colours and an inverse cursor, scaled to
+  fit, and `POP OUT` shows it at natural size in the auxiliary window.
+- Guest input routing: clicking the grid grants terminal guest focus; printable
+  keys, Ctrl-V paste (CRLF→LF), Backspace 8, Tab 9, Enter 13, Left 0x0102,
+  Right 0x0103 and Escape 27 are forwarded as device key values, and a
+  cell-coordinate click carries the left/right/middle bit. `Escape` reaches the
+  guest and then releases focus. Function keys F5/F6/F9–F11 still reach the
+  debugger, and no single-letter debugger shortcut applies while the terminal has
+  guest focus. DISPLAY and COM input never share a queue.
+- Tests: `fake_target` grew an opt-in `FakeTextDisplay` (deterministic
+  tic-tac-toe grid plus recorded keys/text/clicks); new unit tests cover the
+  optional interface, deterministic rendering, key/paste/click forwarding,
+  shortcut isolation, DISPLAY/COM separation and the pop-out; the new
+  `goldens/display.hash` captures the DISPLAY tab with the fake grid, and every
+  pre-existing golden is unchanged because the fake target's display is opt-in.
+- The kr216 adapter (task-24) and the kr232 adapter (task-25) wire their host
+  machine's shared `krc::display` TextDisplay into `ITextDisplay` later; until
+  then `text_display()` is null and the tab is hidden.
 ## 9. Evidence log
 
 Record the real command and result. Do not pre-fill expected output.

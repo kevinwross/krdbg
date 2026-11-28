@@ -281,6 +281,10 @@ KRDBG_TEST(kr232_adapter_exposes_com_and_video) {
     const krdbg::TargetLayout& layout = loaded.target->layout(0);
     CHECK(layout.has_com_port);
     CHECK(layout.has_framebuffer);
+    // The shared text display is not wired into the adapter yet (task-25); the
+    // optional interface is null, so the surface keeps its pre-display tabs.
+    CHECK(loaded.target->text_display() == nullptr);
+    CHECK(!layout.has_text_display);
     krdbg::IComPort* com = loaded.target->com_port();
     CHECK(com != nullptr);
     if (com != nullptr) {

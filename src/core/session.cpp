@@ -885,6 +885,10 @@ const IVideoSource* DebugSession::video() const {
     return impl_->target != nullptr ? impl_->target->video() : nullptr;
 }
 
+ITextDisplay* DebugSession::text_display() {
+    return impl_->target != nullptr ? impl_->target->text_display() : nullptr;
+}
+
 const LineInfo* DebugSession::line_at(std::uint64_t pc) const {
     return detail::find_line(info(), pc);
 }

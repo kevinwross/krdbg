@@ -83,9 +83,15 @@ struct SurfaceLayout {
 
     Rect video_tab_com;
     Rect video_tab_video;
+    // The DISPLAY tab of the same bottom-right device panel. The COM and VIDEO
+    // tab rectangles keep their historical field names; DISPLAY is first in the
+    // strip when the target exposes ITextDisplay.
+    Rect video_tab_display;
     Rect video_pop_out;
     Rect video_fit;
     Rect video_preview;
+    // The same content rectangle as video_preview, named for the display source.
+    Rect display_preview;
 
     // Settings dialog controls (valid while the dialog is open).
     Rect settings_dialog;
@@ -190,6 +196,12 @@ public:
     [[nodiscard]] int selected_frame() const;
     [[nodiscard]] bool settings_open() const;
     [[nodiscard]] bool video_popped() const;
+    // Text display state (PLAN.md §4.11): DISPLAY is the default device tab when
+    // the target exposes ITextDisplay, and clicking its content grants the guest
+    // keyboard focus without consuming debugger function keys.
+    [[nodiscard]] bool display_tab_active() const;
+    [[nodiscard]] bool display_guest_focus() const;
+    [[nodiscard]] bool display_popped() const;
     [[nodiscard]] std::uint64_t memory_base() const;
     [[nodiscard]] std::string com_text() const;
     [[nodiscard]] int com_queued() const;

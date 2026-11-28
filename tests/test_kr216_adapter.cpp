@@ -96,6 +96,10 @@ KRDBG_TEST(kr216_adapter_loads_container_and_layout) {
     CHECK(!layout.has_framebuffer);
     CHECK(target.video() == nullptr);
     CHECK(target.com_port() != nullptr);
+    // The shared text display is not wired into the adapter yet (task-24); the
+    // optional interface is null, so the surface keeps its pre-display tabs.
+    CHECK(target.text_display() == nullptr);
+    CHECK(!layout.has_text_display);
 
     // One core context, selected by the session.
     const std::vector<krdbg::ContextInfo> contexts = target.contexts();

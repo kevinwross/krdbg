@@ -67,6 +67,7 @@ struct TargetLayout {
     std::vector<MemoryRegion> memory;
     bool has_framebuffer = false;
     bool has_com_port = false;
+    bool has_text_display = false;
 };
 
 enum class ContextKind { Core, Thread };
@@ -107,6 +108,54 @@ struct FramebufferView {
     std::span<const std::uint8_t> pixels;  // XRGB8888 or ARGB8888
 };
 
+// One cell of a host text terminal. The code is the display's 16-bit cell code
+// (8-bit ASCII today); the colours are XRGB8888 and the high byte is not
+// interpreted, so there is no alpha blending. See PLAN.md §4.11.
+struct TextCell {
+    std::uint16_t code = 0;
+    std::uint32_t foreground = 0xFFFFFFFFu;
+    std::uint32_t background = 0xFF000000u;
+
+    bool operator==(const TextCell&) const = default;
+};
+
+struct TextCursor {
+    int row = 0;
+    int col = 0;
+    bool visible = true;
+
+    bool operator==(const TextCursor&) const = default;
+};
+
+// A snapshot of the whole terminal grid. `cells` is row-major, rows * cols
+// entries, and stays valid until the next frame() call on the same source.
+struct TextDisplayView {
+    int rows = 0;
+    int cols = 0;
+    std::span<const TextCell> cells;
+    TextCursor cursor;
+};
+
+// Guest key codes forwarded to a text display. They are neutral device values,
+// not a platform key namespace: printable input travels as its code point
+// through ITextDisplay::send_key(), and only the non-printable keys below are
+// enumerated.
+enum class TextKey : int {
+    Backspace = 8,
+    Tab = 9,
+    Enter = 13,
+    Escape = 27,
+    Left = 0x0102,
+    Right = 0x0103,
+};
+
+// The button bits of a cell-coordinate click. The wheel is not reported.
+enum class TextButton : std::uint16_t {
+    Left = 1,
+    Right = 2,
+    Middle = 4,
+};
+
 enum class StopKind { Retired, Halted, Fault, Budget, Interrupted };
 struct StopResult {
     StopKind kind = StopKind::Retired;
@@ -141,6 +190,26 @@ public:
     virtual ~IVideoSource() = default;
     virtual bool frame(FramebufferView& out) const = 0;
     virtual std::uint64_t framebuffer_base() const { return 0; }
+};
+
+// A host text terminal: the VM's character-cell display and its own input
+// channel. The target owns the screen; the debugger renders the cells and
+// forwards guest input. It is independent of IComPort and IVideoSource (PLAN.md
+// §1.1 and §4.11).
+class ITextDisplay {
+public:
+    virtual ~ITextDisplay() = default;
+    virtual std::string name() const { return "DISPLAY"; }
+    // Fills the view with the current grid and cursor. The referenced cells stay
+    // valid until the next frame() call on this object. False when there is no
+    // frame to show.
+    virtual bool frame(TextDisplayView& out) const = 0;
+    // Guest input. send_key() takes a printable code point or a TextKey value;
+    // send_text() types a whole string; send_click() reports a cell coordinate
+    // and a TextButton mask. Returns false when the target refuses the input.
+    virtual bool send_key(int key) = 0;
+    virtual bool send_text(std::string_view text) = 0;
+    virtual bool send_click(int row, int col, std::uint16_t buttons) = 0;
 };
 
 // The complete VM-facing interface. The adapter implements this; krdbg never
@@ -189,10 +258,13 @@ public:
                              InstructionView& out) const = 0;
     virtual std::vector<RawFrame> unwind() const = 0;
 
-    // Optional devices. A target may expose either, both, or neither; the
-    // screen and the COM port are independent.
+    // Optional devices. A target may expose any combination of them: a COM
+    // byte port, a framebuffer, and a character-cell text terminal. The three
+    // are independent, and each defaults to null so an adapter that does not
+    // implement a device is unchanged.
     virtual IComPort* com_port() { return nullptr; }
     virtual const IVideoSource* video() const { return nullptr; }
+    virtual ITextDisplay* text_display() { return nullptr; }
 };
 
 } // namespace krdbg

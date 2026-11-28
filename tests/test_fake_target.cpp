@@ -149,3 +149,82 @@ KRDBG_TEST(fake_target_video_has_4_3_and_16_9_modes) {
     CHECK_EQ(frame.height, 216);
     CHECK_EQ(frame.frame_number, 2U);
 }
+
+// The text terminal is an optional third device. It is off by default so every
+// golden and scene written before it existed is unchanged, and a target that
+// enables it exposes a whole cell grid and its own input channel.
+KRDBG_TEST(fake_target_text_display_is_optional_and_needs_opting_in) {
+    FakeTarget plain;
+    CHECK(plain.text_display() == nullptr);
+    CHECK(!plain.layout(1).has_text_display);
+
+    FakeTarget with_display(true, true, true);
+    CHECK(with_display.text_display() != nullptr);
+    CHECK(with_display.layout(1).has_text_display);
+    CHECK_EQ(with_display.text_display()->name(), std::string("DISPLAY"));
+
+    // A display-only target needs neither the COM port nor a framebuffer.
+    FakeTarget display_only(false, false, true);
+    CHECK(display_only.text_display() != nullptr);
+    CHECK(display_only.com_port() == nullptr);
+    CHECK(display_only.video() == nullptr);
+    CHECK(display_only.layout(1).has_text_display);
+}
+
+KRDBG_TEST(fake_text_display_frame_is_deterministic) {
+    FakeTarget target(true, true, true);
+    krdbg::ITextDisplay* display = target.text_display();
+    CHECK(display != nullptr);
+    if (display == nullptr) {
+        return;
+    }
+    krdbg::TextDisplayView first;
+    CHECK(display->frame(first));
+    CHECK_EQ(first.rows, krdbg::FakeTextDisplay::kRows);
+    CHECK_EQ(first.cols, krdbg::FakeTextDisplay::kCols);
+    CHECK_EQ(first.cells.size(),
+             static_cast<std::size_t>(first.rows) * static_cast<std::size_t>(first.cols));
+    CHECK(first.cursor.visible);
+    const std::vector<krdbg::TextCell> snapshot(first.cells.begin(), first.cells.end());
+
+    krdbg::TextDisplayView second;
+    CHECK(display->frame(second));
+    CHECK_EQ(second.cells.size(), snapshot.size());
+    for (std::size_t index = 0; index < snapshot.size(); ++index) {
+        CHECK(second.cells[index] == snapshot[index]);
+    }
+
+    target.display_source().set_char(4, 4, 'Z');
+    krdbg::TextDisplayView third;
+    CHECK(display->frame(third));
+    CHECK(third.cells[4U * static_cast<std::size_t>(third.cols) + 4U].code == 'Z');
+}
+
+KRDBG_TEST(fake_text_display_records_forwarded_input) {
+    FakeTarget target(true, true, true);
+    krdbg::ITextDisplay* display = target.text_display();
+    CHECK(display != nullptr);
+    if (display == nullptr) {
+        return;
+    }
+    CHECK(display->send_key(8));
+    CHECK(display->send_key('R'));
+    CHECK(display->send_text("hello\n"));
+    CHECK(display->send_click(2, 3, 1));
+
+    const std::vector<int>& keys = target.display_source().keys();
+    CHECK_EQ(keys.size(), 2U);
+    CHECK_EQ(keys[0], 8);
+    CHECK_EQ(keys[1], 'R');
+    CHECK_EQ(target.display_source().text(), std::string("hello\n"));
+    const std::vector<krdbg::FakeTextDisplay::Click>& clicks =
+        target.display_source().clicks();
+    CHECK_EQ(clicks.size(), 1U);
+    CHECK_EQ(clicks[0].row, 2);
+    CHECK_EQ(clicks[0].col, 3);
+    CHECK_EQ(clicks[0].buttons, 1);
+
+    target.display_source().clear_input();
+    CHECK(target.display_source().keys().empty());
+    CHECK(target.display_source().text().empty());
+}

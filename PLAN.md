@@ -37,16 +37,20 @@ I also launched both GUIs to look at the real surface:
 
 No files outside `krdbg` were modified. The four screenshots are in `shots/`.
 
-### 1.1 Terminology: SCREEN, VIDEO and COM port are separate
+### 1.1 Terminology: TEXT DISPLAY, SCREEN, VIDEO and COM port are separate
 
-The lower-right panel is the **COM port**, labelled with `IComPort::name()` and
-defaulting to `COM1`; it is not a console. These are different devices and the
-design must not couple them:
+The lower-right device panel has a tab per device the target exposes. **DISPLAY**
+is the target's character-cell text terminal (its rows, columns, per-cell colours
+and cursor), **COM** is the debug serial byte stream, and **VIDEO** is the
+framebuffer view. They are different devices and the design must not couple them:
 
+- **TEXT DISPLAY** is a host-owned character grid the guest drives through its
+  own terminal device. The debugger renders the cells with the mono font and
+  forwards cell-coordinate input; it does not parse a framebuffer to find it.
 - **SCREEN** is a raw framebuffer view. The debugger presents committed pixels,
-  integer-scaled or fit. A cell-based text console drawn by the guest/OS is
-  guest software painting into that framebuffer; `krdbg` never parses it,
-  scrolls it, or writes text into it.
+  integer-scaled or fit. A cell-based text console drawn by the guest/OS into
+  that framebuffer is guest software painting; `krdbg` never parses it, scrolls
+  it, or writes text into it.
 - **VIDEO WINDOW** is a separate top-level window that presents the framebuffer
   as the real display. It opens when the target has a framebuffer, preserves
   aspect ratio, and can receive screen keyboard input.
@@ -64,8 +68,10 @@ design must not couple them:
   text view over `OUT` plus an input queue; the status bits are not a serial
   configuration UI.
 
-The video window and preview are not the COM port. The COM port is not the
-screen console. A target may expose a framebuffer, a COM port, both, or neither.
+The video window and preview are not the text display. The COM port is not the
+text display either: COM is the debug serial stream, DISPLAY is the guest's
+character terminal. A target may expose a text display, a framebuffer, a COM
+port, any combination, or none.
 
 ---
 
@@ -247,6 +253,7 @@ struct TargetLayout {
     std::vector<MemoryRegion> memory;
     bool has_framebuffer = false;
     bool has_com_port = false;
+    bool has_text_display = false;
 };
 
 } // namespace krdbg
@@ -346,6 +353,33 @@ struct FramebufferView {
     std::span<const std::uint8_t> pixels;  // XRGB8888 or ARGB8888
 };
 
+// One cell of the host text terminal. XRGB8888 with the high byte ignored.
+struct TextCell {
+    std::uint16_t code = 0;
+    std::uint32_t foreground = 0xFFFFFFFFu;
+    std::uint32_t background = 0xFF000000u;
+};
+
+struct TextCursor {
+    int row = 0;
+    int col = 0;
+    bool visible = true;
+};
+
+// The whole grid, row-major; the cells stay valid until the next frame() call.
+struct TextDisplayView {
+    int rows = 0;
+    int cols = 0;
+    std::span<const TextCell> cells;
+    TextCursor cursor;
+};
+
+enum class TextKey : int {          // neutral device values, not platform keys
+    Backspace = 8, Tab = 9, Enter = 13, Escape = 27, Left = 0x0102, Right = 0x0103,
+};
+
+enum class TextButton : std::uint16_t { Left = 1, Right = 2, Middle = 4 };
+
 enum class StopKind { Retired, Halted, Fault, Budget, Interrupted };
 struct StopResult {
     StopKind kind = StopKind::Retired;
@@ -382,6 +416,20 @@ public:
     // Guest address of the first framebuffer byte, or 0 when the source has no
     // addressable backing store. The memory panel's screen-pixel jump uses it.
     virtual std::uint64_t framebuffer_base() const { return 0; }
+};
+
+// The host text terminal. The target owns the screen; the debugger renders the
+// cells and forwards guest input. It is independent of IComPort and IVideoSource.
+class ITextDisplay {
+public:
+    virtual ~ITextDisplay() = default;
+    virtual std::string name() const { return "DISPLAY"; }
+    virtual bool frame(TextDisplayView& out) const = 0;
+    // send_key takes a printable code point or a TextKey value; send_text types a
+    // whole string; send_click reports a cell coordinate and a TextButton mask.
+    virtual bool send_key(int key) = 0;
+    virtual bool send_text(std::string_view text) = 0;
+    virtual bool send_click(int row, int col, std::uint16_t buttons) = 0;
 };
 
 class IDebugTarget {
@@ -427,10 +475,12 @@ public:
                              InstructionView& out) const = 0;
     virtual std::vector<RawFrame> unwind() const = 0;
 
-    // Optional devices. A target may expose either, both, or neither; the
-    // screen and the COM port are independent.
+    // Optional devices. A target may expose any combination of them: a COM byte
+    // port, a framebuffer, and a character-cell text terminal. Each defaults to
+    // null so an adapter that does not implement a device is unchanged.
     virtual IComPort* com_port() { return nullptr; }
     virtual const IVideoSource* video() const { return nullptr; }
+    virtual ITextDisplay* text_display() { return nullptr; }
 };
 ```
 
@@ -472,8 +522,18 @@ Notes:
   of the framebuffer image and is not parsed. `framebuffer_base()` is optional;
   zero means there is no addressable backing store and screen-pixel jumps are
   disabled.
-- `com_port()` and `video()` are independent. A target can expose a screen and
-  no COM port, a COM port and no screen, both, or neither.
+- `ITextDisplay` is the character terminal, not the COM port and not the
+  framebuffer. The debugger renders `TextDisplayView` with the mono font and
+  forwards printable text, `TextKey` values, pasted text and
+  `TextButton`-masked cell clicks. The device's own key/value encoding and its
+  end-of-input state belong to the VM binding; krdbg models none of them beyond
+  the enumerated non-printable keys. An end-of-input/close action is host state
+  on the display, not a key value, so a later Ctrl-D UI action calls the host's
+  close method instead of forwarding a key. The target decides what a key means,
+  so the debugger never echoes, splits lines or edits the guest's input.
+- `text_display()`, `com_port()` and `video()` are independent: a target can
+  expose any combination or none. `TargetLayout::has_text_display` mirrors the
+  pointer for adapters that only publish a descriptor.
 - v1 exposes **one** COM port per target. If a later VM has several, the pointer
   becomes a list and the panel is instantiated per port; the three-register
   interface does not change.
@@ -562,6 +622,7 @@ public:
     std::uint64_t pc() const;   // selected context
     IComPort* com_port();
     const IVideoSource* video() const;
+    ITextDisplay* text_display();   // optional text terminal; null when absent
 
     // Source mapping.
     const LineInfo* line_at(std::uint64_t pc) const;
@@ -788,8 +849,8 @@ apps/demo/
 
 `DebuggerSurface::render(Canvas&)` draws in the same order as KR32
 (`debugger_ui.cpp:3849-3909`): toolbar, source, disassembly, state, memory,
-variables, breakpoints, call stack, inspector, COM port or video preview tab,
-status bar, then tooltips/menus/modals.
+variables, breakpoints, call stack, inspector, the device tab
+(DISPLAY/COM/VIDEO), status bar, then tooltips/menus/modals.
 
 ### 4.8 Platform and rendering
 
@@ -1394,19 +1455,27 @@ bottom-right, tabbed with the COM port, and to a separate video window.
 - Memory: docked under source; 4 rows of address + 16 hex bytes + ASCII;
   editable address, `PTR` follows SP, `^`/`v` scroll.
 - Bottom row: `VARIABLES` (locals/globals; aggregates start collapsed),
-  `BREAKPOINTS`, `THREADS / CALL STACK`, and a tabbed panel with the COM port
-  and the video preview.
+  `BREAKPOINTS`, `THREADS / CALL STACK`, and a tabbed device panel whose tabs are
+  the devices the target exposes: `DISPLAY`, `COM` and `VIDEO`.
+  - `DISPLAY` tab: the target's character terminal (`ITextDisplay`), rendered as
+    the whole grid with the mono font, per-cell colours and a cursor block. It is
+    the initial tab whenever the target exposes a text display. Key, paste and
+    cell-click input is forwarded to the guest only while the terminal has guest
+    focus (clicking its content), and a `POP OUT` window can show the grid at its
+    natural size. The panel scales the grid to fit; the pop-out window is for
+    reading or playing text games.
   - COM tab title: `IComPort::name()` (for example `COM1`, `UART0`), default
-    `COM1`.
-  - Video tab title: `VIDEO`. The initial tab is `VIDEO` when the target has a
-    framebuffer and no COM port, otherwise `COM`; the last selection is
-    remembered.
+    `COM1`; this is the debug serial byte stream, not the terminal.
+  - Video tab title: `VIDEO`. Without a display, the initial tab is `VIDEO` when
+    the target has a framebuffer and no COM port, otherwise `COM`; the last
+    selection is remembered.
   - The video preview is centered and aspect-correct (letterboxed, nearest
     neighbour, never stretched) with a small `fit WxH` label and a `POP OUT`
     button; `POP OUT` opens the separate video window.
 - If the target has no framebuffer, the `VIDEO` tab is hidden; if it has no COM
-  port, the COM tab is hidden; if it has neither, the whole tabbed panel is
-  hidden and the neighbouring bottom panels expand.
+  port, the COM tab is hidden; if it has no text display, the DISPLAY tab is
+  hidden; if it has none, the whole tabbed panel is hidden and the neighbouring
+  bottom panels expand.
 - Inspector: floating panel for a right-clicked variable/pointer, anchored above
   and to the right of the row; left-clicking outside closes it.
 
@@ -1509,6 +1578,19 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
   overrun indicator appears if bytes are dropped. A compact status line shows
   `RX_READY`, `TX_READY` and `OVERRUN`; it is not a baud/8N1 control. The view
   autoscrolls only while it is at the bottom.
+- Text display (`ITextDisplay`, the `DISPLAY` tab): the grid is rendered whole,
+  scaled to fit, with the mono font, per-cell foreground/background and an
+  inverse-block cursor. The tab is the default when the target exposes a display.
+  The panel is the keyboard target while it has focus (hover or click), and clicking the grid also grants the terminal guest focus (green dot); while the terminal has focus,
+  printable keys, paste (Ctrl-V, CRLF normalised to LF), `Backspace`, `Tab`,
+  `Enter`, `Left`/`Right` and `Escape` are forwarded as device key values and a
+  cell coordinate click carries the left/right/middle button bit. `Escape`
+  reaches the guest and then releases guest focus. Debugger function keys
+  (`F5`, `F6`, `F9`–`F11`) always reach the debugger, and no single-letter
+  shortcut is applied while the terminal has guest focus. `POP OUT` shows the
+  grid at natural size in a separate window. DISPLAY focus and COM focus are
+  separate: typing in the terminal never fills the COM input queue and vice
+  versa.
 - Statistics: the toolbar always shows `instr`, `time` and `ips`; `CLR` resets
   the counter baseline without changing VM state; RUN turns green while running.
   See §6.7.
@@ -1529,6 +1611,7 @@ From `docs/ui.md:135-252` and `debugger_ui.cpp:4481-4736`:
 | The screen owns the source pane | Source stays visible; the video preview is a small bottom-right tab, and the separate window is the primary display |
 | One top-level window | Two: the debugger and the video display; either can be closed without quitting the other |
 | `CONSOLE` panel | COM port panel, titled by `IComPort::name()` (default `COM1`); a three-register byte port, independent of the framebuffer, hidden when `has_com_port == false` |
+| Text drawn by the guest into a framebuffer | A `DISPLAY` tab over `ITextDisplay` when the target exposes one: the debugger renders the target's own character grid with per-cell colour and cursor, and forwards guest input; the COM port stays the debug serial stream |
 | `CORES` with one fake core | `CORES / THREADS` from `contexts()`; one row if single, threads nested under cores |
 | Hardcoded GPR/FPR/TSP/CR panels | Groups from `TargetLayout`; absent groups simply don't draw |
 | 8-digit addresses | `address_bits` decides 4/8/16 digits |
@@ -1797,8 +1880,11 @@ Wraps `kr216::Machine`, its image loader, decoder and disassembler:
 - Disassembly: kr216's decoder; instructions are 1–6 bytes and the view advances
   by decoded length.
 - Unwind: the kr216 frame layout.
-- Devices: none. `com_port()` and `video()` return `nullptr`; the surface hides
-  the COM and video panels.
+- Devices: the three-register console as `IComPort`; no framebuffer. The optional
+  `text_display()` is null in v1 because the host machine does not expose the
+  shared `krc::display` terminal yet (the kr216 task that adds it is separate);
+  when it does, the adapter wraps it in `ITextDisplay` and the surface gains its
+  DISPLAY tab with no UI change. COM stays the debug serial stream.
 - Coverage: the adapter has no committed fixture, test file or golden. The
   two-adapter configure links it so the render goldens are measured with an
   adapter present, not to test its behavior.
@@ -1819,7 +1905,10 @@ Wraps `kr232::Machine`, its container loader, decoder and disassembler:
 - Unwind: the EFP chain, with `FunctionInfo::frame` zero and the payload's
   signed frame offsets copied as-is.
 - Devices: the three-register COM port over page 2 and the committed framebuffer
-  as `IVideoSource`.
+  as `IVideoSource`. The optional `text_display()` is null in v1; the shared
+  `krc::display` terminal is exposed by the host VM in a separate task, and the
+  adapter will wrap it in `ITextDisplay` then. With a display present the surface
+  opens on the DISPLAY tab; COM remains the debug serial stream.
 - Coverage: `tests/test_kr232_adapter.cpp` and its fixtures, plus
   `goldens/kr232-loaded.hash`, are a separate test binary so the render goldens
   stay adapter-independent. The host build chain builds kr232 sources.
@@ -2026,6 +2115,7 @@ estimate is 6–7 weeks. Tasks and the gate checklist are in `implementation.md`
 | Video | Separate window auto-opens on the first committed frame; `FIT` + `1:1`, nearest-neighbour; debugger function keys forwarded; bottom-right `COM1 | VIDEO` tab, one visible at a time; preview letterboxed, never stretched |
 | Statistics | Toolbar `instr`/`time`/`ips` + `CLR`; instructions since reset, execution-only wall time, aggregate across cores; reset does not touch VM state; load/restart resets |
 | COM port | Three-register byte port (`OUT`, `IN`, `STATUS`), not a UART; title from the target (default `COM1`); raw input with Enter `0x0A`, Backspace `0x7F`, no local echo; bounded 4 KiB queue with overrun; independent of SCREEN; panel hidden when absent; one port in v1, list later |
+| Text display | Optional third device (`ITextDisplay`): whole character grid with per-cell XRGB colours and cursor, rendered with the mono font; DISPLAY is the first tab and the default when present; printable keys, paste (`Backspace` 8, `Tab` 9, `Enter` 13, `Escape` 27, arrows `0x0102`/`0x0103`) and cell-coordinate clicks are forwarded only with terminal guest focus; debugger function keys always stay in the debugger; the panel scales to fit and `POP OUT` shows the natural-size grid; null by default so adapters that do not implement it are unchanged |
 | v1 feature scope | Core panels, register/flag editing, FPR/matrix groups, video preview and separate video window, COM port panel, instruction/time/IPS statistics and CLR, schema-driven settings, host load/build, cores/threads selection and inspection. DAP is post-v1. |
 | Load/build model | `LOAD` handles an image or source (host builds), `RESET` reloads/rebuilds, `KERNEL` loads the embedded pair; no Build button and no embedded compiler in krdbg |
 | Platform | Windows: Win32 GDI presenter (no DLL); Linux x64/ARM64: SDL2. Static SDL2 was considered and rejected for v1. |
@@ -2057,9 +2147,14 @@ and tracked in `implementation.md` §8.1:
 - M7 — a working kr232 debugger (G7), planned in
   [`docs/working-debugger-plan.md`](docs/working-debugger-plan.md) and tracked in
   `implementation.md` §8.2.
-- kr216: image-load only, no devices, and no fixture, test or golden.
+- kr216: image-load only, a COM console, and no fixture, test or golden.
 - kr232: full adapter with COM, framebuffer, kernel/user load, fixtures and a
   golden.
+- Text display: the optional `ITextDisplay` interface, the DISPLAY tab, the fake
+  display source, unit tests and a display golden are in `main`. The host VMs
+  expose their shared `krc::display` TextDisplay in separate tasks; each adapter
+  then wraps it in `ITextDisplay` and the tab appears with no UI change. COM
+  remains the debug serial stream.
 - Remaining: a kr216 fixture, test and golden; a gate that builds all four
   adapters; and kr216/kr232 coverage in the platform boundary check.
 - DAP server from the same session.

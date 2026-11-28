@@ -117,6 +117,9 @@ public:
     [[nodiscard]] std::uint64_t pc() const;
     IComPort* com_port();
     const IVideoSource* video() const;
+    // The optional text terminal (PLAN.md §4.11). Null when the target has none;
+    // it is independent of the COM port and the framebuffer.
+    ITextDisplay* text_display();
 
     // Source mapping.
     const LineInfo* line_at(std::uint64_t pc) const;

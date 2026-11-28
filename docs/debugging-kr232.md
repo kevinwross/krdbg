@@ -106,6 +106,38 @@ build\kr232-debugger\krdbg_demo.exe build\startrekng-kr232\startrekng_script.kr2
 choice for debugging); `startrekng.kr232` is the interactive console. Re-running
 the script after a clean build restores both.
 
+## COM1, VIDEO and DISPLAY
+
+The bottom-right panel has a tab per device the target exposes:
+
+- `COM1` is the debug serial stream: the three-register byte port, a passive
+  text view plus a raw input queue. It is not the guest's screen.
+- `VIDEO` is the committed framebuffer preview, and the toolbar `VIDEO` button
+  opens the separate video window. A cell console the guest draws into the
+  framebuffer is just pixels; krdbg does not parse it.
+- `DISPLAY` is the guest's character terminal (`ITextDisplay`). When a target
+  exposes one, the panel opens on DISPLAY: the grid is drawn with per-cell
+  colours and a cursor, and the panel is the keyboard target while it has focus (hover or click), and clicking it grants terminal guest focus, after which
+  printable keys, paste, `Backspace`, `Tab`, `Enter`, `Left`/`Right`, `Escape`
+  and cell clicks are forwarded. Debugger function keys still work, and no
+  single-letter shortcut is applied while the terminal has guest focus. `POP
+  OUT` shows the grid at natural size.
+
+kr232 does not expose a text display yet: the shared `krc::display` terminal is
+exposed by the host VM in a separate task, and this adapter will wrap it in
+`ITextDisplay` then. The adapter test asserts `text_display() == nullptr` today,
+so the pending hook stays visible.
+
+The exact hook (task-25): the adapter implements `ITextDisplay` over the host
+machine's `krc::display::TextDisplay`, so `frame()` copies
+`rows()/cols()/cell(row, col)/cursor_row()/cursor_col()/cursor_visible()` into
+`TextDisplayView`, `send_key(code)` calls
+`push_key(static_cast<std::uint16_t>(code))`, `send_text(text)` calls
+`push_text(text)`, and `send_click(row, col, buttons)` calls
+`push_click(row, col, buttons)`. The display ABI's v2 end-of-input is host state,
+not a key: a later close/Ctrl-D input action should call `close_input()`, never
+send a key for it.
+
 ## Settings
 
 The settings dialog exposes two values that change how a load resolves:
@@ -124,6 +156,8 @@ A `--target` or `--source-root` on the command line wins over the settings. Chan
   affects the next load, not an already-loaded image.
 - The kr232 COM panel reports the console's real RX/TX/OVERRUN bits; the guest
   console has no output-side status bit, so TX is constant.
+- **No DISPLAY tab yet.** The kr232 machine's shared text terminal is not exposed
+  by the adapter; `text_display()` is null and the tab is hidden.
 - The milestone and gate state is `implementation.md` §8.2. When a task is still
   open, this page describes only what the build does today.
 

@@ -3,8 +3,8 @@
 #
 # The render goldens must not depend on the linked layout: adding an adapter
 # shifts every address in the binary, and the surface and golden tests compare
-# pixels. Running with two adapters at once is what keeps that true, and 109 of
-# 109 tests must pass.
+# pixels. Running with two adapters at once is what keeps that true, so every
+# registered test must pass.
 #
 # Run from a Visual Studio developer shell (the gate scripts initialize one).
 $ErrorActionPreference = 'Stop'

@@ -1000,3 +1000,161 @@ KRDBG_TEST(surface_chooser_recent_row_calls_load_path) {
     CHECK(!scene.host.last_error.empty());
 }
 
+
+// ---- text display (PLAN.md §4.11) ------------------------------------------------
+
+krdbg::FakeTextDisplay& display_of(krdbg::test::TestScene& scene) {
+    return scene.fake_target->display_source();
+}
+
+// The DISPLAY tab is first in the device strip and is the default presentation
+// when the target has a text terminal; a target without one keeps the old COM /
+// VIDEO tabs and every golden captured before the device existed.
+KRDBG_TEST(surface_display_is_default_and_optional) {
+    krdbg::test::TestScene plain(true);
+    CHECK(!plain.surface->display_tab_active());
+    CHECK(plain.surface->layout().video_tab_display.empty());
+    CHECK_EQ(plain.surface->focused_panel(), SurfacePanel::None);
+
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    CHECK(scene.surface->display_tab_active());
+    CHECK(!scene.surface->layout().video_tab_display.empty());
+    CHECK(!scene.surface->layout().video_tab_com.empty());
+    CHECK(!scene.surface->layout().video_tab_video.empty());
+    CHECK(!scene.surface->layout().display_preview.empty());
+
+    // The COM tab still selects the debug serial stream, and DISPLAY returns.
+    const krdbg::Rect com_tab = scene.surface->layout().video_tab_com;
+    CHECK(scene.click(center_x(com_tab), center_y(com_tab)));
+    CHECK(!scene.surface->display_tab_active());
+    const std::uint64_t com_hash = scene.render_hash();
+    const krdbg::Rect display_tab = scene.surface->layout().video_tab_display;
+    CHECK(scene.click(center_x(display_tab), center_y(display_tab)));
+    CHECK(scene.surface->display_tab_active());
+    CHECK(scene.render_hash() != com_hash);
+
+    // A display-only target has the device panel, no COM or VIDEO tab.
+    krdbg::test::TestScene only(true, false, false, false, false, true);
+    CHECK(only.surface->display_tab_active());
+    CHECK(only.surface->layout().com.width > 0);
+    CHECK(only.session->com_port() == nullptr);
+    CHECK(only.session->text_display() != nullptr);
+}
+
+KRDBG_TEST(surface_display_renders_cells_and_cursor_deterministically) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    const std::uint64_t first = scene.render_hash();
+    CHECK(first != 0U);
+    CHECK_EQ(scene.render_hash(), first);
+
+    display_of(scene).set_char(2, 2, '#');
+    const std::uint64_t edited = scene.render_hash();
+    CHECK(edited != first);
+
+    display_of(scene).set_cursor(5, 5, false);
+    CHECK(scene.render_hash() != edited);
+}
+
+KRDBG_TEST(surface_display_forwards_keys_and_keeps_debugger_shortcuts) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    krdbg::FakeTextDisplay& display = display_of(scene);
+    display.clear_input();
+    const krdbg::Rect preview = scene.surface->layout().display_preview;
+    CHECK(scene.click(center_x(preview), center_y(preview)));
+    CHECK(scene.surface->display_guest_focus());
+
+    CHECK(scene.session->step(krdbg::StepMode::Instruction).kind ==
+          krdbg::StopKind::Retired);
+    const std::uint64_t pc = scene.session->pc();
+    CHECK(scene.send_key(0, 'R'));
+    CHECK_EQ(scene.session->pc(), pc);       // no restart shortcut
+    CHECK_EQ(scene.surface->com_queued(), 0);
+    CHECK_EQ(display.keys().size(), 1U);
+    CHECK_EQ(display.keys()[0], 'R');
+
+    CHECK(scene.send_key(krdbg::platform::key::Backspace));
+    CHECK(scene.send_key(krdbg::platform::key::Enter));
+    CHECK(scene.send_key(krdbg::platform::key::Left));
+    CHECK(scene.send_key(krdbg::platform::key::Right));
+    CHECK(scene.send_key(krdbg::platform::key::Tab));
+    CHECK_EQ(display.keys().size(), 6U);
+    CHECK_EQ(display.keys()[1], static_cast<int>(krdbg::TextKey::Backspace));
+    CHECK_EQ(display.keys()[2], static_cast<int>(krdbg::TextKey::Enter));
+    CHECK_EQ(display.keys()[3], static_cast<int>(krdbg::TextKey::Left));
+    CHECK_EQ(display.keys()[4], static_cast<int>(krdbg::TextKey::Right));
+    CHECK_EQ(display.keys()[5], static_cast<int>(krdbg::TextKey::Tab));
+
+    // F5 still reaches the debugger while the terminal has guest focus.
+    CHECK(!scene.surface->running());
+    CHECK(scene.send_key(krdbg::platform::key::F5));
+    CHECK(scene.surface->running());
+    CHECK(scene.send_key(krdbg::platform::key::F5));
+    CHECK(!scene.surface->running());
+
+    // Escape reaches the guest and then releases terminal focus.
+    CHECK(scene.send_key(krdbg::platform::key::Escape));
+    CHECK_EQ(display.keys().back(), static_cast<int>(krdbg::TextKey::Escape));
+    CHECK(!scene.surface->display_guest_focus());
+
+    // Hovering the panel makes it the keyboard target like any other panel, so
+    // typing reaches the terminal without a click as well.
+    const krdbg::Rect grid = scene.surface->layout().display_preview;
+    CHECK(scene.mouse_move(center_x(grid), center_y(grid)));
+    CHECK(scene.send_key(0, 'z'));
+    CHECK_EQ(display.keys().back(), 'z');
+}
+
+KRDBG_TEST(surface_display_forwards_paste_and_cell_clicks) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    krdbg::FakeTextDisplay& display = display_of(scene);
+    const krdbg::Rect preview = scene.surface->layout().display_preview;
+    CHECK(scene.click(center_x(preview), center_y(preview)));
+    display.clear_input();
+    scene.host.clipboard = "ab\r\ncd";
+    CHECK(scene.send_key(0, 'v', true));
+    CHECK_EQ(display.text(), std::string("ab\ncd"));
+
+    CHECK(scene.click(center_x(preview), center_y(preview), 1));
+    CHECK_EQ(display.clicks().size(), 1U);
+    CHECK_EQ(display.clicks()[0].buttons,
+             static_cast<std::uint16_t>(krdbg::TextButton::Right));
+    CHECK(display.clicks()[0].row >= 0 &&
+          display.clicks()[0].row < krdbg::FakeTextDisplay::kRows);
+    CHECK(display.clicks()[0].col >= 0 &&
+          display.clicks()[0].col < krdbg::FakeTextDisplay::kCols);
+
+    CHECK(scene.click(center_x(preview), center_y(preview)));
+    CHECK_EQ(display.clicks().size(), 2U);
+    CHECK_EQ(display.clicks()[1].buttons,
+             static_cast<std::uint16_t>(krdbg::TextButton::Left));
+}
+
+KRDBG_TEST(surface_display_and_com_are_separate_devices) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    krdbg::FakeTextDisplay& display = display_of(scene);
+    display.clear_input();
+    const krdbg::Rect preview = scene.surface->layout().display_preview;
+    CHECK(scene.click(center_x(preview), center_y(preview)));
+    CHECK(scene.send_key(0, 'x'));
+    CHECK_EQ(display.keys().size(), 1U);
+    CHECK_EQ(scene.surface->com_queued(), 0);
+
+    const krdbg::Rect com_tab = scene.surface->layout().video_tab_com;
+    CHECK(scene.click(center_x(com_tab), center_y(com_tab)));
+    const krdbg::Rect com = scene.surface->layout().com;
+    CHECK(scene.click(center_x(com), center_y(com)));
+    CHECK(scene.send_key(0, 'y'));
+    CHECK_EQ(scene.surface->com_queued(), 1);
+    CHECK_EQ(display.keys().size(), 1U);     // the display got nothing new
+}
+
+KRDBG_TEST(surface_display_pop_out_opens_and_closes) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    const krdbg::Rect pop_out = scene.surface->layout().video_pop_out;
+    CHECK(scene.click(center_x(pop_out), center_y(pop_out)));
+    CHECK(scene.surface->display_popped());
+    CHECK(!scene.surface->video_popped());
+    CHECK(scene.render_hash() != 0U);
+    CHECK(scene.click(center_x(pop_out), center_y(pop_out)));
+    CHECK(!scene.surface->display_popped());
+}

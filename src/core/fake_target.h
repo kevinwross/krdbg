@@ -57,16 +57,55 @@ private:
     std::vector<std::uint8_t> pixels_;
 };
 
+// A deterministic text terminal for the display panel's visual and interaction
+// tests. The grid is a small tic-tac-toe board with per-cell colours and a
+// visible cursor; every forwarded key, text run and click is recorded so a test
+// can assert what reached the guest without a VM.
+class FakeTextDisplay final : public ITextDisplay {
+public:
+    static constexpr int kRows = 24;
+    static constexpr int kCols = 40;
+
+    FakeTextDisplay();
+
+    bool frame(TextDisplayView& out) const override;
+    bool send_key(int key) override;
+    bool send_text(std::string_view text) override;
+    bool send_click(int row, int col, std::uint16_t buttons) override;
+
+    void set_char(int row, int col, std::uint16_t code);
+    void set_cursor(int row, int col, bool visible = true);
+    void clear_input();
+    [[nodiscard]] const std::vector<int>& keys() const { return keys_; }
+    [[nodiscard]] const std::string& text() const { return text_; }
+    struct Click {
+        int row = 0;
+        int col = 0;
+        std::uint16_t buttons = 0;
+    };
+    [[nodiscard]] const std::vector<Click>& clicks() const { return clicks_; }
+    [[nodiscard]] const TextCursor& cursor() const { return cursor_; }
+
+private:
+    std::vector<TextCell> cells_;
+    TextCursor cursor_{10, 13, true};
+    std::vector<int> keys_;
+    std::string text_;
+    std::vector<Click> clicks_;
+};
+
 // A deterministic target for M0's visual baseline and M1's session tests. It
 // models a small 32-bit machine: eight GPRs, PC/SP/FP/LR, four flags, 64 KiB of
-// memory, a fixed disassembly table, a three-frame unwind and both optional
-// devices.
+// memory, a fixed disassembly table, a three-frame unwind and the three optional
+// devices. The text display is opt-in so every golden captured before it existed
+// keeps its hash.
 class FakeTarget final : public IDebugTarget {
 public:
     static constexpr std::uint64_t kMemoryBase = 0x1000;
     static constexpr std::uint64_t kMemorySize = 0x10000;
 
-    FakeTarget(bool has_com = true, bool has_video = true);
+    FakeTarget(bool has_com = true, bool has_video = true,
+               bool has_display = false);
 
     // Test and demo configuration.
     void add_context(std::string name);
@@ -78,6 +117,8 @@ public:
     void set_step_stuck(bool stuck) { stuck_ = stuck; }
     FakeComPort& com() { return com_; }
     FakeVideoSource& video_source() { return video_; }
+    FakeTextDisplay& display_source() { return display_; }
+
     void set_instructions_executed(std::uint64_t count) { instructions_ = count; }
     void set_variable_instruction_length(bool variable) {
         layout_.variable_instruction_length = variable;
@@ -117,6 +158,9 @@ public:
     const IVideoSource* video() const override {
         return has_video_ ? &video_ : nullptr;
     }
+    ITextDisplay* text_display() override {
+        return has_display_ ? &display_ : nullptr;
+    }
 
 private:
     struct Context {
@@ -138,6 +182,7 @@ private:
     TargetLayout layout_;
     bool has_com_ = true;
     bool has_video_ = true;
+    bool has_display_ = false;
     std::vector<Context> contexts_;
     std::uint32_t current_id_ = 1;
     std::uint64_t flags_ = 0;
@@ -152,6 +197,7 @@ private:
     std::map<std::uint64_t, unsigned> instruction_lengths_;
     FakeComPort com_;
     FakeVideoSource video_;
+    FakeTextDisplay display_;
 };
 
 } // namespace krdbg

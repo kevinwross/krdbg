@@ -212,3 +212,12 @@ KRDBG_TEST(golden_no_video_matches_the_committed_hash) {
     krdbg::test::TestScene scene(true, false, false, true, false);
     expect_golden("no-video.hash", scene.render_hash());
 }
+
+// The text terminal's committed frame: a fake target with a display, no real VM
+// linked. The adapter-free goldens above are unchanged because the display is an
+// opt-in device on the fake target.
+KRDBG_TEST(golden_display_state_matches_the_committed_hash) {
+    krdbg::test::TestScene scene(true, false, false, true, true, true);
+    CHECK(scene.surface->display_tab_active());
+    expect_golden("display.hash", scene.render_hash());
+}

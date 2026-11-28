@@ -82,18 +82,20 @@ public:
 };
 
 // Owns the session, host and surface in the order the surface needs. `loaded`
-// selects the fake loaded state for the golden baseline.
+// selects the fake loaded state for the golden baseline. `has_display` adds the
+// opt-in text terminal; it defaults off so every golden captured before the
+// display existed keeps its hash.
 class TestScene {
 public:
     explicit TestScene(bool loaded, bool running = false,
                        bool kernel_supported = false, bool has_com = true,
-                       bool has_video = true)
+                       bool has_video = true, bool has_display = false)
         : host(kernel_supported) {
         // The scenes assert on interaction, so each tick advances the same small
         // slice they were written against; the application's default is larger.
         // The id is qualified like every aggregated setting.
         host.values.values["vm.time_slice"] = std::int64_t{10000};
-        auto target = std::make_unique<FakeTarget>(has_com, has_video);
+        auto target = std::make_unique<FakeTarget>(has_com, has_video, has_display);
         fake_target = target.get();
         session = std::make_unique<DebugSession>(
             std::move(target), std::optional<DebugInfo>{make_fake_debug_info()},

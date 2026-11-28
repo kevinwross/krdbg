@@ -678,6 +678,7 @@ struct Options {
     bool variables = false;
     bool com = false;
     bool video16 = false;
+    bool display = false;
     bool no_com = false;
     bool no_video = false;
     bool kernel = false;
@@ -732,7 +733,7 @@ void print_usage() {
         "  --headless             Render one frame, print its hash, and exit\n"
         "  --screenshot FILE      With --headless, write the frame as a PPM\n"
         "  --state NAME           Initial demo state: empty, loaded, running,\n"
-        "                         video, video16, error, settings, context,\n"
+        "                         video, video16, display, error, settings, context,\n"
         "                         tooltip, variables, com, no-com, or no-video\n"
         "  --kr32 FILE            Load a KR32 image\n"
         "  --kr32-os              Load the embedded KR32 OS image\n"
@@ -879,6 +880,9 @@ bool parse_options(int argc, char** argv, Options& options) {
                 options.loaded = true;
                 options.video = true;
                 options.video16 = true;
+            } else if (state == "display") {
+                options.loaded = true;
+                options.display = true;
             } else if (state == "error") {
                 options.loaded = true;
                 options.error = true;
@@ -1254,8 +1258,8 @@ int main(int argc, char** argv) {
     }
 #endif
     if (!session) {
-        auto target =
-            std::make_unique<krdbg::FakeTarget>(!options.no_com, !options.no_video);
+        auto target = std::make_unique<krdbg::FakeTarget>(
+            !options.no_com, !options.no_video, options.display);
         fake_target = target.get();
         if (options.video16) {
             fake_target->video_source().set_mode(320, 180);

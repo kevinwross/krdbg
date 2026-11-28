@@ -69,16 +69,21 @@ Everything below is the kr216 machine (`../kr216`), not a krdbg-specific model.
 | Instructions | Variable length, 1–6 bytes; the disassembly pane advances by the decoded length (`kr216/encoding.h`) |
 | Unwind | The ENTER chain: `[FP]` = saved caller FP, `[FP+2]` = return address (`kr216-isa.md` §10.7). Frame zero is the current PC even when no KDBG function names it, and every frame's PC and frame base come from the same link |
 | Source lines | From the image's embedded KDBG payload; a line breakpoint resolves against the line table and the run stops on the resolved address |
-| Console | The three-register port at `0xFF00` (OUT), `0xFF02` (IN), `0xFF04` (STATUS), `kr216-isa.md` §14 |
+| Console | The three-register port at `0xFF00` (OUT), `0xFF02` (IN), `0xFF04` (STATUS), `kr216-isa.md` §14. In the surface this is the `COM1` tab: the debug serial stream |
 | Video | None. `layout.has_framebuffer` is false and `video()` returns null; there is no framebuffer device in the kr216 machine, so the VIDEO tab has nothing to show (`kr216-plan.md` §11.8) |
+| Text display | Not exposed yet. The kr216 machine is gaining a shared `krc::display` TextDisplay (separate host task); until the adapter wraps it in `ITextDisplay`, `text_display()` is null and the surface hides the `DISPLAY` tab. The adapter test asserts that null so the pending hook is visible |
 
 The panel-level register labels, roles and memory regions are the same surface
 every adapter drives; nothing in `krdbg_ui` knows a kr216 register number.
 
-## The console
+## COM1 is the debug serial stream
 
-kr216 has one device, the three-register console. The adapter exposes it as the
-COM panel's `IComPort`:
+kr216's three-register console is exposed as the COM panel's `IComPort`. From the
+diagnostics point of view COM is the **debug serial stream**: the guest's `write`
+and `read` host calls and the machine's console bytes travel through it, and the
+panel is a passive text view with a raw input queue. It is not the guest's
+screen: the kr216 text terminal (when the adapter exposes it) gets its own
+`DISPLAY` tab, and typing in one must not reach the other.
 
 - `read_output` drains the machine's accumulated console output exactly once per
   byte; it never loses a byte the guest wrote.
@@ -101,6 +106,33 @@ The COM panel's own input buffer (what you type before it is accepted) is the
 surface's, not the machine's; it still reports its own `OVERRUN` when its 4096-
 byte queue fills.
 
+## DISPLAY is the guest text terminal
+
+The bottom-right device panel has a tab per device the target exposes. `DISPLAY`
+is the guest's character terminal (`ITextDisplay`): the debugger draws the whole
+grid with per-cell colours and an inverse cursor block and forwards guest input,
+while `COM1` stays the debug serial stream. When a target exposes a display the
+panel opens on the DISPLAY tab; clicking the grid grants terminal guest focus,
+after which printable keys, Ctrl-V paste, `Backspace`, `Tab`, `Enter`,
+`Left`/`Right`, `Escape` and cell-coordinate mouse clicks go to the guest. The
+debugger function keys still work and no single-letter shortcut is applied while
+the terminal has guest focus. `POP OUT` shows the grid at natural size.
+
+kr216 does not expose this yet: the shared `krc::display` TextDisplay is being
+added to the host machine in a separate task, and this adapter will wrap it in
+`ITextDisplay` then. Until that lands, the panel has only the COM tab (and a
+VIDEO tab for a target that has a framebuffer).
+
+The exact hook (task-24): the adapter implements `ITextDisplay` over
+`kr216::Machine::display()`, so `frame()` copies
+`TextDisplay::rows()/cols()/cell(row, col)/cursor_row()/cursor_col()/
+cursor_visible()` into `TextDisplayView`, `send_key(code)` calls
+`TextDisplay::push_key(static_cast<std::uint16_t>(code))`, `send_text(text)` calls
+`push_text(text)`, and `send_click(row, col, buttons)` calls
+`push_click(row, col, buttons)`. The shared display ABI's v2 end-of-input is host
+state, not a key: a later close/Ctrl-D input action should call the display's
+`close_input()`, never send a key value for it.
+
 ## Source and stepping
 
 With the source pane focused, `F10`/`F11` step over/into one source line, and the
@@ -120,6 +152,8 @@ kr232 and is what the fixtures' tests do.
 - **No video.** kr216 has no framebuffer device; the adapter reports
   `has_framebuffer = false`. Video parity with kr232 is out of scope for this
   adapter.
+- **No DISPLAY tab yet.** The kr216 machine's shared text terminal is not exposed
+  by the adapter; `text_display()` is null and the tab is hidden.
 - **The fixture images are `-O0`.** Named locals live in their frame slots at
   every source line. `-O1`/`-O2` use the target-independent promotion policy and
   can leave a variable without a home slot; no kr216 `P`/register-location

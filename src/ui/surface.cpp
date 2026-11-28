@@ -146,6 +146,27 @@ bool is_letter(int character, char letter) {
                static_cast<unsigned char>(letter);
 }
 
+// Canvas pixels are packed 0xAARRGGBB; a text-display cell colour is XRGB8888
+// with the high byte ignored. The offscreen terminal canvas is opaque, so the
+// alpha byte is dropped when a pixel is copied back into a Color.
+Color unpack_color(std::uint32_t packed) {
+    return Color{static_cast<std::uint8_t>((packed >> 16) & 0xFFU),
+                 static_cast<std::uint8_t>((packed >> 8) & 0xFFU),
+                 static_cast<std::uint8_t>(packed & 0xFFU), 255};
+}
+
+int display_cell_width() {
+    return std::max(1, Canvas::text_width("M", FontRole::MonoSmall));
+}
+
+int display_cell_height() {
+    return std::max(1, Canvas::text_height(FontRole::MonoSmall));
+}
+
+bool display_code_printable(std::uint16_t code) {
+    return code >= 32 && code < 127;
+}
+
 void draw_button(Canvas& canvas, Rect rect, std::string_view label, Color text_color,
                  Color border_color) {
     if (rect.empty()) {
@@ -273,6 +294,8 @@ struct DebuggerSurface::Impl {
     void draw_stack_panel(Canvas& canvas);
     void draw_inspector(Canvas& canvas);
     void draw_com_panel(Canvas& canvas);
+    void draw_display_panel(Canvas& canvas);
+    void draw_display_preview(Canvas& canvas, Rect content);
     void draw_video_preview(Canvas& canvas, Rect content);
     void draw_settings(Canvas& canvas);
     void draw_chooser(Canvas& canvas);
@@ -347,6 +370,15 @@ struct DebuggerSurface::Impl {
     void note_stop(const StopResult& result);
     void step_and_note(StepMode mode);
     void forward_video_key(const platform::Event& event);
+    // The text display panel (PLAN.md §4.11). The device is independent of the
+    // COM port: its tab is first in the strip and it is the default tab when a
+    // target provides one.
+    [[nodiscard]] bool display_available() const;
+    [[nodiscard]] bool display_cell_at(int x, int y, int& row, int& col) const;
+    [[nodiscard]] bool handle_display_key(const platform::Event& event);
+    void forward_display_key(const platform::Event& event);
+    void refresh_display_canvas(const TextDisplayView& view);
+    void present_display_window();
 
     DebugSession* session = nullptr;
     IHostServices* host = nullptr;
@@ -371,6 +403,21 @@ struct DebuggerSurface::Impl {
     bool video_guest_focus = false;
     bool video_fit = true;
     std::unique_ptr<platform::IVideoWindow> video_window;
+    bool display_tab = false;
+    bool display_tab_chosen = false;
+    bool display_guest_focus = false;
+    bool display_popped = false;
+    std::unique_ptr<platform::IVideoWindow> display_window;
+    // The offscreen canvas the terminal is drawn on once per changed frame, then
+    // scaled into the panel and the pop-out window. Rebuilding only when the
+    // snapshot changes keeps a 40x24 grid cheap at interactive rates.
+    int display_rows = 0;
+    int display_cols = 0;
+    std::vector<TextCell> display_cells;
+    TextCursor display_cursor;
+    bool display_snapshot_valid = false;
+    std::unique_ptr<Canvas> display_canvas;
+    std::vector<std::uint8_t> display_frame_bytes;
     bool menu_open = false;
     Rect popup_rect;
     Rect menu_rect;
@@ -472,12 +519,23 @@ void DebuggerSurface::Impl::recompute_layout() {
     const int breakpoints_width = w * 22 / 100;
     int stack_width = w * 22 / 100;
     int com_width = w - variables_width - breakpoints_width - stack_width;
-    const bool com_visible =
-        session->com_port() != nullptr || session->video() != nullptr;
+    const bool display_visible = display_available();
+    const bool com_visible = session->com_port() != nullptr ||
+                             session->video() != nullptr || display_visible;
+    if (!display_visible) {
+        display_tab = false;
+        display_guest_focus = false;
+    }
     if (session->video() == nullptr) {
         video_tab = false;
-    } else if (session->com_port() == nullptr) {
+    } else if (session->com_port() == nullptr && !display_visible) {
         video_tab = true;
+    }
+    if (display_visible && !display_tab_chosen) {
+        // DISPLAY is the default presentation when the target provides one; the
+        // COM port is the debug serial stream and keeps its own tab.
+        display_tab = true;
+        video_tab = false;
     }
     if (!com_visible) {
         stack_width = w - variables_width - breakpoints_width;
@@ -582,22 +640,36 @@ void DebuggerSurface::Impl::recompute_layout() {
         Rect{layout.memory_page_down.x - 22, layout.memory.y + 3, 18, 18};
 
     if (com_visible) {
-        layout.video_tab_com =
-            Rect{layout.com.x + 70, layout.com.y + 3, 46, 18};
-        layout.video_tab_video =
-            Rect{layout.video_tab_com.x + 48, layout.com.y + 3, 52, 18};
+        int tab_x = layout.com.x + 70;
+        const int tab_y = layout.com.y + 3;
+        if (display_visible) {
+            layout.video_tab_display = Rect{tab_x, tab_y, 58, 18};
+            tab_x += 60;
+        } else {
+            layout.video_tab_display = {};
+        }
+        // The COM slot keeps its pre-display position whether or not a COM port
+        // exists, so every golden captured before the display existed keeps its
+        // pixels.
+        layout.video_tab_com = Rect{tab_x, tab_y, 46, 18};
+        tab_x += 48;
+        layout.video_tab_video = Rect{tab_x, tab_y, 52, 18};
         layout.video_pop_out =
-            Rect{layout.com.x + layout.com.width - 70, layout.com.y + 3, 62, 18};
+            Rect{layout.com.x + layout.com.width - 70, tab_y, 62, 18};
         layout.video_fit =
-            Rect{layout.video_pop_out.x - 46, layout.com.y + 3, 40, 18};
+            Rect{layout.video_pop_out.x - 46, tab_y, 40, 18};
         layout.video_preview =
             Rect{layout.com.x + 1, layout.com.y + 24, layout.com.width - 2,
                  layout.com.height - 25};
+        layout.display_preview = layout.video_preview;
     } else {
+        layout.video_tab_display = {};
         layout.video_tab_com = {};
         layout.video_tab_video = {};
         layout.video_pop_out = {};
+        layout.video_fit = {};
         layout.video_preview = {};
+        layout.display_preview = {};
     }
 
     const int dialog_width = std::min(900, w - 40);
@@ -1115,6 +1187,9 @@ std::vector<std::string> DebuggerSurface::Impl::lines_for(
         return program.loaded ? std::vector<std::string>{"(no stack frames)"}
                               : std::vector<std::string>{"(no call stack)"};
     case SurfacePanel::Com:
+        if (display_tab) {
+            return {"(display)"};
+        }
         return video_tab ? std::vector<std::string>{"(no video frame)"}
                          : com_display_lines();
     case SurfacePanel::State:
@@ -2418,6 +2493,9 @@ void DebuggerSurface::Impl::render(Canvas& canvas) {
             video_window->present(frame, video_fit);
         }
     }
+    if (display_popped && display_window && display_window->valid()) {
+        present_display_window();
+    }
     draw_status_bar(canvas);
     draw_popup(canvas);
     draw_context_menu(canvas);
@@ -2544,7 +2622,12 @@ void DebuggerSurface::Impl::activate(ToolbarAction action) {
         if (layout.toolbar_video.empty()) {
             return;
         }
+        // The toolbar VIDEO toggle selects the framebuffer preview; DISPLAY is a
+        // separate device tab and is not the same thing.
         video_tab = !video_tab;
+        display_tab = false;
+        display_tab_chosen = true;
+        display_guest_focus = false;
         if (!video_tab) {
             video_guest_focus = false;
         }
@@ -2620,15 +2703,20 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
     }
     const ToolbarAction action = toolbar_at(event.x, event.y);
     if (action != ToolbarAction::None) {
+        display_guest_focus = false;
         activate(action);
         return;
     }
     const SurfacePanel panel = panel_at(event.x, event.y);
     if (panel == SurfacePanel::None) {
         focus = SurfacePanel::None;
+        display_guest_focus = false;
         return;
     }
     focus = panel;
+    if (panel != SurfacePanel::Com) {
+        display_guest_focus = false;
+    }
 
     if (panel == SurfacePanel::Source) {
         if (layout.source_dropdown.contains(event.x, event.y)) {
@@ -2911,15 +2999,48 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
     }
 
     if (panel == SurfacePanel::Com) {
+        if (display_available() &&
+            layout.video_tab_display.contains(event.x, event.y)) {
+            display_tab = true;
+            display_tab_chosen = true;
+            video_tab = false;
+            display_guest_focus = false;
+            video_guest_focus = false;
+            return;
+        }
         if (session->com_port() != nullptr &&
             layout.video_tab_com.contains(event.x, event.y)) {
             video_tab = false;
+            display_tab = false;
+            display_tab_chosen = true;
             video_guest_focus = false;
+            display_guest_focus = false;
             return;
         }
         if (session->video() != nullptr &&
             layout.video_tab_video.contains(event.x, event.y)) {
             video_tab = true;
+            display_tab = false;
+            display_tab_chosen = true;
+            display_guest_focus = false;
+            return;
+        }
+        if (display_tab && display_available() &&
+            layout.video_pop_out.contains(event.x, event.y)) {
+            if (display_popped) {
+                if (display_window) {
+                    display_window->destroy();
+                }
+                display_popped = false;
+            } else {
+                if (!display_window) {
+                    display_window = platform::create_video_window();
+                }
+                if (display_window &&
+                    display_window->create("krdbg display", 720, 440)) {
+                    display_popped = true;
+                }
+            }
             return;
         }
         if (session->video() != nullptr &&
@@ -2939,8 +3060,29 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             }
             return;
         }
-        if (layout.video_fit.contains(event.x, event.y)) {
+        if ((video_tab || !display_available()) &&
+            layout.video_fit.contains(event.x, event.y)) {
             video_fit = !video_fit;
+            return;
+        }
+        if (display_tab && display_available() &&
+            layout.display_preview.contains(event.x, event.y)) {
+            int row = 0;
+            int col = 0;
+            ITextDisplay* display = session->text_display();
+            if (display != nullptr &&
+                display_cell_at(event.x, event.y, row, col)) {
+                std::uint16_t buttons = static_cast<std::uint16_t>(
+                    TextButton::Left);
+                if (event.button == 1) {
+                    buttons = static_cast<std::uint16_t>(TextButton::Right);
+                } else if (event.button == 2) {
+                    buttons = static_cast<std::uint16_t>(TextButton::Middle);
+                }
+                display->send_click(row, col, buttons);
+            }
+            display_guest_focus = true;
+            video_guest_focus = false;
             return;
         }
         if (video_tab && layout.video_preview.contains(event.x, event.y)) {
@@ -2976,7 +3118,7 @@ void DebuggerSurface::Impl::mouse_down(const platform::Event& event) {
             video_guest_focus = true;
             return;
         }
-        if (!video_tab) {
+        if (!video_tab && !display_tab) {
             video_guest_focus = false;
             scroll_click(panel, event.x, event.y);
         }
@@ -3519,14 +3661,21 @@ void DebuggerSurface::Impl::draw_video_preview(Canvas& canvas, Rect content) {
     canvas.frame(target, ui::theme::kBorder);
 }
 
+bool DebuggerSurface::Impl::display_available() const {
+    return session->text_display() != nullptr;
+}
+
 void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
     const Rect rect = layout.com;
     if (rect.empty()) {
         return;
     }
+    const bool display_visible = display_available();
     const bool video_only =
         session->com_port() == nullptr && session->video() != nullptr;
-    if (!video_tab && !video_only) {
+    if (display_tab && display_visible) {
+        draw_display_panel(canvas);
+    } else if (!video_tab && !video_only) {
         draw_panel(canvas, rect, com_title(), com_status(),
                    lines_for(SurfacePanel::Com), SurfacePanel::Com);
     } else {
@@ -3556,10 +3705,18 @@ void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
                         kRunGreen);
         }
     }
+    if (display_visible) {
+        draw_small_button(canvas, layout.video_tab_display, "DISPLAY",
+                          display_tab ? ui::theme::kAccent : ui::theme::kDim,
+                          display_tab ? ui::theme::kAccent
+                                      : ui::theme::kBorder);
+    }
     if (session->com_port() != nullptr) {
         draw_small_button(canvas, layout.video_tab_com, "COM1",
-                          !video_tab ? ui::theme::kAccent : ui::theme::kDim,
-                          !video_tab ? ui::theme::kAccent : ui::theme::kBorder);
+                          !video_tab && !display_tab ? ui::theme::kAccent
+                                                     : ui::theme::kDim,
+                          !video_tab && !display_tab ? ui::theme::kAccent
+                                                     : ui::theme::kBorder);
     }
     if (session->video() != nullptr) {
         draw_small_button(canvas, layout.video_tab_video, "VIDEO",
@@ -3570,9 +3727,179 @@ void DebuggerSurface::Impl::draw_com_panel(Canvas& canvas) {
                               ui::theme::kText, ui::theme::kBorder);
         }
     }
+    const bool active_popped =
+        display_tab && display_visible ? display_popped : video_popped;
     draw_small_button(canvas, layout.video_pop_out,
-                      video_popped ? "CLOSE" : "POP OUT", ui::theme::kText,
+                      active_popped ? "CLOSE" : "POP OUT", ui::theme::kText,
                       ui::theme::kBorder);
+}
+
+void DebuggerSurface::Impl::draw_display_panel(Canvas& canvas) {
+    const Rect rect = layout.com;
+    canvas.fill(rect, ui::theme::kPanel);
+    canvas.frame(rect,
+                 focus == SurfacePanel::Com ? ui::theme::kAccent
+                                            : ui::theme::kBorder);
+    canvas.fill(Rect{rect.x + 1, rect.y + 1, rect.width - 2,
+                     ui::theme::kPanelHeaderHeight - 1},
+                ui::theme::kPanelAlt);
+    canvas.text(rect.x + 8, rect.y + 5, "DISPLAY", ui::theme::kAccent,
+                FontRole::UiBold);
+    if (ITextDisplay* source = session->text_display(); source != nullptr) {
+        TextDisplayView view;
+        if (source->frame(view)) {
+            const std::string label =
+                std::to_string(view.cols) + "x" + std::to_string(view.rows);
+            canvas.text(layout.video_pop_out.x - 70, rect.y + 5,
+                        clip(label, 60, FontRole::MonoSmall), ui::theme::kDim,
+                        FontRole::MonoSmall);
+        }
+    }
+    draw_display_preview(canvas, layout.display_preview);
+    if (display_guest_focus) {
+        canvas.fill(Rect{rect.x + 60, rect.y + 10, 5, 5}, kRunGreen);
+    }
+}
+
+void DebuggerSurface::Impl::refresh_display_canvas(const TextDisplayView& view) {
+    const std::size_t count =
+        static_cast<std::size_t>(view.rows) * static_cast<std::size_t>(view.cols);
+    bool changed = !display_snapshot_valid || display_rows != view.rows ||
+                   display_cols != view.cols || display_cursor != view.cursor;
+    if (!changed) {
+        for (std::size_t index = 0; index < count; ++index) {
+            if (!(display_cells[index] == view.cells[index])) {
+                changed = true;
+                break;
+            }
+        }
+    }
+    if (!changed && display_canvas) {
+        return;
+    }
+    display_rows = view.rows;
+    display_cols = view.cols;
+    display_cells.assign(view.cells.begin(),
+                         view.cells.begin() + static_cast<std::ptrdiff_t>(count));
+    display_cursor = view.cursor;
+    display_snapshot_valid = true;
+
+    const int cell_width = display_cell_width();
+    const int cell_height = display_cell_height();
+    const int natural_width = view.cols * cell_width;
+    const int natural_height = view.rows * cell_height;
+    if (!display_canvas || display_canvas->width() != natural_width ||
+        display_canvas->height() != natural_height) {
+        display_canvas = std::make_unique<Canvas>(natural_width, natural_height);
+    }
+    display_canvas->clear(Color{0, 0, 0, 255});
+    const auto draw_code = [&](int x, int y, std::uint16_t code, Color color) {
+        if (display_code_printable(code)) {
+            display_canvas->text(x, y,
+                                 std::string(1, static_cast<char>(code)), color,
+                                 FontRole::MonoSmall);
+        }
+    };
+    for (int row = 0; row < view.rows; ++row) {
+        for (int col = 0; col < view.cols; ++col) {
+            const TextCell& cell = display_cells[static_cast<std::size_t>(row) *
+                                                     static_cast<std::size_t>(view.cols) +
+                                                 static_cast<std::size_t>(col)];
+            const int x = col * cell_width;
+            const int y = row * cell_height;
+            const Color background = unpack_color(cell.background);
+            display_canvas->fill(Rect{x, y, cell_width, cell_height}, background);
+            draw_code(x, y, cell.code, unpack_color(cell.foreground));
+        }
+    }
+    // The cursor is an inverse block: the cell is filled with the foreground and
+    // the code, if printable, is drawn in the background colour on top.
+    if (view.cursor.visible && view.cursor.row >= 0 &&
+        view.cursor.row < view.rows && view.cursor.col >= 0 &&
+        view.cursor.col < view.cols) {
+        const TextCell& cell =
+            display_cells[static_cast<std::size_t>(view.cursor.row) *
+                              static_cast<std::size_t>(view.cols) +
+                          static_cast<std::size_t>(view.cursor.col)];
+        const int x = view.cursor.col * cell_width;
+        const int y = view.cursor.row * cell_height;
+        const Color foreground = unpack_color(cell.foreground);
+        display_canvas->fill(Rect{x, y, cell_width, cell_height}, foreground);
+        draw_code(x, y, cell.code, unpack_color(cell.background));
+    }
+}
+
+void DebuggerSurface::Impl::draw_display_preview(Canvas& canvas, Rect content) {
+    if (content.empty()) {
+        return;
+    }
+    canvas.fill(content, ui::theme::kBackground);
+    ITextDisplay* source = session->text_display();
+    TextDisplayView view;
+    if (source == nullptr || !source->frame(view) || view.rows <= 0 ||
+        view.cols <= 0 ||
+        view.cells.size() < static_cast<std::size_t>(view.rows) *
+                                static_cast<std::size_t>(view.cols)) {
+        canvas.text(content.x + 8, content.y + 8, "(no display)",
+                    ui::theme::kDim, FontRole::MonoSmall);
+        return;
+    }
+    refresh_display_canvas(view);
+    if (!display_canvas || display_canvas->width() <= 0 ||
+        display_canvas->height() <= 0) {
+        return;
+    }
+    const Rect fit =
+        ui::fit_rect(display_canvas->width(), display_canvas->height(),
+                     std::max(1, content.width - 2), std::max(1, content.height - 2));
+    const Rect target{content.x + 1 + fit.x, content.y + 1 + fit.y, fit.width,
+                      fit.height};
+    if (target.empty()) {
+        return;
+    }
+    for (int y = 0; y < target.height; ++y) {
+        const int source_y = y * display_canvas->height() / target.height;
+        for (int x = 0; x < target.width; ++x) {
+            const int source_x = x * display_canvas->width() / target.width;
+            canvas.pixel(target.x + x, target.y + y,
+                         unpack_color(display_canvas->pixel_at(source_x, source_y)));
+        }
+    }
+    canvas.frame(target, ui::theme::kBorder);
+}
+
+void DebuggerSurface::Impl::present_display_window() {
+    if (!display_window || !display_window->valid() || !display_canvas) {
+        return;
+    }
+    const int frame_width = display_canvas->width();
+    const int frame_height = display_canvas->height();
+    if (frame_width <= 0 || frame_height <= 0) {
+        return;
+    }
+    display_frame_bytes.resize(static_cast<std::size_t>(frame_width) *
+                               static_cast<std::size_t>(frame_height) * 4U);
+    for (int y = 0; y < frame_height; ++y) {
+        for (int x = 0; x < frame_width; ++x) {
+            const std::uint32_t packed = display_canvas->pixel_at(x, y);
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(frame_width) +
+                 static_cast<std::size_t>(x)) * 4U;
+            display_frame_bytes[offset + 0] =
+                static_cast<std::uint8_t>(packed & 0xFFU);
+            display_frame_bytes[offset + 1] =
+                static_cast<std::uint8_t>((packed >> 8) & 0xFFU);
+            display_frame_bytes[offset + 2] =
+                static_cast<std::uint8_t>((packed >> 16) & 0xFFU);
+            display_frame_bytes[offset + 3] = 255;
+        }
+    }
+    FramebufferView frame;
+    frame.width = frame_width;
+    frame.height = frame_height;
+    frame.stride = frame_width * 4;
+    frame.pixels = std::span<const std::uint8_t>(display_frame_bytes);
+    display_window->present(frame, true);
 }
 
 
@@ -3995,6 +4322,24 @@ bool DebuggerSurface::Impl::key_down(const platform::Event& event) {
         }
         return true;
     }
+    // A focused DISPLAY owns printable and editing keys: the device panel is the
+    // keyboard target while it has focus (hover or click, the surface's normal
+    // rule) or after a click gave the terminal guest focus. The function keys stay
+    // with the debugger, so stepping and run/pause work while the terminal is
+    // focused; every other key is guest input, never a letter shortcut.
+    if (display_tab && display_available() &&
+        (display_guest_focus || focus == SurfacePanel::Com)) {
+        switch (event.key) {
+        case platform::key::F5:
+        case platform::key::F6:
+        case platform::key::F9:
+        case platform::key::F10:
+        case platform::key::F11:
+            break;
+        default:
+            return handle_display_key(event);
+        }
+    }
     switch (event.key) {
     case platform::key::Escape:
         if (popup) {
@@ -4164,6 +4509,116 @@ void DebuggerSurface::Impl::forward_video_key(const platform::Event& event) {
     }
 }
 
+bool DebuggerSurface::Impl::display_cell_at(int x, int y, int& row,
+                                            int& col) const {
+    ITextDisplay* source = session->text_display();
+    TextDisplayView view;
+    if (source == nullptr || !source->frame(view) || view.rows <= 0 ||
+        view.cols <= 0) {
+        return false;
+    }
+    const Rect content = layout.display_preview;
+    if (content.empty()) {
+        return false;
+    }
+    const int natural_width = view.cols * display_cell_width();
+    const int natural_height = view.rows * display_cell_height();
+    const Rect fit = ui::fit_rect(natural_width, natural_height,
+                                  std::max(1, content.width - 2),
+                                  std::max(1, content.height - 2));
+    const Rect target{content.x + 1 + fit.x, content.y + 1 + fit.y, fit.width,
+                      fit.height};
+    if (target.empty() || !target.contains(x, y)) {
+        return false;
+    }
+    const int source_x = (x - target.x) * natural_width / target.width;
+    const int source_y = (y - target.y) * natural_height / target.height;
+    row = std::clamp(source_y / display_cell_height(), 0, view.rows - 1);
+    col = std::clamp(source_x / display_cell_width(), 0, view.cols - 1);
+    return true;
+}
+
+// Keys with display guest focus. Function keys are handled by the debugger
+// before this is called; everything else is guest input and is consumed so a
+// single-letter debugger shortcut can never reach the VM (PLAN.md §6.2).
+bool DebuggerSurface::Impl::handle_display_key(const platform::Event& event) {
+    ITextDisplay* display = session->text_display();
+    if (display == nullptr) {
+        return false;
+    }
+    switch (event.key) {
+    case platform::key::Escape:
+        display->send_key(static_cast<int>(TextKey::Escape));
+        // Escape reaches the guest and then releases guest focus, so the user is
+        // never trapped in the terminal by a line editor that ignores it.
+        display_guest_focus = false;
+        return true;
+    case platform::key::Enter:
+        display->send_key(static_cast<int>(TextKey::Enter));
+        return true;
+    case platform::key::Backspace:
+        display->send_key(static_cast<int>(TextKey::Backspace));
+        return true;
+    case platform::key::Tab:
+        display->send_key(static_cast<int>(TextKey::Tab));
+        return true;
+    case platform::key::Left:
+        display->send_key(static_cast<int>(TextKey::Left));
+        return true;
+    case platform::key::Right:
+        display->send_key(static_cast<int>(TextKey::Right));
+        return true;
+    default:
+        break;
+    }
+    const int character = event_character(event);
+    const bool paste = is_letter(character, 'V') && event.control;
+    if (paste || character == 0x16) {
+        const std::string text = host->clipboard_text();
+        std::string normalized;
+        normalized.reserve(text.size());
+        for (std::size_t index = 0; index < text.size(); ++index) {
+            const char ch = text[index];
+            if (ch == '\r') {
+                if (index + 1 < text.size() && text[index + 1] == '\n') {
+                    continue;
+                }
+                normalized.push_back('\n');
+            } else {
+                normalized.push_back(ch);
+            }
+        }
+        display->send_text(normalized);
+        return true;
+    }
+    if (character != 0) {
+        display->send_key(character);
+        return true;
+    }
+    if (event.key >= 32 && event.key < 127) {
+        display->send_key(event.key);
+        return true;
+    }
+    // A key in the platform namespace with no character (navigation, modifiers)
+    // is not guest input; consume it rather than turning it into a shortcut.
+    return true;
+}
+
+void DebuggerSurface::Impl::forward_display_key(const platform::Event& event) {
+    switch (event.key) {
+    case platform::key::F5:
+    case platform::key::F6:
+    case platform::key::F9:
+    case platform::key::F10:
+    case platform::key::F11:
+        key_down(event);
+        return;
+    default:
+        break;
+    }
+    (void)handle_display_key(event);
+}
+
 DebuggerSurface::DebuggerSurface(DebugSession& session, IHostServices& host)
     : impl_(std::make_unique<Impl>(session, host)) {}
 
@@ -4225,6 +4680,12 @@ void DebuggerSurface::set_program_info(ProgramInfo program) {
         impl_->edit_buffer.clear();
         impl_->menu_open = false;
         impl_->video_auto_opened = false;
+        // A new target may or may not have a text terminal; re-evaluate the
+        // device tabs and let DISPLAY become the default again.
+        impl_->display_tab_chosen = false;
+        impl_->display_guest_focus = false;
+        impl_->display_snapshot_valid = false;
+        impl_->recompute_layout();
     }
     impl_->clamp_scrolls();
 }
@@ -4279,6 +4740,17 @@ void DebuggerSurface::tick() {
                 impl_->video_popped = false;
             } else if (event.kind == platform::Event::Kind::KeyDown) {
                 impl_->forward_video_key(event);
+            }
+        }
+    }
+    if (impl_->display_window && impl_->display_window->valid()) {
+        platform::Event event;
+        while (impl_->display_window->poll(event)) {
+            if (event.kind == platform::Event::Kind::Quit) {
+                impl_->display_window->destroy();
+                impl_->display_popped = false;
+            } else if (event.kind == platform::Event::Kind::KeyDown) {
+                impl_->forward_display_key(event);
             }
         }
     }
@@ -4374,6 +4846,18 @@ bool DebuggerSurface::settings_open() const {
 
 bool DebuggerSurface::video_popped() const {
     return impl_->video_popped;
+}
+
+bool DebuggerSurface::display_tab_active() const {
+    return impl_->display_tab && impl_->display_available();
+}
+
+bool DebuggerSurface::display_guest_focus() const {
+    return impl_->display_guest_focus;
+}
+
+bool DebuggerSurface::display_popped() const {
+    return impl_->display_popped;
 }
 
 std::uint64_t DebuggerSurface::memory_base() const {

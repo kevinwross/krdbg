@@ -126,8 +126,106 @@ bool FakeVideoSource::frame(FramebufferView& out) const {
     return true;
 }
 
-FakeTarget::FakeTarget(bool has_com, bool has_video)
-    : has_com_(has_com), has_video_(has_video),
+namespace {
+
+constexpr std::uint32_t kTextForeground = 0xFFFFFFFFu;
+constexpr std::uint32_t kTextBackground = 0xFF000000u;
+constexpr std::uint32_t kTextAccent = 0xFF4CC9F0u;
+constexpr std::uint32_t kTextBoard = 0xFFFFD166u;
+
+void write_cells(std::vector<TextCell>& cells, int rows, int cols, int row, int col,
+                 std::string_view text, std::uint32_t foreground,
+                 std::uint32_t background) {
+    if (row < 0 || row >= rows) {
+        return;
+    }
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const int target_col = col + static_cast<int>(index);
+        if (target_col < 0 || target_col >= cols) {
+            continue;
+        }
+        cells[static_cast<std::size_t>(row) * static_cast<std::size_t>(cols) +
+              static_cast<std::size_t>(target_col)] =
+            TextCell{static_cast<std::uint16_t>(
+                         static_cast<unsigned char>(text[index])),
+                     foreground, background};
+    }
+}
+
+} // namespace
+
+FakeTextDisplay::FakeTextDisplay()
+    : cells_(static_cast<std::size_t>(kRows) * static_cast<std::size_t>(kCols),
+             TextCell{0, kTextForeground, kTextBackground}) {
+    write_cells(cells_, kRows, kCols, 1, 2, "TIC TAC TOE", kTextAccent,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 3, 3, "+---+---+---+", kTextBoard,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 4, 3, "| X | O |   |", kTextForeground,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 5, 3, "+---+---+---+", kTextBoard,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 6, 3, "| O | X |   |", kTextForeground,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 7, 3, "+---+---+---+", kTextBoard,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 8, 3, "|   |   | X |", kTextForeground,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 9, 3, "+---+---+---+", kTextBoard,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 11, 2, "CLICK A CELL TO MOVE", kTextAccent,
+                kTextBackground);
+    write_cells(cells_, kRows, kCols, 12, 2, "COM1 IS THE DEBUG SERIAL",
+                kTextForeground, kTextBackground);
+    set_cursor(14, 10, true);
+}
+
+bool FakeTextDisplay::frame(TextDisplayView& out) const {
+    out.rows = kRows;
+    out.cols = kCols;
+    out.cells = std::span<const TextCell>(cells_);
+    out.cursor = cursor_;
+    return true;
+}
+
+bool FakeTextDisplay::send_key(int key) {
+    keys_.push_back(key);
+    return true;
+}
+
+bool FakeTextDisplay::send_text(std::string_view text) {
+    text_.append(text);
+    return true;
+}
+
+bool FakeTextDisplay::send_click(int row, int col, std::uint16_t buttons) {
+    clicks_.push_back(Click{row, col, buttons});
+    return true;
+}
+
+void FakeTextDisplay::set_char(int row, int col, std::uint16_t code) {
+    if (row < 0 || row >= kRows || col < 0 || col >= kCols) {
+        return;
+    }
+    cells_[static_cast<std::size_t>(row) * static_cast<std::size_t>(kCols) +
+           static_cast<std::size_t>(col)]
+        .code = code;
+}
+
+void FakeTextDisplay::set_cursor(int row, int col, bool visible) {
+    cursor_.row = std::clamp(row, 0, kRows - 1);
+    cursor_.col = std::clamp(col, 0, kCols - 1);
+    cursor_.visible = visible;
+}
+
+void FakeTextDisplay::clear_input() {
+    keys_.clear();
+    text_.clear();
+    clicks_.clear();
+}
+
+FakeTarget::FakeTarget(bool has_com, bool has_video, bool has_display)
+    : has_com_(has_com), has_video_(has_video), has_display_(has_display),
       memory_(static_cast<std::size_t>(kMemorySize), 0) {
     layout_.name = "Fake32";
     layout_.address_bits = 32;
@@ -137,6 +235,7 @@ FakeTarget::FakeTarget(bool has_com, bool has_video)
     layout_.step_unit = "instructions";
     layout_.has_framebuffer = has_video_;
     layout_.has_com_port = has_com_;
+    layout_.has_text_display = has_display_;
 
     RegisterGroup gpr;
     gpr.id = "gpr";
