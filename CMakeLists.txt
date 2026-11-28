@@ -441,7 +441,7 @@ if(KRDBG_BUILD_TESTS)
             if(WIN32)
                 set(KRDBG_STARTREKNG_HASH "811261FE3A1C2871")
             else()
-                set(KRDBG_STARTREKNG_HASH "4DD52E2F73788C72")
+                set(KRDBG_STARTREKNG_HASH "507B8E948545F669")
             endif()
             add_test(NAME krdbg_kr232_startrekng_golden
                 COMMAND krdbg_demo --headless
